@@ -7,6 +7,7 @@ using LitoralMarket.Domain.Entities;
 using LitoralMarket.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace LitoralMarket.Infrastructure.Services;
@@ -16,27 +17,51 @@ public class PagoEcommerceService : IPagoEcommerceService
     private readonly AppDbContext                    _db;
     private readonly IParametrosService              _params;
     private readonly IPedidoService                  _pedidos;
-    private readonly IEmailService                   _email;
     private readonly IHttpClientFactory              _httpFactory;
     private readonly IConfiguration                  _config;
     private readonly ILogger<PagoEcommerceService>   _logger;
+    private readonly IServiceScopeFactory            _scopeFactory;
 
     public PagoEcommerceService(
         AppDbContext                  db,
         IParametrosService            parametros,
         IPedidoService                pedidos,
-        IEmailService                 email,
         IHttpClientFactory            httpFactory,
         IConfiguration                config,
-        ILogger<PagoEcommerceService> logger)
+        ILogger<PagoEcommerceService> logger,
+        IServiceScopeFactory          scopeFactory)
     {
-        _db          = db;
-        _params      = parametros;
-        _pedidos     = pedidos;
-        _email       = email;
-        _httpFactory = httpFactory;
-        _config      = config;
-        _logger      = logger;
+        _db           = db;
+        _params       = parametros;
+        _pedidos      = pedidos;
+        _httpFactory  = httpFactory;
+        _config       = config;
+        _logger       = logger;
+        _scopeFactory = scopeFactory;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Email fire-and-forget: crea su propio scope para que el DbContext
+    // no quede disposed cuando termina el request HTTP que lo originó.
+    // ─────────────────────────────────────────────────────────────
+    private void EmailFireAndForget(
+        Func<IEmailService, Task> accion, int pedidoId, string descripcion)
+    {
+        _ = Task.Run(async () =>
+        {
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var email = scope.ServiceProvider.GetRequiredService<IEmailService>();
+            try
+            {
+                await accion(email);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "EmailFireAndForget({Desc}): error enviando email para pedido #{Id}",
+                    descripcion, pedidoId);
+            }
+        });
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -96,10 +121,11 @@ public class PagoEcommerceService : IPagoEcommerceService
         // El pedido queda en pendiente_pago; la confirmación y el descuento de stock
         // se realizarán desde el módulo de cobros cuando el administrador registre el pago.
 
-        // Notificaciones de email — el PDF se genera dentro del servicio de email si está habilitado
-        var emailEnviado = false;
-        try { emailEnviado = await _email.EnviarConfirmacionPedidoAsync(pedidoId); } catch { }
-        try { await _email.EnviarNotificacionAdminAsync(pedidoId); } catch { }
+        // Notificaciones de email en background — no bloqueamos el hilo HTTP.
+        // IEmailService crea su propio scope (IServiceScopeFactory) para evitar
+        // que el DbContext quede disposed al terminar el request.
+        EmailFireAndForget(e => e.EnviarConfirmacionPedidoAsync(pedidoId), pedidoId, "confirmacion-reembolso");
+        EmailFireAndForget(e => e.EnviarNotificacionAdminAsync(pedidoId),  pedidoId, "admin-reembolso");
 
         return new ResultadoPagoDto
         {
@@ -107,7 +133,7 @@ public class PagoEcommerceService : IPagoEcommerceService
             PedidoId     = pedidoId,
             CobroId      = cobro.Id,
             Tipo         = "reembolso",
-            EmailEnviado = emailEnviado
+            EmailEnviado = true   // se está enviando en background
         };
     }
 
@@ -228,10 +254,11 @@ public class PagoEcommerceService : IPagoEcommerceService
         _db.CobrosEcommerce.Add(cobro);
         await _db.SaveChangesAsync();
 
-        // Email con link de pago — el PDF se genera dentro del servicio de email si está habilitado
-        var emailEnviado = false;
-        try { emailEnviado = await _email.EnviarLinkMercadoPagoAsync(pedidoId, cobro.Id); } catch { }
-        try { await _email.EnviarNotificacionAdminAsync(pedidoId); } catch { }
+        // Email con link de pago en background (descarga QR + genera PDF + SMTP).
+        // Capturamos cobro.Id antes de que el scope del pedido pueda cerrarse.
+        var cobroId = cobro.Id;
+        EmailFireAndForget(e => e.EnviarLinkMercadoPagoAsync(pedidoId, cobroId), pedidoId, "link-mp");
+        EmailFireAndForget(e => e.EnviarNotificacionAdminAsync(pedidoId),        pedidoId, "admin-mp");
 
         return new ResultadoPagoDto
         {
@@ -241,7 +268,7 @@ public class PagoEcommerceService : IPagoEcommerceService
             Tipo              = "mercadopago",
             MpLinkPago        = mpInitPoint,
             MpFechaExpiracion = cobro.MpFechaExpiracion,
-            EmailEnviado      = emailEnviado
+            EmailEnviado      = true   // se está enviando en background
         };
     }
 
@@ -344,8 +371,10 @@ public class PagoEcommerceService : IPagoEcommerceService
 
             await _pedidos.ConfirmarPagoAsync(pedidoId);
 
-            try { await _email.EnviarConfirmacionPedidoAsync(pedidoId); } catch { }
-            try { await _email.EnviarNotificacionAdminAsync(pedidoId);  } catch { }
+            // Emails en background: no bloqueamos el hilo de polling ni el webhook.
+            // Un timeout de 14 s en el cliente JS no puede cortar el envío de email.
+            EmailFireAndForget(e => e.EnviarConfirmacionPedidoAsync(pedidoId), pedidoId, "confirmacion-mp-webhook");
+            EmailFireAndForget(e => e.EnviarNotificacionAdminAsync(pedidoId),  pedidoId, "admin-mp-webhook");
         }
         else if (status is "rejected" or "cancelled")
         {

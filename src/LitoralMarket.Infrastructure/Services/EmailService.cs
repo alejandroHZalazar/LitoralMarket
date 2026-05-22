@@ -256,12 +256,22 @@ public class EmailService : IEmailService
 
         if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(remitente))
         {
-            _logger.LogWarning("EmailService: SMTP no configurado (mail/host o mail/remitente vacíos). " +
-                               "Asunto: {Asunto} → {Destino}", asunto, emailDestino);
+            _logger.LogWarning(
+                "EmailService: SMTP no configurado — " +
+                "host='{Host}' remitente='{Remitente}'. " +
+                "Verificá los parámetros mail/host y mail/remitente en la tabla parametros. " +
+                "Asunto: {Asunto} → {Destino}",
+                host ?? "(vacío)", remitente ?? "(vacío)", asunto, emailDestino);
             return false;
         }
 
         if (!int.TryParse(portStr, out var port)) port = 587;
+
+        // Log de diagnóstico: visible en Railway Logs para detectar problemas de config
+        _logger.LogInformation(
+            "EmailService: intentando envío SMTP " +
+            "host={Host} port={Port} ssl={Ssl} usuario={Usuario} remitente={Remitente} → {Destino}",
+            host, port, useSsl, usuario ?? "(sin auth)", remitente, emailDestino);
 
         var message = new MimeMessage();
         message.From.Add(new MailboxAddress(nombreRemitente, remitente));
@@ -284,12 +294,14 @@ public class EmailService : IEmailService
             await smtp.SendAsync(message);
             await smtp.DisconnectAsync(true);
 
-            _logger.LogInformation("Email enviado: {Asunto} → {Destino}", asunto, emailDestino);
+            _logger.LogInformation("EmailService: enviado OK — {Asunto} → {Destino}", asunto, emailDestino);
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al enviar email '{Asunto}' a {Destino}", asunto, emailDestino);
+            _logger.LogError(ex,
+                "EmailService: error SMTP — host={Host}:{Port} ssl={Ssl} — '{Asunto}' → {Destino}",
+                host, port, useSsl, asunto, emailDestino);
             return false;
         }
     }
