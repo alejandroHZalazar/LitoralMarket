@@ -3,6 +3,7 @@ using LitoralMarket.Infrastructure.Data;
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MimeKit;
 using MimeKit.Text;
@@ -11,8 +12,13 @@ namespace LitoralMarket.Infrastructure.Services;
 
 /// <summary>
 /// Servicio de email usando MailKit.
-/// La configuración SMTP se lee de la tabla parametros (modulo='mail').
-/// Todos los PDFs se generan en memoria; nunca se escriben en disco ni en BD.
+///
+/// Precedencia de configuración SMTP (de mayor a menor prioridad):
+///   1. Variables de entorno Railway (SMTP_HOST, SMTP_PORT, SMTP_SSL, SMTP_USERNAME,
+///      SMTP_PASSWORD, SMTP_FROM, SMTP_FROM_NAME, SMTP_ADMIN_EMAIL)
+///   2. Tabla `parametros` en BD (modulo='mail', parametro='host' | 'port' | ...)
+///
+/// Esto permite cambiar la config SMTP sin tocar la BD, solo con env vars en Railway.
 /// </summary>
 public class EmailService : IEmailService
 {
@@ -21,20 +27,27 @@ public class EmailService : IEmailService
     private readonly IPdfPagoService       _pdf;
     private readonly IHttpClientFactory    _http;
     private readonly ILogger<EmailService> _logger;
+    private readonly IConfiguration        _config;
 
     public EmailService(
         AppDbContext          db,
         IParametrosService    params_,
         IPdfPagoService       pdf,
         IHttpClientFactory    http,
-        ILogger<EmailService> logger)
+        ILogger<EmailService> logger,
+        IConfiguration        config)
     {
         _db     = db;
         _params = params_;
         _pdf    = pdf;
         _http   = http;
         _logger = logger;
+        _config = config;
     }
+
+    // Env var tiene prioridad sobre valor de BD (permite override en Railway sin tocar la BD)
+    private string? EnvOrParam(string envKey, string? dbValue)
+        => _config[envKey] is { Length: > 0 } v ? v : dbValue;
 
     // ──────────────────────────────────────────────────────────────
     // Confirmación de pedido (pago contra reembolso o MP aprobado)
@@ -217,10 +230,14 @@ public class EmailService : IEmailService
     {
         if (!await MailHabilitado("ecommerce", "enviarMailAdmin")) return;
 
-        var emailAdmin = await _params.GetValorAsync("mail", "emailAdmin");
+        // SMTP_ADMIN_EMAIL (env var) sobreescribe mail/emailAdmin (BD)
+        var emailAdmin = EnvOrParam("SMTP_ADMIN_EMAIL", await _params.GetValorAsync("mail", "emailAdmin"));
         if (string.IsNullOrWhiteSpace(emailAdmin))
         {
-            _logger.LogWarning("EnviarNotificacionAdminAsync: no hay mail/emailAdmin configurado");
+            _logger.LogWarning(
+                "EnviarNotificacionAdminAsync: no hay email de admin configurado. " +
+                "Configurá la variable de entorno SMTP_ADMIN_EMAIL en Railway " +
+                "o el parámetro mail/emailAdmin en la tabla parametros.");
             return;
         }
 
@@ -243,35 +260,64 @@ public class EmailService : IEmailService
 
     // ──────────────────────────────────────────────────────────────
     // Envío SMTP real con MailKit
+    //
+    // Variables de entorno Railway (sobreescriben BD):
+    //   SMTP_HOST        → host del servidor SMTP
+    //   SMTP_PORT        → puerto (587 STARTTLS / 465 SSL)
+    //   SMTP_SSL         → "1" para SSL directo en 465; "0" o ausente para STARTTLS en 587
+    //   SMTP_USERNAME    → cuenta de autenticación SMTP
+    //   SMTP_PASSWORD    → contraseña o App Password
+    //   SMTP_FROM        → dirección remitente (From)
+    //   SMTP_FROM_NAME   → nombre visible del remitente
+    //
+    // Office365 → SMTP_HOST=smtp.office365.com  SMTP_PORT=587  SMTP_SSL=0
+    // Gmail     → SMTP_HOST=smtp.gmail.com       SMTP_PORT=587  SMTP_SSL=0  (App Password requerido)
+    // Gmail SSL → SMTP_HOST=smtp.gmail.com       SMTP_PORT=465  SMTP_SSL=1
     // ──────────────────────────────────────────────────────────────
     private async Task<bool> EnviarAsync(string emailDestino, string asunto, BodyBuilder builder)
     {
-        var host            = await _params.GetValorAsync("mail", "host");
-        var portStr         = await _params.GetValorAsync("mail", "port");
-        var useSsl          = await _params.GetValorAsync("mail", "ssl") == "1";
-        var usuario         = await _params.GetValorAsync("mail", "usuario");
-        var password        = await _params.GetValorAsync("mail", "password");
-        var remitente       = await _params.GetValorAsync("mail", "remitente");
-        var nombreRemitente = await _params.GetValorAsync("mail", "nombreRemitente") ?? "LitoralMarket";
+        // ── Leer configuración: env var tiene prioridad sobre BD ──────────
+        var host            = EnvOrParam("SMTP_HOST",      await _params.GetValorAsync("mail", "host"));
+        var portStr         = EnvOrParam("SMTP_PORT",      await _params.GetValorAsync("mail", "port"));
+        var sslStr          = EnvOrParam("SMTP_SSL",       await _params.GetValorAsync("mail", "ssl"));
+        var usuario         = EnvOrParam("SMTP_USERNAME",  await _params.GetValorAsync("mail", "usuario"));
+        var password        = EnvOrParam("SMTP_PASSWORD",  await _params.GetValorAsync("mail", "password"));
+        var remitente       = EnvOrParam("SMTP_FROM",      await _params.GetValorAsync("mail", "remitente"));
+        var nombreRemitente = EnvOrParam("SMTP_FROM_NAME", await _params.GetValorAsync("mail", "nombreRemitente"))
+                              ?? "LitoralMarket";
+
+        // Fuente real de cada parámetro (para el log de diagnóstico)
+        bool viaEnv = _config["SMTP_HOST"] is { Length: > 0 };
 
         if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(remitente))
         {
             _logger.LogWarning(
-                "EmailService: SMTP no configurado — " +
-                "host='{Host}' remitente='{Remitente}'. " +
-                "Verificá los parámetros mail/host y mail/remitente en la tabla parametros. " +
+                "EmailService: SMTP no configurado — host='{Host}' remitente='{Remitente}'. " +
+                "Configurá las variables de entorno SMTP_HOST y SMTP_FROM en Railway, " +
+                "o los parámetros mail/host y mail/remitente en la tabla parametros. " +
                 "Asunto: {Asunto} → {Destino}",
                 host ?? "(vacío)", remitente ?? "(vacío)", asunto, emailDestino);
             return false;
         }
 
         if (!int.TryParse(portStr, out var port)) port = 587;
+        var useSsl = sslStr == "1" || sslStr?.Equals("true", StringComparison.OrdinalIgnoreCase) == true;
 
-        // Log de diagnóstico: visible en Railway Logs para detectar problemas de config
+        // SecureSocketOptions correcto según puerto:
+        //   465 → SslOnConnect (SSL inmediato)
+        //   587 → StartTls    (STARTTLS obligatorio — falla si el server no lo soporta)
+        //   25  → StartTlsWhenAvailable (best-effort, para servidores relay internos)
+        var socketOptions = (port == 465 || useSsl)
+            ? SecureSocketOptions.SslOnConnect
+            : port == 587
+                ? SecureSocketOptions.StartTls
+                : SecureSocketOptions.StartTlsWhenAvailable;
+
+        // Log de diagnóstico visible en Railway Logs
         _logger.LogInformation(
-            "EmailService: intentando envío SMTP " +
-            "host={Host} port={Port} ssl={Ssl} usuario={Usuario} remitente={Remitente} → {Destino}",
-            host, port, useSsl, usuario ?? "(sin auth)", remitente, emailDestino);
+            "EmailService: [{Fuente}] SMTP host={Host}:{Port} tls={Tls} usuario={Usuario} → {Destino}",
+            viaEnv ? "ENV" : "BD",
+            host, port, socketOptions, usuario ?? "(sin auth)", emailDestino);
 
         var message = new MimeMessage();
         message.From.Add(new MailboxAddress(nombreRemitente, remitente));
@@ -282,10 +328,6 @@ public class EmailService : IEmailService
         using var smtp = new SmtpClient();
         try
         {
-            var socketOptions = useSsl
-                ? SecureSocketOptions.SslOnConnect
-                : SecureSocketOptions.StartTlsWhenAvailable;
-
             await smtp.ConnectAsync(host, port, socketOptions);
 
             if (!string.IsNullOrWhiteSpace(usuario) && !string.IsNullOrWhiteSpace(password))
@@ -294,14 +336,35 @@ public class EmailService : IEmailService
             await smtp.SendAsync(message);
             await smtp.DisconnectAsync(true);
 
-            _logger.LogInformation("EmailService: enviado OK — {Asunto} → {Destino}", asunto, emailDestino);
+            _logger.LogInformation(
+                "EmailService: ✓ enviado — '{Asunto}' → {Destino}", asunto, emailDestino);
             return true;
+        }
+        catch (MailKit.Net.Smtp.SmtpCommandException ex)
+        {
+            // Error de protocolo SMTP: el servidor rechazó el comando
+            // StatusCode y Response dan la causa exacta (ej: 535 = auth failed, 550 = relay denied)
+            _logger.LogError(
+                "EmailService: SMTP rechazó el comando — " +
+                "host={Host}:{Port} tls={Tls} errorCode={Code} statusCode={Status} — {SmtpMsg} — asunto='{Asunto}'",
+                host, port, socketOptions, (int)ex.StatusCode, ex.StatusCode, ex.Message, asunto);
+            return false;
+        }
+        catch (MailKit.Net.Smtp.SmtpProtocolException ex)
+        {
+            // Error de protocolo TLS/negociación
+            _logger.LogError(
+                "EmailService: error de protocolo SMTP/TLS — " +
+                "host={Host}:{Port} tls={Tls} — {Msg} — asunto='{Asunto}'",
+                host, port, socketOptions, ex.Message, asunto);
+            return false;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex,
-                "EmailService: error SMTP — host={Host}:{Port} ssl={Ssl} — '{Asunto}' → {Destino}",
-                host, port, useSsl, asunto, emailDestino);
+                "EmailService: excepción inesperada — " +
+                "host={Host}:{Port} tls={Tls} tipo={Tipo} — asunto='{Asunto}' → {Destino}",
+                host, port, socketOptions, ex.GetType().Name, asunto, emailDestino);
             return false;
         }
     }
