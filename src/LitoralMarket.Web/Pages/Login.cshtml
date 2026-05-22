@@ -135,8 +135,13 @@
     <partial name="_ValidationScriptsPartial" />
     <script>
         function lmToggleAdmin(esAdmin) {
-            document.getElementById('campoAdmin').style.display = esAdmin ? '' : 'none';
-            document.getElementById('campoEmail').style.display = esAdmin ? 'none' : '';
+            var campoAdmin = document.getElementById('campoAdmin');
+            var campoEmail = document.getElementById('campoEmail');
+            // Usar 'block' explícito en lugar de '' para evitar que quede oculto
+            // cuando el elemento tenía display:none como inline style
+            if (campoAdmin) campoAdmin.style.display = esAdmin ? 'block' : 'none';
+            // campoEmail no existe en modo público → guard obligatorio
+            if (campoEmail) campoEmail.style.display = esAdmin ? 'none' : 'block';
         }
         function lmTogglePass() {
             var input = document.getElementById('lm-pass');
@@ -151,7 +156,10 @@
         }
         document.addEventListener('DOMContentLoaded', function () {
             var chk = document.getElementById('EsAdministrador');
-            if (chk) lmToggleAdmin(chk.checked);
+            // En modo público hay un <input type="hidden"> con ese id, NO un checkbox.
+            // Sin esta guarda, .checked es undefined (falsy) y lmToggleAdmin(false)
+            // oculta el campo de usuario antes de que el usuario haga nada.
+            if (chk && chk.type === 'checkbox') lmToggleAdmin(chk.checked);
         });
     </script>
 }
