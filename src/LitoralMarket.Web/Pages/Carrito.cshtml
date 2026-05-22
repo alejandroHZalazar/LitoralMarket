@@ -1,0 +1,164 @@
+@page
+@model CarritoModel
+@using System.Globalization
+@functions {
+    static string ResolverRutaImagen(string? imagen)
+    {
+        if (string.IsNullOrWhiteSpace(imagen)) return string.Empty;
+        var img = imagen.Trim();
+        if (img.StartsWith("http://") || img.StartsWith("https://") || img.StartsWith("/"))
+            return img;
+        return $"/images/productos/{img}";
+    }
+
+    // Siempre punto como separador decimal para input[type=number]
+    static string FormatearCantidad(decimal v) =>
+        v.ToString("G", CultureInfo.InvariantCulture);
+}
+@{
+    ViewData["Title"] = "Carrito";
+}
+
+<h2 class="mb-4"><i class="bi bi-cart3 me-2"></i>Mi Carrito</h2>
+
+@if (Model.Eliminados.Any())
+{
+    <div class="alert alert-warning d-flex gap-2 align-items-start mb-4">
+        <i class="bi bi-exclamation-triangle-fill fs-5 flex-shrink-0 mt-1"></i>
+        <div>
+            <strong>Algunos productos fueron quitados del carrito por falta de stock:</strong>
+            <ul class="mb-0 mt-1">
+                @foreach (var nombre in Model.Eliminados)
+                {
+                    <li>@nombre</li>
+                }
+            </ul>
+        </div>
+    </div>
+}
+
+@if (TempData["Error"] is string errorMsg)
+{
+    <div class="alert alert-warning d-flex gap-2 align-items-start mb-4">
+        <i class="bi bi-exclamation-triangle-fill fs-5 mt-1"></i>
+        <span>@errorMsg</span>
+    </div>
+}
+
+@if (!Model.Items.Any())
+{
+    <div class="alert alert-info d-flex align-items-center gap-2">
+        <i class="bi bi-cart-x fs-4"></i>
+        <span>Tu carrito está vacío. <a asp-page="/Index" class="alert-link">Ver productos</a></span>
+    </div>
+}
+else
+{
+    <div class="row g-4">
+        <!-- Tabla de ítems -->
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-0">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead style="background:var(--verde-profundo);color:#fff;">
+                            <tr>
+                                <th class="ps-3 rounded-top-start py-3">Producto</th>
+                                <th class="text-center py-3">Precio</th>
+                                <th class="text-center py-3" style="width:140px;">Cantidad</th>
+                                <th class="text-end py-3">Subtotal</th>
+                                <th class="rounded-top-end py-3"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in Model.Items)
+                            {
+                                var rutaImg = ResolverRutaImagen(item.Imagen);
+                                <tr>
+                                    <td class="ps-3">
+                                        <div class="d-flex align-items-center gap-2">
+                                            @if (!string.IsNullOrEmpty(rutaImg))
+                                            {
+                                                <img src="@rutaImg" height="48" width="48"
+                                                     class="rounded object-fit-contain border"
+                                                     alt="@item.Descripcion"
+                                                     onerror="this.style.display='none'" />
+                                            }
+                                            <span class="fw-semibold small">@item.Descripcion</span>
+                                        </div>
+                                    </td>
+                                    <td class="text-center">$@item.Precio.ToString("N2")</td>
+                                    <td>
+                                        <!-- Actualizar cantidad -->
+                                        <form asp-page-handler="ActualizarCantidad" method="post"
+                                              class="d-flex align-items-center justify-content-center gap-1">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="lineaId" value="@item.LineaId" />
+                                            <input type="number"
+                                                   name="cantidad"
+                                                   value="@FormatearCantidad(item.Cantidad)"
+                                                   min="0"
+                                                   step="any"
+                                                   class="form-control form-control-sm text-center px-1"
+                                                   style="width:75px;"
+                                                   onchange="this.form.submit()" />
+                                        </form>
+                                    </td>
+                                    <td class="text-end fw-bold" style="color:var(--verde);">
+                                        $@item.Subtotal.ToString("N2")
+                                    </td>
+                                    <td class="text-center pe-2">
+                                        <!-- Eliminar -->
+                                        <form asp-page-handler="Quitar" method="post">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="lineaId" value="@item.LineaId" />
+                                            <button type="submit"
+                                                    class="btn btn-outline-danger btn-sm"
+                                                    title="Eliminar"
+                                                    onclick="return confirm('¿Quitar @Html.Raw(item.Descripcion.Replace("'","&#39;")) del carrito?')">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Resumen -->
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title mb-3">Resumen del pedido</h5>
+
+                    @foreach (var item in Model.Items)
+                    {
+                        <div class="d-flex justify-content-between mb-1 small">
+                            <span class="text-muted text-truncate me-2" style="max-width:160px;"
+                                  title="@item.Descripcion">@item.Descripcion</span>
+                            <span class="text-nowrap">
+                                @FormatearCantidad(item.Cantidad) × $@item.Precio.ToString("N2")
+                            </span>
+                        </div>
+                    }
+
+                    <hr class="my-2" />
+
+                    <div class="d-flex justify-content-between fs-5 fw-bold">
+                        <span>Total (@Model.Items.Count @(Model.Items.Count == 1 ? "ítem" : "ítems"))</span>
+                        <span style="color:var(--verde);">$@Model.Total.ToString("N2")</span>
+                    </div>
+
+                    <a asp-page="/Checkout" class="btn btn-agregar w-100 mt-3">
+                        <i class="bi bi-credit-card me-1"></i>Confirmar pedido
+                    </a>
+                    <a asp-page="/Index" class="btn btn-outline-secondary w-100 mt-2">
+                        <i class="bi bi-arrow-left me-1"></i>Seguir comprando
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+}

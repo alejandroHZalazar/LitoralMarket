@@ -1,0 +1,513 @@
+@page
+@model PagoPageModel
+@using System.Globalization
+@{
+    ViewData["Title"] = "Seleccionar método de pago";
+    var subtotalItems = Model.Pedido?.Items.Sum(i => i.Subtotal) ?? 0;
+    var costoEnvio    = (Model.Pedido?.Total ?? 0) - subtotalItems;
+}
+
+<h2 class="mb-4"><i class="bi bi-credit-card me-2"></i>Método de pago</h2>
+
+@if (!ModelState.IsValid)
+{
+    <div class="alert alert-danger d-flex gap-2 align-items-start mb-4">
+        <i class="bi bi-exclamation-triangle-fill fs-5 mt-1"></i>
+        <div>
+            <strong>No se pudo procesar el pago:</strong>
+            <ul class="mb-0 mt-1">
+                @foreach (var error in ModelState.Values.SelectMany(v => v.Errors))
+                {
+                    <li>@error.ErrorMessage</li>
+                }
+            </ul>
+        </div>
+    </div>
+}
+
+<div class="row g-4">
+
+    <!-- ===== Columna izquierda ===== -->
+    <div class="col-lg-7">
+
+        @if (Model.PagoYaProcesado && Model.Resultado?.Tipo == "mercadopago")
+        {
+            <!-- Link de pago MercadoPago generado -->
+            <div class="card border-0 shadow-sm mb-3">
+                <div class="card-body text-center py-4">
+                    <div class="mb-3">
+                        <span style="font-size:3rem; color:var(--verde);">
+                            <i class="bi bi-check-circle-fill"></i>
+                        </span>
+                    </div>
+                    <h5 class="fw-bold mb-1">¡Tu pedido está reservado!</h5>
+                    <p class="text-muted small mb-4">
+                        Completá el pago en MercadoPago para confirmar tu pedido.<br />
+                        @if (Model.Resultado.MpFechaExpiracion.HasValue)
+                        {
+                            <span>El link vence el <strong>@Model.Resultado.MpFechaExpiracion.Value.ToString("dd/MM/yyyy 'a las' HH:mm") hs.</strong></span>
+                        }
+                    </p>
+
+                    @{
+                        var qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=10&ecc=M&data="
+                                  + Uri.EscapeDataString(Model.Resultado.MpLinkPago ?? "");
+                    }
+
+                    <!-- QR de pago -->
+                    <div class="qr-pago-container mb-3">
+                        <div class="qr-pago-frame">
+                            <img src="@qrUrl"
+                                 alt="QR de pago MercadoPago"
+                                 class="qr-pago-img"
+                                 width="240" height="240" />
+                            <div class="qr-pago-corner top-left"></div>
+                            <div class="qr-pago-corner top-right"></div>
+                            <div class="qr-pago-corner bottom-left"></div>
+                            <div class="qr-pago-corner bottom-right"></div>
+                        </div>
+                        <p class="text-muted small mt-2 mb-0">
+                            <i class="bi bi-phone me-1"></i>
+                            Escaneá el QR con tu celular para pagar
+                        </p>
+                    </div>
+
+                    <div class="d-flex align-items-center my-3">
+                        <hr class="flex-grow-1" />
+                        <span class="px-3 text-muted small fw-semibold">o</span>
+                        <hr class="flex-grow-1" />
+                    </div>
+
+                    <a href="@Model.Resultado.MpLinkPago"
+                       target="_blank"
+                       class="btn btn-lg w-100 mb-2"
+                       style="background-color:#009EE3; color:#fff; border-radius:8px; font-weight:700;">
+                        <i class="bi bi-box-arrow-up-right me-2"></i>Pagar con MercadoPago
+                    </a>
+
+                    <button type="button"
+                            class="btn btn-outline-secondary btn-sm w-100"
+                            onclick="copiarLinkPago(this)"
+                            data-link="@Model.Resultado.MpLinkPago">
+                        <i class="bi bi-clipboard me-1"></i>Copiar link de pago
+                    </button>
+
+                    <!-- Descarga del comprobante -->
+                    <div class="mt-3">
+                        <a href="/descargar-pdf?pedidoId=@Model.Id"
+                           target="_blank"
+                           class="btn btn-outline-dark btn-sm w-100">
+                            <i class="bi bi-file-earmark-pdf me-1"></i>Descargar comprobante PDF
+                        </a>
+                        <p class="text-muted text-center mt-2 mb-0" style="font-size:.75rem;">
+                            <i class="bi bi-exclamation-triangle me-1 text-warning"></i>
+                            Este comprobante <strong>no es válido como factura</strong>.
+                            La compra se efectivizará al recibir el pago.
+                        </p>
+                    </div>
+
+                    @if (Model.Resultado?.EmailEnviado == true)
+                    {
+                        <div class="alert alert-success small mt-3 text-start d-flex align-items-start gap-2">
+                            <i class="bi bi-envelope-check-fill fs-5 mt-1 flex-shrink-0"></i>
+                            <div>
+                                <strong>Te enviamos un email</strong> con el link de pago y el comprobante.<br />
+                                Si no lo ves en tu bandeja de entrada, <strong>revisá la carpeta de spam o correo no deseado</strong>.
+                            </div>
+                        </div>
+                    }
+
+                    @* ── Panel de estado en tiempo real (polling) ── *@
+                    <div id="mp-poll-panel" class="mp-poll-panel esperando" role="status" aria-live="polite">
+                        <span class="mp-poll-icon"><i class="bi bi-clock-history" id="mp-poll-icon-i"></i></span>
+                        <span class="mp-poll-texto">
+                            <div class="mp-poll-titulo" id="mp-poll-titulo">Esperando confirmación de pago...</div>
+                            <div class="mp-poll-subtitulo" id="mp-poll-subtitulo">
+                                Verificamos automáticamente. Podés cerrar esta página y volver más tarde.
+                            </div>
+                        </span>
+                        <span class="mp-poll-timer" id="mp-poll-timer">0:00</span>
+                    </div>
+
+                </div>
+            </div>
+        }
+        else
+        {
+            <!-- Selección de método de pago -->
+            <form method="post" id="formPago">
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="Seleccion.PedidoId" value="@Model.Id" />
+
+                <div class="card border-0 shadow-sm mb-3">
+                    <div class="card-body">
+                        <h6 class="card-title checkout-section-title">
+                            <i class="bi bi-wallet2 me-2"></i>Elegí cómo querés pagar
+                        </h6>
+                        <span asp-validation-for="Seleccion.MetodoPago" class="text-danger small d-block mb-3"></span>
+
+                        <div class="d-flex flex-column gap-3" id="listaPagos">
+
+                            @if (Model.MetodoReembolso)
+                            {
+                                <label class="dir-opcion" id="opcion-reembolso">
+                                    <input type="radio"
+                                           name="Seleccion.MetodoPago"
+                                           value="reembolso"
+                                           class="dir-radio visually-hidden" />
+                                    <div class="dir-opcion-inner">
+                                        <div class="dir-icono" style="background:var(--verde-profundo);">
+                                            <i class="bi bi-cash-coin" style="color:#fff;"></i>
+                                        </div>
+                                        <div class="dir-info flex-grow-1">
+                                            <div class="dir-nombre">Pago contra reembolso</div>
+                                            <div class="dir-detalle">
+                                                <i class="bi bi-truck me-1"></i>Pagás al momento de recibir tu pedido
+                                            </div>
+                                        </div>
+                                        <div class="dir-costo">
+                                            <span class="badge-gratis">Sin cargo extra</span>
+                                        </div>
+                                    </div>
+                                </label>
+                            }
+
+                            @if (Model.MetodoMercadoPago)
+                            {
+                                <label class="dir-opcion" id="opcion-mp">
+                                    <input type="radio"
+                                           name="Seleccion.MetodoPago"
+                                           value="mercadopago"
+                                           class="dir-radio visually-hidden" />
+                                    <div class="dir-opcion-inner">
+                                        <div class="dir-icono" style="background:#009EE3; padding:6px;">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="28" height="28">
+                                                <path fill="#fff" d="M24 4C13 4 4 13 4 24s9 20 20 20 20-9 20-20S35 4 24 4zm0 6c3.9 0 7.4 1.5 10 3.8L10 27.5C9.4 26.4 9 25.2 9 24c0-8.3 6.7-14 15-14zm0 28c-3.9 0-7.4-1.5-10-3.8L38 20.5c.6 1.1 1 2.3 1 3.5 0 7.7-6.7 14-15 14z"/>
+                                            </svg>
+                                        </div>
+                                        <div class="dir-info flex-grow-1">
+                                            <div class="dir-nombre">MercadoPago</div>
+                                            <div class="dir-detalle">
+                                                <i class="bi bi-credit-card me-1"></i>Tarjeta, débito, transferencia o efectivo
+                                            </div>
+                                        </div>
+                                        <div class="dir-costo">
+                                            <i class="bi bi-shield-check text-success fs-5"></i>
+                                        </div>
+                                    </div>
+                                </label>
+                            }
+
+                            @if (!Model.MetodoReembolso && !Model.MetodoMercadoPago)
+                            {
+                                <div class="alert alert-warning">
+                                    <i class="bi bi-exclamation-triangle me-2"></i>
+                                    No hay métodos de pago habilitados. Contactate con la tienda.
+                                </div>
+                            }
+
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit"
+                        id="btnConfirmarPago"
+                        class="btn-agregar w-100 py-2 fs-6"
+                        @(!Model.MetodoReembolso && !Model.MetodoMercadoPago ? "disabled" : "")>
+                    <i class="bi bi-check-circle me-2"></i>Confirmar pago
+                </button>
+            </form>
+        }
+    </div>
+
+    <!-- ===== Resumen derecha ===== -->
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm checkout-resumen-sticky">
+            <div class="card-body">
+                <h6 class="card-title checkout-section-title">
+                    <i class="bi bi-receipt me-2"></i>Resumen del pedido
+                </h6>
+
+                @if (Model.Pedido is not null)
+                {
+                    <!-- Ítems -->
+                    <div class="checkout-items-list mb-3">
+                        @foreach (var item in Model.Pedido.Items)
+                        {
+                            <div class="d-flex justify-content-between align-items-start small mb-1 gap-2">
+                                <span class="text-muted text-truncate" style="max-width:200px;">
+                                    @item.Descripcion
+                                    <span class="fw-semibold text-dark"> × @item.Cantidad.ToString("G", CultureInfo.InvariantCulture)</span>
+                                </span>
+                                <span class="text-nowrap fw-semibold">$@item.Subtotal.ToString("N2")</span>
+                            </div>
+                        }
+                    </div>
+
+                    <hr class="my-2" />
+
+                    <!-- Totales -->
+                    <div class="d-flex justify-content-between small mb-1">
+                        <span class="text-muted">Subtotal productos</span>
+                        <span>$@subtotalItems.ToString("N2")</span>
+                    </div>
+                    @if (costoEnvio > 0)
+                    {
+                        <div class="d-flex justify-content-between small mb-1">
+                            <span class="text-muted">Envío</span>
+                            <span class="fw-semibold">+ $@costoEnvio.ToString("N2")</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="d-flex justify-content-between small mb-1">
+                            <span class="text-muted">Envío</span>
+                            <span class="fw-semibold" style="color:var(--verde);">Gratis</span>
+                        </div>
+                    }
+
+                    <hr class="my-2" />
+
+                    <div class="d-flex justify-content-between fs-5 fw-bold">
+                        <span>Total</span>
+                        <span style="color:var(--verde);">$@Model.Pedido.Total.ToString("N2")</span>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(Model.Pedido.DireccionEntrega))
+                    {
+                        <div class="mt-3 p-2 rounded" style="background:#f8f9fa; font-size:.82rem;">
+                            <i class="bi bi-geo-alt-fill text-muted me-1"></i>
+                            <strong>Entrega:</strong> @Model.Pedido.DireccionEntrega
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+
+</div>
+
+@section Scripts {
+<script>
+/* ════════════════════════════════════════════════════════════════
+   SELECCIÓN DE MÉTODO DE PAGO — estilo de opciones
+   ════════════════════════════════════════════════════════════════ */
+(function () {
+    document.querySelectorAll('.dir-radio').forEach(radio => {
+        radio.addEventListener('change', () => {
+            document.querySelectorAll('.dir-opcion').forEach(l => l.classList.remove('checked'));
+            radio.closest('.dir-opcion').classList.add('checked');
+        });
+    });
+
+    document.querySelectorAll('.dir-opcion').forEach(label => {
+        label.addEventListener('click', function () {
+            const radio = this.querySelector('.dir-radio');
+            if (radio) {
+                radio.checked = true;
+                document.querySelectorAll('.dir-opcion').forEach(l => l.classList.remove('checked'));
+                this.classList.add('checked');
+            }
+        });
+    });
+
+    // Spinner al confirmar
+    const form = document.getElementById('formPago');
+    const btn  = document.getElementById('btnConfirmarPago');
+    if (form && btn) {
+        form.addEventListener('submit', () => {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Procesando...';
+        });
+    }
+})();
+
+/* ════════════════════════════════════════════════════════════════
+   POLLING DE ESTADO DE PAGO — solo activo cuando hay QR visible
+   ════════════════════════════════════════════════════════════════ */
+@if (Model.PagoYaProcesado && Model.Resultado?.Tipo == "mercadopago")
+{
+    <text>
+(function () {
+    'use strict';
+
+    var PEDIDO_ID    = @Model.Id;
+    var REDIRECT_URL = '/Pedido/@Model.Id';
+    var INTERVALO_MS = 5000;   // poll cada 5 s
+    var MAX_ESPERA_S = 600;    // detener polling a los 10 min sin respuesta
+
+    var estadoActual = 'esperando';
+    var elapsed      = 0;
+    var pollId       = null;
+    var timerId      = null;
+    var terminado    = false;
+
+    // Definición de estados visuales
+    var ESTADOS = {
+        esperando:   { icon: 'bi-clock-history',   cls: 'esperando',   titulo: 'Esperando confirmación de pago...',          sub: 'Verificamos automáticamente. Podés cerrar esta página y volver más tarde.' },
+        verificando: { icon: 'bi-arrow-repeat',    cls: 'verificando',  titulo: 'Verificando con MercadoPago...',             sub: 'Esto puede tardar unos segundos.' },
+        confirmado:  { icon: 'bi-check-circle-fill',cls: 'confirmado',  titulo: '¡Pago confirmado!',                         sub: 'Redirigiendo a tu pedido...' },
+        rechazado:   { icon: 'bi-x-circle-fill',   cls: 'error',        titulo: 'Pago rechazado.',                           sub: 'Por favor revisá los datos de tu tarjeta o intentá con otro método de pago.' },
+        cancelado:   { icon: 'bi-dash-circle-fill', cls: 'error',       titulo: 'Pago cancelado.',                           sub: 'Si fue un error, podés intentarlo de nuevo desde el link de arriba.' },
+        expirado:    { icon: 'bi-alarm-fill',       cls: 'error',       titulo: 'Tiempo de verificación agotado.',           sub: 'Si ya pagaste, tu pedido se confirmará en breve de forma automática.' }
+    };
+
+    function actualizarPanel(nuevoEstado) {
+        if (terminado && nuevoEstado !== 'confirmado' && nuevoEstado !== 'rechazado' && nuevoEstado !== 'cancelado') return;
+        if (estadoActual === nuevoEstado) return;
+        estadoActual = nuevoEstado;
+
+        var cfg    = ESTADOS[nuevoEstado] || ESTADOS['esperando'];
+        var panel  = document.getElementById('mp-poll-panel');
+        var iconEl = document.getElementById('mp-poll-icon-i');
+        var tit    = document.getElementById('mp-poll-titulo');
+        var sub    = document.getElementById('mp-poll-subtitulo');
+        if (!panel) return;
+
+        panel.className = 'mp-poll-panel ' + cfg.cls;
+        if (iconEl) iconEl.className = 'bi ' + cfg.icon;
+        if (tit) tit.textContent = cfg.titulo;
+        if (sub) sub.textContent = cfg.sub;
+    }
+
+    function actualizarTimer() {
+        var el = document.getElementById('mp-poll-timer');
+        if (!el || terminado) return;
+        var m = Math.floor(elapsed / 60);
+        var s = elapsed % 60;
+        el.textContent = m + ':' + (s < 10 ? '0' : '') + s;
+    }
+
+    async function pollear() {
+        if (terminado) return;
+
+        // Cambio visual breve a "verificando" solo cuando llevamos más de 3 s esperando
+        // (evita flash en el primer poll que puede resolverse rápido)
+        var prevEstado = estadoActual;
+        if (elapsed > 3 && estadoActual === 'esperando') actualizarPanel('verificando');
+
+        try {
+            var ctrl = new AbortController();
+            var timeoutId = setTimeout(function() { ctrl.abort(); }, 14000);
+
+            var resp = await fetch('/api/pago-estado/' + PEDIDO_ID, {
+                signal: ctrl.signal,
+                headers: { 'Accept': 'application/json' },
+                credentials: 'same-origin',
+                cache: 'no-store'
+            });
+            clearTimeout(timeoutId);
+
+            console.log('[MP-Poll] t=' + elapsed + 's status=' + resp.status + ' ct=' + resp.headers.get('content-type'));
+
+            if (!resp.ok) {
+                console.warn('[MP-Poll] respuesta no OK', resp.status);
+                if (estadoActual === 'verificando') actualizarPanel('esperando');
+                return;
+            }
+
+            // Defensa: si por algún motivo la respuesta no es JSON (redirect, HTML de error),
+            // el .json() tirará excepción → la atrapamos abajo y loggeamos.
+            var data = await resp.json();
+            console.log('[MP-Poll] estado=' + (data && data.estado));
+
+            var estado = (data && data.estado) || 'pendiente';
+
+            if (estado === 'confirmado') {
+                terminar('confirmado');
+            } else if (estado === 'rechazado') {
+                terminar('rechazado');
+            } else if (estado === 'cancelado') {
+                terminar('cancelado');
+            } else {
+                // pendiente — volver a "esperando"
+                if (estadoActual === 'verificando') actualizarPanel('esperando');
+            }
+
+        } catch (e) {
+            console.warn('[MP-Poll] error en fetch:', e && e.message);
+            if (estadoActual === 'verificando') actualizarPanel(prevEstado);
+        }
+    }
+
+    function terminar(estado) {
+        terminado = true;
+        clearInterval(pollId);
+        clearInterval(timerId);
+
+        var timerEl = document.getElementById('mp-poll-timer');
+        if (timerEl) timerEl.textContent = '';
+
+        actualizarPanel(estado);
+
+        if (estado === 'confirmado') {
+            // Ocultar timer, mostrar redireccion y redirigir tras 2.5 s
+            setTimeout(function() {
+                window.location.href = REDIRECT_URL;
+            }, 2500);
+        }
+    }
+
+    // Arrancar
+    document.addEventListener('DOMContentLoaded', function () {
+        console.log('[MP-Poll] iniciando polling de estado de pago — pedidoId=' + PEDIDO_ID +
+                    ' intervalo=' + (INTERVALO_MS/1000) + 's');
+
+        // Primer poll inmediato (sin esperar 5 s)
+        pollear();
+
+        pollId  = setInterval(pollear, INTERVALO_MS);
+        timerId = setInterval(function () {
+            elapsed++;
+            actualizarTimer();
+
+            // Límite de tiempo: si pasaron MAX_ESPERA_S sin confirmación, detener
+            if (elapsed >= MAX_ESPERA_S && !terminado) terminar('expirado');
+        }, 1000);
+    });
+
+    // Limpiar al salir de la página (evitar memory leaks)
+    window.addEventListener('pagehide', function () {
+        clearInterval(pollId);
+        clearInterval(timerId);
+    });
+
+})();
+    </text>
+}
+
+/* ════════════════════════════════════════════════════════════════
+   COPIAR LINK DE PAGO
+   ════════════════════════════════════════════════════════════════ */
+function copiarLinkPago(btn) {
+    var link = btn.getAttribute('data-link');
+    if (!link) return;
+
+    var ok = function() {
+        var original = btn.innerHTML;
+        btn.innerHTML = '<i class="bi bi-check2 me-1"></i>¡Link copiado!';
+        btn.classList.add('btn-outline-success');
+        btn.classList.remove('btn-outline-secondary');
+        setTimeout(function() {
+            btn.innerHTML = original;
+            btn.classList.remove('btn-outline-success');
+            btn.classList.add('btn-outline-secondary');
+        }, 2000);
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(link).then(ok).catch(fallback);
+    } else {
+        fallback();
+    }
+
+    function fallback() {
+        var ta = document.createElement('textarea');
+        ta.value = link; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); ok(); } catch (e) {}
+        document.body.removeChild(ta);
+    }
+}
+</script>
+}

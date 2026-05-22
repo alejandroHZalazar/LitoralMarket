@@ -1,0 +1,1421 @@
+/* =============================================
+   VARIABLES — Paleta LitoralMarket
+   Verde RGB(29,176,98) | Celeste RGB(148,201,233)
+   Blanco | Dorado
+   ============================================= */
+:root {
+  --verde:           #1DB062;          /* RGB(29, 176, 98)  */
+  --verde-oscuro:    #157847;          /* más oscuro para fondos */
+  --verde-profundo:  #0D5C35;          /* navbar, contraste alto  */
+  --verde-hover:     #199C57;
+  --celeste:         #94C9E9;          /* RGB(148, 201, 233) */
+  --celeste-oscuro:  #5AADD4;
+  --celeste-suave:   rgba(148,201,233,0.18);
+  --dorado:          #C9A84C;
+  --dorado-claro:    #E8C87A;
+  --dorado-suave:    rgba(201,168,76,0.18);
+  --blanco:          #ffffff;
+  --crema:           #F6FAF7;
+  --gris-texto:      #374151;
+  --sombra:          0 6px 24px rgba(0,0,0,0.14);
+  --sombra-suave:    0 2px 10px rgba(0,0,0,0.07);
+}
+
+/* =============================================
+   BASE
+   ============================================= */
+html { font-size: 14px; }
+@media (min-width: 768px) { html { font-size: 16px; } }
+html { position: relative; min-height: 100%; }
+
+body {
+  background-color: var(--crema);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  color: var(--gris-texto);
+  overflow-x: hidden;        /* nunca scroll horizontal de página */
+}
+
+/* =============================================
+   FRANJA DECORATIVA SUPERIOR
+   Verde → Celeste → Blanco → Dorado
+   ============================================= */
+.topbar {
+  height: 5px;
+  background: linear-gradient(
+    to right,
+    var(--verde-profundo) 0%,
+    var(--verde)          30%,
+    var(--celeste)        55%,
+    var(--blanco)         70%,
+    var(--dorado-claro)   83%,
+    var(--dorado)         100%
+  );
+}
+
+/* =============================================
+   NAVBAR estilo Amazon / Mercado Libre
+   ============================================= */
+.navbar-lm {
+  background: linear-gradient(160deg, var(--verde-profundo) 0%, var(--verde-oscuro) 100%);
+  box-shadow: var(--sombra);
+  border-bottom: 2.5px solid var(--dorado);
+  padding: 0;
+}
+
+/* ------- FILA 1: brand + buscador + acciones ------- */
+.navbar-main {
+  padding: 0.65rem 0;
+}
+.navbar-main-grid {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 1.5rem;
+  align-items: center;
+}
+@media (max-width: 767.98px) {
+  .navbar-main-grid {
+    grid-template-columns: auto 1fr;
+    grid-template-areas:
+      "brand actions"
+      "search search";
+    row-gap: 0.6rem;
+    column-gap: 0.75rem;
+  }
+  .navbar-brand   { grid-area: brand; }
+  .navbar-actions { grid-area: actions; justify-self: end; }
+  .search-form    { grid-area: search; max-width: 100%; }
+}
+
+/* =============================================
+   BRAND
+   ============================================= */
+.navbar-lm .navbar-brand {
+  color: var(--blanco) !important;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0;
+  text-decoration: none;
+  transition: opacity 0.2s;
+  white-space: nowrap;
+}
+.navbar-lm .navbar-brand:hover { opacity: 0.88; }
+.brand-text {
+  display: inline-block;
+}
+@media (max-width: 575.98px) {
+  .brand-text { display: none; }
+}
+
+/* Logo imagen desde BD */
+.brand-logo {
+  height: 38px;
+  width: auto;
+  max-width: 110px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: var(--blanco);
+  padding: 2px 4px;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.18);
+}
+
+/* Ícono fallback cuando no hay logo en BD */
+.brand-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, var(--dorado) 0%, var(--dorado-claro) 100%);
+  border-radius: 10px;
+  font-size: 1.1rem;
+  color: var(--verde-profundo);
+  box-shadow: 0 2px 8px rgba(201,168,76,0.38);
+  flex-shrink: 0;
+}
+
+/* =============================================
+   BUSCADOR — protagonista, centrado y prominente
+   ============================================= */
+.search-form {
+  display: flex;
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+}
+.search-form .form-control {
+  background: rgba(255,255,255,0.97);
+  border: 1.5px solid rgba(255,255,255,0.5);
+  border-right: none;
+  color: var(--gris-texto);
+  border-radius: 24px 0 0 24px;
+  font-size: 0.92rem;
+  min-width: 0;
+  width: 100%;
+  padding: 0.5rem 1.1rem;
+  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+.search-form .form-control::placeholder { color: #9aa0a6; }
+.search-form .form-control:focus {
+  background: var(--blanco);
+  border-color: var(--dorado);
+  box-shadow: 0 0 0 3px rgba(201,168,76,0.35);
+  color: var(--gris-texto);
+  outline: none;
+}
+.search-form .btn-buscar {
+  background: linear-gradient(135deg, var(--dorado) 0%, var(--dorado-claro) 100%);
+  border: 1.5px solid var(--dorado);
+  border-left: none;
+  color: var(--verde-profundo);
+  font-weight: 700;
+  border-radius: 0 24px 24px 0;
+  padding: 0.5rem 1.4rem;
+  white-space: nowrap;
+  transition: filter 0.2s;
+}
+.search-form .btn-buscar:hover { filter: brightness(1.08); }
+
+/* =============================================
+   ACCIONES (carrito, mis pedidos, admin)
+   ============================================= */
+.navbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.action-label {
+  display: none;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+@media (min-width: 992px) {
+  .action-label { display: inline-block; }
+}
+
+/* Botón Carrito (más sobrio) */
+.btn-carrito {
+  position: relative;
+  background: rgba(255,255,255,0.1);
+  border: 1.5px solid rgba(255,255,255,0.3);
+  color: var(--blanco) !important;
+  border-radius: 8px;
+  padding: 0.4rem 0.75rem;
+  font-size: 1.05rem;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+  transition: background 0.2s, border-color 0.2s;
+}
+.btn-carrito:hover {
+  background: rgba(148,201,233,0.18);
+  border-color: var(--celeste);
+  color: var(--blanco) !important;
+}
+.badge-carrito {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  background: linear-gradient(135deg, var(--dorado) 0%, var(--dorado-claro) 100%);
+  color: var(--verde-profundo);
+  border-radius: 50%;
+  width: 19px;
+  height: 19px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--verde-profundo);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+}
+
+/* Botón "Mis pedidos" / "Ingresar" / Usuario */
+.btn-login {
+  background: linear-gradient(135deg, var(--dorado) 0%, var(--dorado-claro) 100%);
+  color: var(--verde-profundo) !important;
+  border: none;
+  border-radius: 8px;
+  padding: 0.4rem 0.85rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  gap: 0.4rem;
+  box-shadow: 0 2px 8px rgba(201,168,76,0.32);
+  transition: filter 0.2s, box-shadow 0.2s;
+  line-height: 1.4;
+}
+.btn-login:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 4px 14px rgba(201,168,76,0.42);
+  color: var(--verde-profundo) !important;
+}
+
+/* Variante discreta para acceso admin en modo público */
+.btn-admin-acceso {
+  background: rgba(255,255,255,0.08);
+  border: 1.5px solid rgba(255,255,255,0.45);
+  color: rgba(255,255,255,0.9) !important;
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
+  font-size: 1rem;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+.btn-admin-acceso:hover {
+  border-color: var(--dorado);
+  color: var(--dorado-claro) !important;
+  background: rgba(201,168,76,0.15);
+}
+
+/* =============================================
+   FILA 2: MENÚ DE RUBROS (franja oscura)
+   ============================================= */
+.navbar-rubros {
+  background: rgba(0, 0, 0, 0.20);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+.navbar-rubros > .container {
+  flex-wrap: wrap;
+}
+.rubros-collapse {
+  flex-basis: 100%;
+  width: 100%;
+}
+.rubros-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 0.15rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.25) transparent;
+}
+.rubros-list::-webkit-scrollbar { height: 3px; }
+.rubros-list::-webkit-scrollbar-track { background: transparent; }
+.rubros-list::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.18);
+  border-radius: 2px;
+}
+
+.rubro-link {
+  display: inline-block;
+  color: rgba(255,255,255,0.85);
+  text-decoration: none;
+  font-size: 0.76rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 0.6rem 0.85rem;
+  border-radius: 0;
+  white-space: nowrap;
+  position: relative;
+  transition: background 0.18s, color 0.18s;
+}
+.rubro-link:hover {
+  color: var(--blanco);
+  background: rgba(255,255,255,0.07);
+}
+.rubro-link.active {
+  color: var(--dorado-claro);
+  background: rgba(255,255,255,0.06);
+}
+.rubro-link.active::after {
+  content: '';
+  position: absolute;
+  left: 0.6rem;
+  right: 0.6rem;
+  bottom: 0;
+  height: 2.5px;
+  background: var(--dorado);
+  border-radius: 2px;
+}
+
+/* Toggler categorías (mobile) */
+.rubros-toggler {
+  background: transparent;
+  border: 1.5px solid rgba(255,255,255,0.3);
+  color: var(--blanco);
+  border-radius: 6px;
+  padding: 0.35rem 0.85rem;
+  margin: 0.4rem 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+.rubros-toggler:hover {
+  border-color: var(--dorado);
+  background: rgba(201,168,76,0.12);
+}
+
+@media (max-width: 991.98px) {
+  .rubros-collapse { padding-bottom: 0.5rem; }
+  .rubros-list {
+    flex-direction: column;
+    gap: 0;
+    overflow-x: visible;
+  }
+  .rubro-link {
+    display: block;
+    padding: 0.6rem 0.5rem;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .rubro-link.active::after { display: none; }
+  .rubro-link.active {
+    border-left: 3px solid var(--dorado);
+    padding-left: calc(0.5rem - 3px);
+  }
+}
+
+/* =============================================
+   DROPDOWN USUARIO
+   ============================================= */
+.navbar-lm .dropdown-menu {
+  border: none;
+  border-radius: 12px;
+  box-shadow: var(--sombra);
+  margin-top: 10px;
+  border-top: 3px solid var(--dorado);
+  overflow: hidden;
+}
+.navbar-lm .dropdown-item {
+  font-size: 0.875rem;
+  padding: 0.55rem 1.1rem;
+  transition: background 0.15s, color 0.15s;
+}
+.navbar-lm .dropdown-item:hover {
+  background: var(--celeste-suave);
+  color: var(--verde-profundo);
+}
+.navbar-lm .dropdown-item.text-danger:hover {
+  background: rgba(200,60,60,0.07);
+}
+.navbar-lm .dropdown-divider { border-color: rgba(0,0,0,0.06); }
+
+/* =============================================
+   FOOTER compacto (mismo lenguaje visual que el navbar)
+   ============================================= */
+footer.footer-lm {
+  background: linear-gradient(170deg, var(--verde-profundo) 0%, #0a3d22 100%);
+  color: rgba(255,255,255,0.75);
+  margin-top: 3rem;
+  border-top: 2.5px solid var(--dorado);
+  font-size: 0.82rem;
+}
+
+/* ------- Banda principal ------- */
+.footer-main {
+  padding: 0.9rem 0;
+}
+.footer-grid {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 1.5rem;
+  align-items: center;
+}
+@media (max-width: 767.98px) {
+  .footer-grid {
+    grid-template-columns: 1fr;
+    text-align: center;
+    gap: 0.75rem;
+    justify-items: center;
+  }
+}
+
+/* Brand mini */
+.footer-brand-mini {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+.footer-logo {
+  height: 38px;
+  width: auto;
+  max-width: 80px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.92);
+  padding: 3px 5px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.22);
+}
+.footer-empresa-nombre {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--dorado-claro);
+  letter-spacing: 0.3px;
+  line-height: 1.2;
+}
+.footer-empresa-sub {
+  font-size: 0.7rem;
+  color: rgba(255,255,255,0.5);
+  line-height: 1.2;
+}
+
+/* Nav inline */
+.footer-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.95rem;
+  justify-content: center;
+}
+.footer-nav a {
+  color: rgba(255,255,255,0.7);
+  text-decoration: none;
+  font-size: 0.78rem;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: color 0.2s;
+}
+.footer-nav a:hover { color: var(--celeste); }
+
+/* Dev compacto */
+.footer-dev-compact {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  white-space: nowrap;
+}
+.footer-dev-text {
+  font-size: 0.78rem;
+  color: rgba(255,255,255,0.6);
+}
+.footer-dev-text strong {
+  color: var(--dorado-claro);
+  font-weight: 700;
+}
+.btn-acerca-de {
+  background: transparent;
+  border: 1.5px solid rgba(201,168,76,0.5);
+  color: var(--dorado-claro);
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.95rem;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.btn-acerca-de:hover {
+  background: var(--dorado);
+  color: var(--verde-profundo);
+  border-color: var(--dorado);
+}
+
+/* ------- Banda inferior delgada (igual estilo que franja de rubros) ------- */
+.footer-bottom-strip {
+  background: rgba(0, 0, 0, 0.20);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  padding: 0.45rem 0;
+  font-size: 0.72rem;
+  color: rgba(255,255,255,0.45);
+}
+.footer-bottom-strip strong { color: rgba(255,255,255,0.6); }
+.footer-bottom-strip a {
+  color: var(--celeste);
+  text-decoration: none;
+}
+.footer-bottom-strip a:hover { opacity: 0.85; }
+
+/* =============================================
+   MODAL ACERCA DE LITORALSYS
+   ============================================= */
+.modal-acerca-de {
+  background: linear-gradient(170deg, var(--verde-profundo) 0%, #0c4727 60%, #081f12 100%);
+  border: none;
+  border-radius: 18px;
+  border-top: 4px solid var(--dorado);
+  overflow: hidden;
+  color: var(--blanco);
+}
+.modal-acerca-de .btn-close-white {
+  filter: invert(1) grayscale(1) brightness(2);
+  opacity: 0.7;
+}
+.modal-acerca-de .btn-close-white:hover { opacity: 1; }
+
+/* Logo LitoralSys en modal */
+.modal-dev-logo-wrap {
+  display: flex;
+  justify-content: center;
+}
+.modal-dev-logo {
+  height: 90px;
+  width: auto;
+  max-width: 220px;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 12px rgba(0,0,0,0.4));
+}
+
+.modal-dev-title {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--blanco);
+  margin-bottom: 0.1rem;
+  letter-spacing: 0.5px;
+}
+.modal-dev-subtitle {
+  font-size: 0.82rem;
+  color: var(--dorado-claro);
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 0;
+}
+
+.modal-divider {
+  border: none;
+  height: 1.5px;
+  background: linear-gradient(to right, transparent, var(--dorado), transparent);
+  margin: 1rem auto;
+  width: 60%;
+}
+
+.modal-dev-desc {
+  font-size: 0.88rem;
+  color: rgba(255,255,255,0.78);
+  line-height: 1.65;
+  margin-bottom: 1.25rem;
+}
+.modal-dev-desc strong { color: var(--celeste); }
+
+/* Redes sociales */
+.modal-redes {
+  display: flex;
+  justify-content: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+.btn-red-social {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 1rem;
+  border-radius: 25px;
+  font-size: 0.83rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: filter 0.2s, transform 0.15s;
+  border: none;
+}
+.btn-red-social:hover {
+  filter: brightness(1.12);
+  transform: translateY(-2px);
+}
+.btn-facebook {
+  background: #1877F2;
+  color: #fff;
+}
+.btn-instagram {
+  background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888);
+  color: #fff;
+}
+.btn-tiktok {
+  background: #010101;
+  color: #fff;
+  border: 1.5px solid rgba(255,255,255,0.2);
+}
+
+.modal-acerca-de .modal-footer small { color: rgba(255,255,255,0.3); }
+
+/* =============================================
+   CARDS DE PRODUCTO
+   ============================================= */
+.producto-card {
+  border: 1px solid rgba(0,0,0,0.07);
+  border-radius: 14px;
+  box-shadow: var(--sombra-suave);
+  transition: transform 0.22s, box-shadow 0.22s;
+  overflow: hidden;
+  background: var(--blanco);
+  position: relative;
+}
+.producto-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 28px rgba(0,0,0,0.11);
+}
+
+/* Imagen */
+.producto-card-img-link { display: block; overflow: hidden; }
+.producto-img {
+  height: 190px;
+  width: 100%;
+  object-fit: contain;
+  padding: 10px;
+  background: #fafafa;
+  transition: transform 0.3s;
+}
+.producto-card:hover .producto-img { transform: scale(1.04); }
+
+.producto-img-placeholder {
+  height: 190px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f3f4f6;
+  color: #bbb;
+  font-size: 3rem;
+}
+
+/* Título */
+.card-title { font-size: 0.88rem; line-height: 1.35; }
+.stretched-link-title {
+  color: var(--gris-texto);
+}
+.stretched-link-title:hover { color: var(--verde); }
+
+/* Precio */
+.producto-precio {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--verde);
+  line-height: 1;
+}
+
+/* Badge Promo */
+.badge-promo {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: linear-gradient(135deg, var(--dorado) 0%, var(--dorado-claro) 100%);
+  color: var(--verde-profundo);
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  border-radius: 6px;
+  padding: 3px 8px;
+  z-index: 1;
+}
+
+/* Badge Agotado */
+.badge-agotado {
+  display: block;
+  width: 100%;
+  text-align: center;
+  padding: 0.45rem;
+  background: rgba(0,0,0,0.07);
+  color: #777;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+/* ---- Control de cantidad ---- */
+.producto-agregar-form { display: flex; flex-direction: column; gap: 0.4rem; }
+
+.cantidad-control {
+  display: flex;
+  align-items: center;
+  border: 1.5px solid rgba(0,0,0,0.12);
+  border-radius: 9px;
+  overflow: hidden;
+  height: 36px;
+}
+.btn-cantidad {
+  background: var(--crema);
+  border: none;
+  width: 36px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--verde-oscuro);
+  font-size: 1rem;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.btn-cantidad:hover { background: rgba(29,176,98,0.1); }
+.btn-cantidad:active { background: rgba(29,176,98,0.2); }
+
+.cantidad-input {
+  flex: 1;
+  border: none;
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--gris-texto);
+  background: transparent;
+  width: 0; /* flex se encarga */
+  outline: none;
+  -moz-appearance: textfield;
+}
+.cantidad-input::-webkit-outer-spin-button,
+.cantidad-input::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+/* Botón Agregar */
+.btn-agregar {
+  background: linear-gradient(135deg, var(--verde-oscuro) 0%, var(--verde) 100%);
+  border: none;
+  color: var(--blanco);
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.875rem;
+  padding: 0.45rem;
+  cursor: pointer;
+  transition: filter 0.2s;
+  width: 100%;
+}
+.btn-agregar:hover { filter: brightness(1.1); }
+
+/* =============================================
+   BOTONES GLOBALES
+   ============================================= */
+.btn-primary {
+  background: linear-gradient(135deg, var(--verde-oscuro) 0%, var(--verde) 100%);
+  border: none;
+  font-weight: 600;
+  color: var(--blanco);
+}
+.btn-primary:hover, .btn-primary:focus {
+  background: linear-gradient(135deg, var(--verde-profundo) 0%, var(--verde-oscuro) 100%);
+  border: none;
+  color: var(--blanco);
+}
+.btn-success {
+  background: linear-gradient(135deg, var(--celeste-oscuro) 0%, var(--celeste) 100%);
+  border: none;
+  color: var(--verde-profundo);
+  font-weight: 700;
+}
+.btn-success:hover {
+  filter: brightness(1.07);
+  border: none;
+  color: var(--verde-profundo);
+}
+.btn-outline-secondary {
+  border-color: var(--verde);
+  color: var(--verde-oscuro);
+}
+.btn-outline-secondary:hover {
+  background: var(--verde);
+  border-color: var(--verde);
+  color: white;
+}
+
+.text-primary { color: var(--verde) !important; }
+
+/* Focus ring celeste */
+.btn:focus, .form-control:focus, .form-check-input:focus {
+  box-shadow: 0 0 0 0.18rem rgba(148,201,233,0.45);
+  outline: none;
+}
+
+/* =============================================
+   ALERTS
+   ============================================= */
+.alert-success {
+  background: rgba(29,176,98,0.08);
+  border-color: var(--verde);
+  color: var(--verde-profundo);
+}
+.alert-info {
+  background: rgba(148,201,233,0.15);
+  border-color: var(--celeste-oscuro);
+  color: var(--verde-profundo);
+}
+
+/* =============================================
+   CHECKOUT
+   ============================================= */
+.checkout-section-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--verde-oscuro);
+  border-bottom: 2px solid var(--celeste-suave);
+  padding-bottom: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+/* Opciones de dirección de entrega */
+.dir-opcion {
+  border: 2px solid rgba(0,0,0,0.08);
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+  background: var(--blanco);
+  display: block;
+}
+.dir-opcion:hover {
+  border-color: var(--celeste);
+  background: rgba(148,201,233,0.06);
+}
+.dir-opcion.checked {
+  border-color: var(--verde);
+  background: rgba(29,176,98,0.05);
+  box-shadow: 0 0 0 3px rgba(29,176,98,0.12);
+}
+.dir-opcion-inner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+.dir-icono {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--celeste-suave);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--verde-oscuro);
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+.dir-opcion.checked .dir-icono {
+  background: rgba(29,176,98,0.15);
+  color: var(--verde);
+}
+.dir-nombre {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--gris-texto);
+}
+.dir-detalle {
+  font-size: 0.78rem;
+  color: #888;
+  margin-top: 2px;
+}
+.dir-costo {
+  text-align: right;
+  flex-shrink: 0;
+}
+.dir-costo-valor {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--gris-texto);
+}
+.badge-gratis {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--verde);
+  background: rgba(29,176,98,0.12);
+  padding: 2px 8px;
+  border-radius: 20px;
+  border: 1px solid rgba(29,176,98,0.25);
+}
+.dir-libre-wrap { display: none; }
+
+/* Sticky resumen en pantallas grandes */
+@media (min-width: 992px) {
+  .checkout-resumen-sticky {
+    position: sticky;
+    top: 90px;
+  }
+}
+
+.checkout-items-list {
+  max-height: 220px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+/* =============================================
+   TOAST CARRITO
+   ============================================= */
+#toastCarrito {
+  background: linear-gradient(135deg, var(--verde-profundo), #0c4727);
+  color: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  min-width: 280px;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+#toastCarrito .toast-body { font-weight: 500; font-size: 0.9rem; }
+#toastCarrito .btn-close { filter: invert(1) brightness(2); opacity: 0.7; }
+#toastCarrito .btn-close:hover { opacity: 1; }
+
+/* =============================================
+   PAGINACIÓN
+   ============================================= */
+.page-link {
+  color: var(--verde-oscuro);
+  border-color: rgba(0,0,0,0.1);
+}
+.page-link:hover {
+  background: var(--celeste-suave);
+  border-color: var(--celeste);
+  color: var(--verde-profundo);
+}
+.page-item.active .page-link {
+  background: var(--verde);
+  border-color: var(--verde);
+  color: var(--blanco);
+}
+
+/* =============================================
+   QR de pago MercadoPago
+   ============================================= */
+.qr-pago-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.qr-pago-frame {
+  position: relative;
+  display: inline-block;
+  padding: 14px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.10);
+}
+
+.qr-pago-img {
+  display: block;
+  width: 240px;
+  height: 240px;
+  border-radius: 4px;
+}
+
+/* Esquinas decorativas tipo "viewfinder" */
+.qr-pago-corner {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border: 3px solid var(--verde);
+}
+.qr-pago-corner.top-left {
+  top: 6px; left: 6px;
+  border-right: 0; border-bottom: 0;
+  border-top-left-radius: 8px;
+}
+.qr-pago-corner.top-right {
+  top: 6px; right: 6px;
+  border-left: 0; border-bottom: 0;
+  border-top-right-radius: 8px;
+}
+.qr-pago-corner.bottom-left {
+  bottom: 6px; left: 6px;
+  border-right: 0; border-top: 0;
+  border-bottom-left-radius: 8px;
+}
+.qr-pago-corner.bottom-right {
+  bottom: 6px; right: 6px;
+  border-left: 0; border-top: 0;
+  border-bottom-right-radius: 8px;
+}
+
+@media (max-width: 480px) {
+  .qr-pago-img { width: 200px; height: 200px; }
+  .qr-pago-frame { padding: 10px; }
+}
+
+/* =============================================
+   LOGIN PAGE
+   ============================================= */
+.login-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 68vh;
+  padding: 2rem 1rem 3rem;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 420px;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.14), 0 4px 16px rgba(0,0,0,0.07);
+}
+
+/* ─── Encabezado con gradiente verde ─── */
+.login-header {
+  background: linear-gradient(145deg, var(--verde-profundo) 0%, var(--verde-oscuro) 55%, var(--verde) 100%);
+  padding: 2.25rem 2rem 2rem;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+/* Patrón de puntos decorativo */
+.login-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, rgba(255,255,255,0.07) 1px, transparent 1px);
+  background-size: 22px 22px;
+  pointer-events: none;
+}
+/* Franja dorada inferior */
+.login-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(to right, var(--dorado), var(--dorado-claro), var(--dorado));
+  opacity: 0.85;
+}
+
+.login-header-icon {
+  position: relative;
+  z-index: 1;
+  width: 62px;
+  height: 62px;
+  background: rgba(255,255,255,0.12);
+  border: 2px solid rgba(255,255,255,0.22);
+  border-radius: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+  color: var(--blanco);
+  margin-bottom: 1rem;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.22);
+}
+.login-title {
+  position: relative;
+  color: var(--blanco);
+  font-size: 1.45rem;
+  font-weight: 800;
+  margin: 0 0 0.3rem;
+  letter-spacing: -0.3px;
+}
+.login-subtitle {
+  position: relative;
+  color: rgba(255,255,255,0.66);
+  font-size: 0.84rem;
+  margin: 0;
+}
+
+/* ─── Cuerpo blanco ─── */
+.login-body {
+  background: var(--blanco);
+  padding: 1.9rem 2rem 2.2rem;
+}
+
+/* ─── Alerta de error ─── */
+.login-error {
+  background: #fef2f2;
+  border: 1.5px solid #fca5a5;
+  border-left: 4px solid #ef4444;
+  border-radius: 10px;
+  padding: 0.8rem 1rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  margin-bottom: 1.35rem;
+  font-size: 0.875rem;
+  color: #b91c1c;
+  animation: loginSlideIn 0.25s ease;
+}
+.login-error i { font-size: 1rem; flex-shrink: 0; margin-top: 1px; }
+@keyframes loginSlideIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Toggle administrador ─── */
+.login-admin-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: linear-gradient(135deg, rgba(13,92,53,0.05) 0%, rgba(29,176,98,0.08) 100%);
+  border: 1.5px solid rgba(29,176,98,0.22);
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  margin-bottom: 1.3rem;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+  user-select: none;
+}
+.login-admin-toggle:hover {
+  background: rgba(29,176,98,0.11);
+  border-color: rgba(29,176,98,0.4);
+  box-shadow: 0 0 0 3px rgba(29,176,98,0.08);
+}
+.login-admin-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--verde);
+  cursor: pointer;
+  flex-shrink: 0;
+  margin: 0;
+}
+.login-admin-label {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--verde-oscuro);
+  line-height: 1.3;
+  flex: 1;
+}
+.login-admin-hint {
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: #6b7280;
+  display: block;
+  margin-top: 1px;
+}
+
+/* ─── Campos del formulario ─── */
+.login-field { margin-bottom: 1.15rem; }
+.login-label {
+  display: block;
+  font-size: 0.77rem;
+  font-weight: 700;
+  letter-spacing: 0.55px;
+  text-transform: uppercase;
+  color: #6b7280;
+  margin-bottom: 0.45rem;
+}
+.login-input-wrap { position: relative; }
+
+.login-input-icon {
+  position: absolute;
+  left: 0.9rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #9ca3af;
+  font-size: 1rem;
+  pointer-events: none;
+  z-index: 2;
+  transition: color 0.2s;
+}
+.login-input-wrap:focus-within .login-input-icon { color: var(--verde); }
+
+.login-input {
+  display: block;
+  width: 100%;
+  height: 48px;
+  padding: 0 1rem 0 2.75rem;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 12px;
+  font-size: 0.92rem;
+  background: #fafafa;
+  color: var(--gris-texto);
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  appearance: none;
+}
+.login-input:focus {
+  border-color: var(--verde);
+  box-shadow: 0 0 0 3.5px rgba(29,176,98,0.13);
+  background: var(--blanco);
+}
+.login-input.is-invalid,
+.login-input.input-validation-error {
+  border-color: #ef4444;
+  background: #fffafa;
+}
+.login-input.is-invalid:focus,
+.login-input.input-validation-error:focus {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 3.5px rgba(239,68,68,0.12);
+}
+/* Espacio extra para el botón ojo en campo contraseña */
+.login-input-wrap.has-toggle .login-input { padding-right: 3rem; }
+
+/* Botón ojo — mostrar/ocultar contraseña */
+.login-pass-toggle {
+  position: absolute;
+  right: 0.65rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #9ca3af;
+  padding: 0.3rem 0.4rem;
+  cursor: pointer;
+  z-index: 2;
+  font-size: 1rem;
+  line-height: 1;
+  border-radius: 6px;
+  transition: color 0.2s, background 0.15s;
+}
+.login-pass-toggle:hover {
+  color: var(--verde);
+  background: rgba(29,176,98,0.08);
+}
+
+/* Mensaje de validación */
+.login-validation-msg {
+  display: block;
+  font-size: 0.78rem;
+  color: #ef4444;
+  margin-top: 0.35rem;
+  min-height: 0;
+}
+
+/* ─── Recordarme ─── */
+.login-remember {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 1.5rem;
+}
+.login-remember input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--verde);
+  flex-shrink: 0;
+  cursor: pointer;
+  margin: 0;
+}
+.login-remember label {
+  font-size: 0.82rem;
+  color: #6b7280;
+  cursor: pointer;
+  margin: 0;
+  user-select: none;
+}
+
+/* ─── Botón Ingresar ─── */
+.login-submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  height: 50px;
+  background: linear-gradient(135deg, var(--verde-oscuro) 0%, var(--verde) 100%);
+  color: var(--blanco);
+  border: none;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  box-shadow: 0 4px 18px rgba(29,176,98,0.30);
+  transition: filter 0.2s, box-shadow 0.2s, transform 0.1s;
+}
+.login-submit:hover {
+  filter: brightness(1.07);
+  box-shadow: 0 6px 24px rgba(29,176,98,0.40);
+}
+.login-submit:active {
+  transform: scale(0.985);
+  filter: brightness(0.97);
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 480px) {
+  .login-card   { border-radius: 14px; }
+  .login-header { padding: 1.8rem 1.5rem 1.6rem; }
+  .login-body   { padding: 1.5rem 1.4rem 1.8rem; }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   PAGO — Panel de estado en tiempo real (polling frontend)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.mp-poll-panel {
+  border-radius: 14px;
+  padding: 1.1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+  transition: background .4s, border-color .4s;
+  border: 1.5px solid transparent;
+}
+
+/* ─── Estado: esperando ─── */
+.mp-poll-panel.esperando {
+  background: #f0f7ff;
+  border-color: #bfdbfe;
+  color: #1e40af;
+}
+.mp-poll-panel.esperando .mp-poll-icon { color: #3b82f6; }
+
+/* ─── Estado: verificando (breve, mientras llama a MP) ─── */
+.mp-poll-panel.verificando {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+.mp-poll-panel.verificando .mp-poll-icon { color: #f59e0b; }
+
+/* ─── Estado: confirmado ─── */
+.mp-poll-panel.confirmado {
+  background: #f0fdf4;
+  border-color: #86efac;
+  color: #14532d;
+}
+.mp-poll-panel.confirmado .mp-poll-icon { color: #16a34a; }
+
+/* ─── Estado: error / rechazado / cancelado ─── */
+.mp-poll-panel.error {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #7f1d1d;
+}
+.mp-poll-panel.error .mp-poll-icon { color: #dc2626; }
+
+/* ─── Icono central ─── */
+.mp-poll-icon {
+  font-size: 1.6rem;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+/* ─── Textos ─── */
+.mp-poll-texto {
+  flex: 1;
+  min-width: 0;
+}
+.mp-poll-titulo {
+  font-weight: 700;
+  font-size: .95rem;
+  line-height: 1.3;
+  margin-bottom: .15rem;
+}
+.mp-poll-subtitulo {
+  font-size: .8rem;
+  opacity: .75;
+}
+
+/* ─── Timer ─── */
+.mp-poll-timer {
+  font-size: .75rem;
+  opacity: .6;
+  white-space: nowrap;
+  align-self: flex-start;
+  padding-top: .1rem;
+}
+
+/* ─── Animación pulso para "esperando" ─── */
+@keyframes mp-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .45; }
+}
+.mp-poll-panel.esperando .mp-poll-icon,
+.mp-poll-panel.verificando .mp-poll-icon {
+  animation: mp-pulse 1.6s ease-in-out infinite;
+}
+.mp-poll-panel.confirmado .mp-poll-icon,
+.mp-poll-panel.error .mp-poll-icon {
+  animation: none;
+}
+
+/* ─── Entrada con slide ─── */
+@keyframes mp-slide-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.mp-poll-panel {
+  animation: mp-slide-in .35s ease both;
+}

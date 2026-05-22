@@ -1,0 +1,204 @@
+@page
+@model LitoralMarket.Web.Pages.Admin.Pedidos.IndexModel
+@{
+    ViewData["Title"] = "Gestión de Pedidos";
+}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h2 class="mb-0"><i class="bi bi-bag-check me-2 text-success"></i>Gestión de Pedidos</h2>
+    <span class="badge bg-secondary" id="contadorPedidos">@Model.Pedidos.Count pedido(s)</span>
+</div>
+
+<!-- ===== FILTROS ===== -->
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body py-2">
+        <div class="row g-2 align-items-end">
+            <div class="col-12 col-sm-6 col-md-3">
+                <label class="form-label form-label-sm mb-1">Desde</label>
+                <input type="date" id="filtroDesde" class="form-control form-control-sm" />
+            </div>
+            <div class="col-12 col-sm-6 col-md-3">
+                <label class="form-label form-label-sm mb-1">Hasta</label>
+                <input type="date" id="filtroHasta" class="form-control form-control-sm" />
+            </div>
+            <div class="col-12 col-sm-6 col-md-3">
+                <label class="form-label form-label-sm mb-1">Estado</label>
+                <select id="filtroEstado" class="form-select form-select-sm">
+                    <option value="todos">Todos</option>
+                    <option value="pendiente_pago">Pendiente de pago</option>
+                    <option value="confirmado">Confirmado</option>
+                    <option value="cancelado">Cancelado</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-3 d-flex gap-2">
+                <button class="btn btn-success btn-sm flex-fill" onclick="buscar()">
+                    <i class="bi bi-search me-1"></i>Buscar
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" onclick="limpiarFiltros()" title="Limpiar filtros">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== CONTENIDO: tabla + detalle ===== -->
+<div class="row g-3">
+
+    <!-- Tabla -->
+    <div class="col-12 col-lg-8">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body p-0">
+                <div style="max-height:72vh;overflow-y:auto;">
+                    <table class="table table-hover table-sm mb-0 align-middle">
+                        <thead class="table-dark sticky-top">
+                            <tr>
+                                <th style="width:60px">#</th>
+                                <th>Fecha</th>
+                                <th>Cliente</th>
+                                <th class="text-end">Total</th>
+                                <th class="text-center">Estado</th>
+                                <th class="text-center" style="width:50px">Ítem</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyPedidos">
+                            @await Html.PartialAsync("_TablaPedidos", Model.Pedidos)
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Panel detalle -->
+    <div class="col-12 col-lg-4">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white border-bottom py-2">
+                <span class="fw-semibold small"><i class="bi bi-info-circle me-1 text-success"></i>Detalle del pedido</span>
+            </div>
+            <div class="card-body p-2" id="panelDetalle" style="overflow-y:auto;max-height:72vh;">
+                <p class="text-muted text-center small mt-3">Hacé click en un pedido para ver el detalle.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- =========================================================
+     MODAL CONFIRMAR
+     ========================================================= -->
+<div class="modal fade" id="modalConfirmar" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-0 bg-success text-white">
+                <h6 class="modal-title"><i class="bi bi-check-circle me-2"></i>Confirmar pedido</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>¿Confirmar el <strong id="lblPedidoConfirmar"></strong>?</p>
+                <p class="text-muted small mb-0">
+                    Esto cambiará el estado a <strong>Confirmado</strong>, descontará el stock
+                    y registrará los movimientos de productos — igual que un pago por MercadoPago.
+                </p>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success" id="btnEjecutarConfirmar">
+                    <i class="bi bi-check-lg me-1"></i>Confirmar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+@Html.AntiForgeryToken()
+<style>
+    .fila-pedido { cursor: pointer; }
+    .fila-pedido.seleccionado { background: rgba(29,176,98,0.1); }
+</style>
+<script>
+const TOKEN = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+let _idConfirmar = 0;
+
+// ── Búsqueda ──────────────────────────────────────────────────────
+async function buscar() {
+    const desde  = document.getElementById('filtroDesde').value;
+    const hasta  = document.getElementById('filtroHasta').value;
+    const estado = document.getElementById('filtroEstado').value;
+
+    const params = new URLSearchParams({ handler: 'Buscar' });
+    if (desde)  params.set('desde',  desde);
+    if (hasta)  params.set('hasta',  hasta);
+    if (estado) params.set('estado', estado);
+
+    const res  = await fetch('?' + params.toString());
+    const html = await res.text();
+    document.getElementById('tbodyPedidos').innerHTML = html;
+    actualizarContador();
+
+    // limpiar detalle al buscar
+    document.getElementById('panelDetalle').innerHTML =
+        '<p class="text-muted text-center small mt-3">Hacé click en un pedido para ver el detalle.</p>';
+}
+
+function limpiarFiltros() {
+    document.getElementById('filtroDesde').value  = '';
+    document.getElementById('filtroHasta').value  = '';
+    document.getElementById('filtroEstado').value = 'todos';
+    buscar();
+}
+
+function actualizarContador() {
+    const cant = document.querySelectorAll('.fila-pedido').length;
+    document.getElementById('contadorPedidos').textContent = cant + ' pedido(s)';
+}
+
+// ── Detalle ───────────────────────────────────────────────────────
+document.addEventListener('click', async e => {
+    const fila = e.target.closest('.fila-pedido');
+    if (!fila) return;
+    document.querySelectorAll('.fila-pedido.seleccionado').forEach(r => r.classList.remove('seleccionado'));
+    fila.classList.add('seleccionado');
+    const res = await fetch(`?handler=Detalle&id=${fila.dataset.id}`);
+    document.getElementById('panelDetalle').innerHTML = await res.text();
+});
+
+// ── Confirmar ─────────────────────────────────────────────────────
+function confirmarPedido(id) {
+    _idConfirmar = id;
+    document.getElementById('lblPedidoConfirmar').textContent = 'Pedido #' + id;
+    new bootstrap.Modal(document.getElementById('modalConfirmar')).show();
+}
+
+document.getElementById('btnEjecutarConfirmar').addEventListener('click', async () => {
+    const btn = document.getElementById('btnEjecutarConfirmar');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Procesando...';
+
+    const fd = new FormData();
+    fd.append('id', _idConfirmar);
+    fd.append('__RequestVerificationToken', TOKEN);
+
+    const res  = await fetch('?handler=Confirmar', { method: 'POST', body: fd });
+    const data = await res.json();
+
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Confirmar';
+
+    bootstrap.Modal.getInstance(document.getElementById('modalConfirmar')).hide();
+
+    if (data.ok) {
+        // Recargar detalle y tabla
+        await buscar();
+        // Recargar detalle del pedido confirmado
+        const res2 = await fetch(`?handler=Detalle&id=${_idConfirmar}`);
+        document.getElementById('panelDetalle').innerHTML = await res2.text();
+        // Re-seleccionar la fila
+        const fila = document.querySelector(`.fila-pedido[data-id="${_idConfirmar}"]`);
+        if (fila) fila.classList.add('seleccionado');
+    } else {
+        alert('Error: ' + (data.error ?? 'No se pudo confirmar el pedido.'));
+    }
+});
+</script>
+}

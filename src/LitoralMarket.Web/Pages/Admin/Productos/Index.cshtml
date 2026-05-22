@@ -1,0 +1,478 @@
+@page
+@model LitoralMarket.Web.Pages.Admin.Productos.IndexModel
+@{
+    ViewData["Title"] = "Administración de Productos";
+}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h2 class="mb-0"><i class="bi bi-box-seam me-2 text-success"></i>Administración de Productos</h2>
+    <button class="btn btn-success" onclick="abrirModalNuevo()">
+        <i class="bi bi-plus-lg me-1"></i>Nuevo producto
+    </button>
+</div>
+
+@if (TempData["Error"] is string err)
+{
+    <div class="alert alert-danger alert-dismissible fade show">
+        <i class="bi bi-x-circle me-2"></i>@err
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- ===== BUSCADOR ===== -->
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body py-2">
+        <div class="row g-2 align-items-center">
+            <div class="col-auto">
+                <select id="tipoBusqueda" class="form-select form-select-sm">
+                    <option value="0">Cód. Proveedor</option>
+                    <option value="1">Cód. Barras</option>
+                    <option value="2" selected>Descripción</option>
+                </select>
+            </div>
+            <div class="col">
+                <input id="valorBusqueda" type="text" class="form-control form-control-sm"
+                       placeholder="Escribí para buscar..." oninput="buscarProductos()" />
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== CONTENIDO: tabla + panel detalle ===== -->
+<div class="row g-3">
+
+    <!-- Tabla de productos -->
+    <div class="col-12 col-lg-8">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body p-0">
+                <div style="max-height:70vh;overflow-y:auto;">
+                    <table class="table table-hover table-sm mb-0 align-middle">
+                        <thead class="table-dark sticky-top">
+                            <tr>
+                                <th>Cód.Prov.</th>
+                                <th>Cód.Barras</th>
+                                <th>Descripción</th>
+                                <th>Rubro</th>
+                                <th class="text-end">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyProductos">
+                            <tr><td colspan="5" class="text-center text-muted py-4">
+                                <i class="bi bi-search me-1"></i>Usá el buscador para cargar productos
+                            </td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Panel detalle -->
+    <div class="col-12 col-lg-4">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white border-bottom py-2">
+                <span class="fw-semibold small"><i class="bi bi-info-circle me-1 text-success"></i>Detalle</span>
+            </div>
+            <div class="card-body p-2" id="panelDetalle">
+                <p class="text-muted text-center small mt-3">Hacé click en un producto para ver su detalle.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- =========================================================
+     MODAL ABM
+     ========================================================= -->
+<div class="modal fade" id="productoModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header border-bottom">
+                <h5 class="modal-title fw-bold" id="modalTitulo">
+                    <i class="bi bi-box-seam me-2 text-success"></i>Producto
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <form method="post" asp-page-handler="Guardar" enctype="multipart/form-data" id="formProducto">
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="Producto.Id" id="prodId" />
+                <input type="hidden" name="imagenDataUrl" id="imagenDataUrl" />
+
+                <div class="modal-body">
+                    <div class="row g-3">
+
+                        <!-- ── Col izquierda ── -->
+                        <div class="col-12 col-md-6">
+
+                            <!-- Identificación -->
+                            <div class="admin-section-title">Identificación</div>
+                            <div class="mb-2">
+                                <label class="form-label form-label-sm">Descripción *</label>
+                                <input asp-for="Producto.Descripcion" class="form-control form-control-sm"
+                                       placeholder="Nombre del producto" />
+                                <span asp-validation-for="Producto.Descripcion" class="text-danger small"></span>
+                            </div>
+                            <div class="row g-2 mb-2">
+                                <div class="col-6">
+                                    <label class="form-label form-label-sm">Cód. Proveedor</label>
+                                    <input asp-for="Producto.CodProveedor" class="form-control form-control-sm" />
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label form-label-sm">Cód. Barras</label>
+                                    <input asp-for="Producto.CodBarras" class="form-control form-control-sm" />
+                                </div>
+                            </div>
+
+                            <!-- Clasificación -->
+                            <div class="admin-section-title mt-3">Clasificación</div>
+                            <div class="mb-2">
+                                <label class="form-label form-label-sm">Rubro</label>
+                                <select asp-for="Producto.FkRubro" asp-items="Model.Rubros"
+                                        class="form-select form-select-sm"></select>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label form-label-sm">Proveedor</label>
+                                <select asp-for="Producto.FkProveedor" id="selProveedor"
+                                        class="form-select form-select-sm"
+                                        onchange="onProveedorChange()">
+                                    <option value="">— Sin proveedor —</option>
+                                    @foreach (var p in Model.Proveedores)
+                                    {
+                                        <option value="@p.Id"
+                                                data-ganancia="@p.Ganancia.ToString("F4", System.Globalization.CultureInfo.InvariantCulture)"
+                                                data-descuento="@p.Descuento.ToString("F4", System.Globalization.CultureInfo.InvariantCulture)">
+                                            @p.Nombre
+                                        </option>
+                                    }
+                                </select>
+                            </div>
+
+                            <!-- Flags -->
+                            <div class="admin-section-title mt-3">Opciones</div>
+                            <div class="row g-2">
+                                <div class="col-4">
+                                    <div class="form-check">
+                                        <input asp-for="Producto.EsPromocion" class="form-check-input" type="checkbox" />
+                                        <label class="form-check-label small" asp-for="Producto.EsPromocion">Promoción</label>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="form-check">
+                                        <input asp-for="Producto.Fraccionado" class="form-check-input" type="checkbox" />
+                                        <label class="form-check-label small" asp-for="Producto.Fraccionado">Fraccionado</label>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="form-check">
+                                        <input asp-for="Producto.Dolarizado" class="form-check-input" type="checkbox" />
+                                        <label class="form-check-label small" asp-for="Producto.Dolarizado">Dolarizado</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ── Col derecha ── -->
+                        <div class="col-12 col-md-6">
+
+                            <!-- Precios -->
+                            <div class="admin-section-title">Precios</div>
+                            <div class="row g-2 mb-2">
+                                <div class="col-6">
+                                    <label class="form-label form-label-sm">IVA (%)</label>
+                                    <input asp-for="Producto.Iva" id="inpIva"
+                                           class="form-control form-control-sm" type="number"
+                                           step="0.01" min="0" />
+                                </div>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label form-label-sm">Precio proveedor</label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text">$</span>
+                                    <input asp-for="Producto.PrecioProveedor" id="inpPrecioProveedor"
+                                           class="form-control" type="number" step="0.01" min="0"
+                                           oninput="calcularPrecio()" />
+                                </div>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label form-label-sm">Precio costo
+                                    <span class="text-muted small">(calculado o manual)</span>
+                                </label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text">$</span>
+                                    <input asp-for="Producto.PrecioCosto" id="inpPrecioCosto"
+                                           class="form-control" type="number" step="0.01" min="0" />
+                                </div>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label form-label-sm">Precio lista
+                                    <span class="text-muted small">(calculado o manual)</span>
+                                </label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text">$</span>
+                                    <input asp-for="Producto.PrecioLista" id="inpPrecioLista"
+                                           class="form-control" type="number" step="0.01" min="0" />
+                                </div>
+                            </div>
+
+                            <!-- Stock -->
+                            <div class="admin-section-title mt-3">Stock</div>
+                            <div class="row g-2 mb-2">
+                                <div class="col-6">
+                                    <label class="form-label form-label-sm">Stock actual</label>
+                                    <input asp-for="Producto.StockActual" id="inpStockActual"
+                                           class="form-control form-control-sm" type="number"
+                                           step="0.001" min="0" />
+                                    <div id="warningStock" class="text-warning small mt-1 d-none">
+                                        <i class="bi bi-exclamation-triangle me-1"></i>El stock se modifica desde el módulo de movimientos.
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label form-label-sm">Stock mínimo</label>
+                                    <input asp-for="Producto.StockMinimo"
+                                           class="form-control form-control-sm" type="number"
+                                           step="0.001" min="0" />
+                                </div>
+                            </div>
+
+                            <!-- Imagen -->
+                            <div class="admin-section-title mt-3">Imagen</div>
+                            <div id="zonaImagen" class="zona-imagen-drop border rounded p-3 text-center"
+                                 ondragover="event.preventDefault()" ondrop="onDropImagen(event)">
+                                <div id="imgPreviewWrap" class="d-none mb-2">
+                                    <img id="imgPreview" src="" class="img-fluid rounded"
+                                         style="max-height:120px;object-fit:contain;" />
+                                </div>
+                                <p id="imgPlaceholder" class="text-muted small mb-1">
+                                    <i class="bi bi-image fs-4 d-block mb-1"></i>
+                                    Arrastrá una imagen o hacé click para seleccionar
+                                </p>
+                                <input type="file" id="inpImagen" accept="image/*"
+                                       class="d-none" onchange="onImagenSeleccionada(this)" />
+                                <button type="button" class="btn btn-sm btn-outline-secondary me-1"
+                                        onclick="document.getElementById('inpImagen').click()">
+                                    <i class="bi bi-folder2-open me-1"></i>Seleccionar
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger"
+                                        onclick="quitarImagen()" id="btnQuitarImg" style="display:none">
+                                    <i class="bi bi-x-lg me-1"></i>Quitar
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Descripción larga (ancho completo) -->
+                        <div class="col-12">
+                            <div class="admin-section-title">Descripción detallada</div>
+                            <textarea asp-for="Producto.DescripcionLarga" class="form-control form-control-sm"
+                                      rows="3" placeholder="Descripción extendida visible en el catálogo..."></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-check-lg me-1"></i>Guardar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- =========================================================
+     MODAL CONFIRMAR BAJA
+     ========================================================= -->
+<div class="modal fade" id="modalConfirmarBaja" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-0 bg-danger text-white">
+                <h6 class="modal-title"><i class="bi bi-exclamation-triangle me-2"></i>Confirmar baja</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>¿Dar de baja el producto <strong id="nomProdBaja"></strong>?</p>
+                <p class="text-muted small">La baja es lógica; el producto no se eliminará de la base de datos.</p>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger" id="btnEjecutarBaja">
+                    <i class="bi bi-trash me-1"></i>Dar de baja
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<partial name="_ValidationScriptsPartial" />
+<style>
+    .admin-section-title {
+        font-size: 0.68rem; font-weight: 700; letter-spacing: 1px;
+        text-transform: uppercase; color: var(--verde-oscuro);
+        border-bottom: 2px solid rgba(29,176,98,0.15);
+        padding-bottom: 3px; margin-bottom: 8px;
+    }
+    .fila-producto:hover { cursor: pointer; }
+    .fila-producto.seleccionado { background: rgba(29,176,98,0.1); }
+    .zona-imagen-drop { background: #f9fafb; cursor: pointer; min-height: 80px;
+        transition: border-color .2s, background .2s; }
+    .zona-imagen-drop:hover { border-color: var(--verde) !important; background: rgba(29,176,98,0.04); }
+</style>
+<script>
+// ── Estado ────────────────────────────────────────────────────────
+let _idBaja   = 0;
+const TOKEN   = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+
+// ── Búsqueda ──────────────────────────────────────────────────────
+let _busqTimer;
+function buscarProductos() {
+    clearTimeout(_busqTimer);
+    _busqTimer = setTimeout(async () => {
+        const tipo  = document.getElementById('tipoBusqueda').value;
+        const valor = document.getElementById('valorBusqueda').value;
+        const res   = await fetch(`?handler=BuscarProductos&tipo=${tipo}&valor=${encodeURIComponent(valor)}`);
+        document.getElementById('tbodyProductos').innerHTML = await res.text();
+    }, 300);
+}
+
+// ── Detalle ───────────────────────────────────────────────────────
+document.addEventListener('click', async e => {
+    const fila = e.target.closest('.fila-producto');
+    if (!fila) return;
+    document.querySelectorAll('.fila-producto.seleccionado').forEach(r => r.classList.remove('seleccionado'));
+    fila.classList.add('seleccionado');
+    const id  = fila.dataset.id;
+    const res = await fetch(`?handler=Detalle&id=${id}`);
+    document.getElementById('panelDetalle').innerHTML = await res.text();
+});
+
+// ── Modal Nuevo ───────────────────────────────────────────────────
+function abrirModalNuevo() {
+    document.getElementById('formProducto').reset();
+    document.getElementById('prodId').value = '0';
+    document.getElementById('modalTitulo').innerHTML = '<i class="bi bi-plus-circle me-2 text-success"></i>Nuevo producto';
+    document.getElementById('inpStockActual').readOnly = false;
+    document.getElementById('warningStock').classList.add('d-none');
+    quitarImagen();
+    new bootstrap.Modal(document.getElementById('productoModal')).show();
+}
+
+// ── Modal Editar ──────────────────────────────────────────────────
+async function abrirModalEditar(id) {
+    const res  = await fetch(`?handler=ProductoJson&id=${id}`);
+    if (!res.ok) { alert('No se pudo cargar el producto.'); return; }
+    const p    = await res.json();
+
+    document.getElementById('prodId').value                            = p.id;
+    document.querySelector('[name="Producto.Descripcion"]').value      = p.descripcion     ?? '';
+    document.querySelector('[name="Producto.CodProveedor"]').value     = p.codProveedor    ?? '';
+    document.querySelector('[name="Producto.CodBarras"]').value        = p.codBarras       ?? '';
+    document.querySelector('[name="Producto.FkRubro"]').value          = p.fkRubro         ?? '';
+    document.querySelector('[name="Producto.FkProveedor"]').value      = p.fkProveedor     ?? '';
+    document.querySelector('[name="Producto.Iva"]').value              = p.iva             ?? 0;
+    document.getElementById('inpPrecioProveedor').value                = p.precioProveedor ?? 0;
+    document.getElementById('inpPrecioCosto').value                    = p.precioCosto     ?? 0;
+    document.getElementById('inpPrecioLista').value                    = p.precioLista     ?? 0;
+    document.getElementById('inpStockActual').value                    = p.stockActual     ?? 0;
+    document.querySelector('[name="Producto.StockMinimo"]').value      = p.stockMinimo     ?? 0;
+    document.querySelector('[name="Producto.EsPromocion"]').checked    = p.esPromocion;
+    document.querySelector('[name="Producto.Fraccionado"]').checked    = p.fraccionado;
+    document.querySelector('[name="Producto.Dolarizado"]').checked     = p.dolarizado;
+    document.querySelector('[name="Producto.DescripcionLarga"]').value = p.descripcionLarga ?? '';
+
+    // Stock readonly en edición
+    document.getElementById('inpStockActual').readOnly = true;
+    document.getElementById('warningStock').classList.remove('d-none');
+
+    // Imagen existente
+    quitarImagen();
+    const imgEl = document.getElementById('imgPreview');
+    imgEl.src = `/Admin/Productos?handler=Imagen&id=${id}&t=${Date.now()}`;
+    imgEl.onerror = () => { document.getElementById('imgPreviewWrap').classList.add('d-none'); };
+    imgEl.onload  = () => {
+        document.getElementById('imgPreviewWrap').classList.remove('d-none');
+        document.getElementById('imgPlaceholder').classList.add('d-none');
+        document.getElementById('btnQuitarImg').style.display = '';
+    };
+
+    document.getElementById('modalTitulo').innerHTML = `<i class="bi bi-pencil me-2 text-success"></i>Editar: ${p.descripcion ?? ''}`;
+    new bootstrap.Modal(document.getElementById('productoModal')).show();
+}
+
+// ── Cálculo automático de precios ─────────────────────────────────
+function onProveedorChange() {
+    calcularPrecio();
+}
+function calcularPrecio() {
+    const sel       = document.getElementById('selProveedor');
+    const opt       = sel.options[sel.selectedIndex];
+    const ganancia  = parseFloat(opt?.dataset.ganancia  ?? '0') || 0;
+    const descuento = parseFloat(opt?.dataset.descuento ?? '0') || 0;
+    const precProv  = parseFloat(document.getElementById('inpPrecioProveedor').value) || 0;
+
+    if (precProv === 0 || (ganancia === 0 && descuento === 0)) return;
+
+    const lista = precProv * (1 + ganancia  / 100);
+    const costo = precProv * (1 - descuento / 100);
+
+    document.getElementById('inpPrecioLista').value = lista.toFixed(2);
+    document.getElementById('inpPrecioCosto').value = costo.toFixed(2);
+}
+
+// ── Imagen ────────────────────────────────────────────────────────
+async function onImagenSeleccionada(input) {
+    if (!input.files.length) return;
+    await _subirImagen(input.files[0]);
+}
+function onDropImagen(e) {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file) _subirImagen(file);
+}
+async function _subirImagen(file) {
+    const fd = new FormData();
+    fd.append('archivo', file);
+    fd.append('__RequestVerificationToken', TOKEN);
+
+    const res  = await fetch('?handler=SubirImagen', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!data.ok) { alert(data.error ?? 'Error al subir la imagen.'); return; }
+
+    document.getElementById('imagenDataUrl').value = data.dataUrl;
+    document.getElementById('imgPreview').src = data.dataUrl;
+    document.getElementById('imgPreviewWrap').classList.remove('d-none');
+    document.getElementById('imgPlaceholder').classList.add('d-none');
+    document.getElementById('btnQuitarImg').style.display = '';
+}
+function quitarImagen() {
+    document.getElementById('imagenDataUrl').value = '';
+    document.getElementById('imgPreview').src = '';
+    document.getElementById('imgPreviewWrap').classList.add('d-none');
+    document.getElementById('imgPlaceholder').classList.remove('d-none');
+    document.getElementById('btnQuitarImg').style.display = 'none';
+    document.getElementById('inpImagen').value = '';
+}
+
+// ── Baja ──────────────────────────────────────────────────────────
+function confirmarEliminar(id, nombre) {
+    _idBaja = id;
+    document.getElementById('nomProdBaja').textContent = nombre;
+    new bootstrap.Modal(document.getElementById('modalConfirmarBaja')).show();
+}
+document.getElementById('btnEjecutarBaja').addEventListener('click', async () => {
+    const fd = new FormData();
+    fd.append('id', _idBaja);
+    fd.append('__RequestVerificationToken', TOKEN);
+    const res = await fetch('?handler=Eliminar', { method: 'POST', body: fd });
+    if (res.ok) {
+        bootstrap.Modal.getInstance(document.getElementById('modalConfirmarBaja')).hide();
+        buscarProductos();
+        document.getElementById('panelDetalle').innerHTML =
+            '<p class="text-muted text-center small mt-3">Producto dado de baja.</p>';
+    }
+});
+
+// Buscar al cargar (muestra todos si campo vacío)
+buscarProductos();
+</script>
+}

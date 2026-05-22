@@ -1,0 +1,304 @@
+@page
+@model LitoralMarket.Web.Pages.Admin.Parametros.IndexModel
+@{
+    ViewData["Title"] = "Parámetros del sistema";
+    var grupos = Model.Parametros
+        .GroupBy(p => p.Modulo ?? "(sin módulo)")
+        .OrderBy(g => g.Key)
+        .ToList();
+}
+
+<div class="d-flex align-items-center mb-4 gap-3">
+    <h2 class="mb-0">Parámetros del sistema</h2>
+    <button class="btn btn-primary ms-auto" id="btnNuevo">
+        <i class="bi bi-plus-lg me-1"></i>Nuevo parámetro
+    </button>
+</div>
+
+@if (!Model.Parametros.Any())
+{
+    <div class="alert alert-secondary">No hay parámetros cargados.</div>
+}
+else
+{
+    @foreach (var grupo in grupos)
+    {
+        <div class="card mb-4 border-0 shadow-sm">
+            <div class="card-header bg-light py-2 px-3 d-flex align-items-center gap-2">
+                <i class="bi bi-sliders2 text-primary"></i>
+                <strong class="text-uppercase small">@grupo.Key</strong>
+                <span class="badge bg-secondary ms-1">@grupo.Count()</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width:2rem" class="text-muted ps-3">#</th>
+                            <th>Parámetro</th>
+                            <th>Valor</th>
+                            <th class="text-center" style="width:7rem">Imagen</th>
+                            <th class="text-end pe-3" style="width:8rem">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in grupo)
+                        {
+                            <tr>
+                                <td class="text-muted ps-3 small">@p.Id</td>
+                                <td class="fw-medium">@p.ParametroNombre</td>
+                                <td class="text-muted small">
+                                    @if (string.IsNullOrEmpty(p.Valor))
+                                    {
+                                        <span class="text-muted fst-italic">—</span>
+                                    }
+                                    else if (p.Valor.Length > 80)
+                                    {
+                                        <span title="@p.Valor">@(p.Valor[..77])…</span>
+                                    }
+                                    else
+                                    {
+                                        @p.Valor
+                                    }
+                                </td>
+                                <td class="text-center">
+                                    @if (p.Imagen is { Length: > 0 })
+                                    {
+                                        <img src="/Admin/Parametros?handler=Imagen&id=@p.Id&t=@DateTime.Now.Ticks"
+                                             alt="imagen" class="rounded border"
+                                             style="max-height:36px;max-width:72px;object-fit:contain;" />
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small">—</span>
+                                    }
+                                </td>
+                                <td class="text-end pe-3">
+                                    <button class="btn btn-sm btn-outline-secondary btn-editar"
+                                            data-id="@p.Id">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger btn-eliminar"
+                                            data-id="@p.Id"
+                                            data-nombre="@(p.Modulo)//@(p.ParametroNombre)">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+}
+
+<!-- ═══════════════════════════ MODAL EDITAR / CREAR ════════════════════════ -->
+<div class="modal fade" id="modalParam" tabindex="-1" aria-labelledby="modalParamLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalParamLabel">Parámetro</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+
+                <input type="hidden" id="fId" value="0" />
+
+                <div class="row g-3 mb-3">
+                    <div class="col-md-5">
+                        <label class="form-label fw-semibold">Módulo <span class="text-danger">*</span></label>
+                        <input type="text" id="fModulo" class="form-control" placeholder="ecommerce, empresa, login…" />
+                    </div>
+                    <div class="col-md-7">
+                        <label class="form-label fw-semibold">Nombre del parámetro <span class="text-danger">*</span></label>
+                        <input type="text" id="fNombre" class="form-control" placeholder="modoAcceso, titulo, imagen…" />
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Valor</label>
+                    <input type="text" id="fValor" class="form-control" placeholder="Valor de texto del parámetro" />
+                    <div class="form-text">Dejá vacío si el parámetro almacena solo una imagen.</div>
+                </div>
+
+                <!-- Sección imagen -->
+                <div class="border rounded p-3 bg-light">
+                    <div class="d-flex align-items-center gap-3 mb-2">
+                        <span class="fw-semibold small">Imagen</span>
+                        <span id="imagenActualBadge" class="badge bg-success d-none">Imagen cargada</span>
+                        <button type="button" class="btn btn-sm btn-outline-danger d-none ms-auto" id="btnQuitarImagen">
+                            <i class="bi bi-x-circle me-1"></i>Quitar imagen
+                        </button>
+                    </div>
+                    <div id="imagenPreviewWrap" class="mb-2 d-none text-center">
+                        <img id="imagenPreview" src="" alt="preview"
+                             class="border rounded"
+                             style="max-height:100px;max-width:200px;object-fit:contain;" />
+                    </div>
+                    <input type="file" id="fImagen" class="form-control" accept="image/*" />
+                    <div class="form-text">PNG, JPG, GIF o WebP. Subir un archivo reemplaza la imagen actual.</div>
+                    <input type="hidden" id="fQuitarImagen" value="false" />
+                </div>
+
+            </div>
+            <div class="modal-footer">
+                <div id="modalError" class="text-danger small me-auto d-none"></div>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnGuardar">
+                    <i class="bi bi-check-lg me-1"></i>Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    const TOKEN = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+    const modal = new bootstrap.Modal(document.getElementById('modalParam'));
+
+    // ── helpers ───────────────────────────────────────────────────────────
+    function resetModal() {
+        document.getElementById('fId').value        = '0';
+        document.getElementById('fModulo').value    = '';
+        document.getElementById('fNombre').value    = '';
+        document.getElementById('fValor').value     = '';
+        document.getElementById('fImagen').value    = '';
+        document.getElementById('fQuitarImagen').value = 'false';
+        document.getElementById('imagenActualBadge').classList.add('d-none');
+        document.getElementById('btnQuitarImagen').classList.add('d-none');
+        document.getElementById('imagenPreviewWrap').classList.add('d-none');
+        document.getElementById('modalError').classList.add('d-none');
+        document.getElementById('fModulo').readOnly = false;
+        document.getElementById('fNombre').readOnly = false;
+    }
+
+    function mostrarError(msg) {
+        const el = document.getElementById('modalError');
+        el.textContent = msg;
+        el.classList.remove('d-none');
+    }
+
+    // ── nuevo ─────────────────────────────────────────────────────────────
+    document.getElementById('btnNuevo').addEventListener('click', () => {
+        resetModal();
+        document.getElementById('modalParamLabel').textContent = 'Nuevo parámetro';
+        modal.show();
+    });
+
+    // ── editar ────────────────────────────────────────────────────────────
+    document.addEventListener('click', async e => {
+        const btn = e.target.closest('.btn-editar');
+        if (!btn) return;
+
+        const id  = btn.dataset.id;
+        const res = await fetch(`/Admin/Parametros?handler=ParametroJson&id=${id}`);
+        if (!res.ok) { alert('No se pudo cargar el parámetro.'); return; }
+        const d = await res.json();
+
+        resetModal();
+        document.getElementById('modalParamLabel').textContent = 'Editar parámetro';
+        document.getElementById('fId').value     = d.id;
+        document.getElementById('fModulo').value = d.modulo  ?? '';
+        document.getElementById('fNombre').value = d.parametroNombre ?? '';
+        document.getElementById('fValor').value  = d.valor   ?? '';
+
+        // módulo y nombre readonly al editar (evitar cambiar clave del sistema)
+        document.getElementById('fModulo').readOnly = true;
+        document.getElementById('fNombre').readOnly = true;
+
+        if (d.tieneImagen) {
+            document.getElementById('imagenActualBadge').classList.remove('d-none');
+            document.getElementById('btnQuitarImagen').classList.remove('d-none');
+            document.getElementById('imagenPreviewWrap').classList.remove('d-none');
+            document.getElementById('imagenPreview').src =
+                `/Admin/Parametros?handler=Imagen&id=${id}&t=${Date.now()}`;
+        }
+
+        modal.show();
+    });
+
+    // ── quitar imagen ─────────────────────────────────────────────────────
+    document.getElementById('btnQuitarImagen').addEventListener('click', () => {
+        document.getElementById('fQuitarImagen').value = 'true';
+        document.getElementById('imagenActualBadge').classList.add('d-none');
+        document.getElementById('btnQuitarImagen').classList.add('d-none');
+        document.getElementById('imagenPreviewWrap').classList.add('d-none');
+        document.getElementById('imagenPreviewWrap').querySelector('img').src = '';
+    });
+
+    // ── preview de imagen local ───────────────────────────────────────────
+    document.getElementById('fImagen').addEventListener('change', function () {
+        const file = this.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = ev => {
+            document.getElementById('imagenPreview').src = ev.target.result;
+            document.getElementById('imagenPreviewWrap').classList.remove('d-none');
+            document.getElementById('fQuitarImagen').value = 'false'; // si sube nueva no quitar
+        };
+        reader.readAsDataURL(file);
+    });
+
+    // ── guardar ───────────────────────────────────────────────────────────
+    document.getElementById('btnGuardar').addEventListener('click', async () => {
+        const modulo = document.getElementById('fModulo').value.trim();
+        const nombre = document.getElementById('fNombre').value.trim();
+
+        if (!modulo || !nombre) {
+            mostrarError('Módulo y nombre del parámetro son obligatorios.');
+            return;
+        }
+
+        const fd = new FormData();
+        fd.append('__RequestVerificationToken', TOKEN);
+        fd.append('Id',              document.getElementById('fId').value);
+        fd.append('Modulo',          modulo);
+        fd.append('ParametroNombre', nombre);
+        fd.append('Valor',           document.getElementById('fValor').value);
+        fd.append('QuitarImagen',    document.getElementById('fQuitarImagen').value);
+
+        const imgFile = document.getElementById('fImagen').files?.[0];
+        if (imgFile) fd.append('Imagen', imgFile);
+
+        const btn = document.getElementById('btnGuardar');
+        btn.disabled = true;
+        try {
+            const res  = await fetch('/Admin/Parametros?handler=Guardar', { method: 'POST', body: fd });
+            const data = await res.json();
+            if (data.ok) { modal.hide(); location.reload(); }
+            else          mostrarError(data.error ?? 'Error al guardar.');
+        } catch {
+            mostrarError('Error de conexión.');
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    // ── eliminar ──────────────────────────────────────────────────────────
+    document.addEventListener('click', async e => {
+        const btn = e.target.closest('.btn-eliminar');
+        if (!btn) return;
+
+        const nombre = btn.dataset.nombre;
+        if (!confirm(`¿Eliminar el parámetro "${nombre}"? Esta acción no se puede deshacer.`)) return;
+
+        const fd = new FormData();
+        fd.append('__RequestVerificationToken', TOKEN);
+        fd.append('id', btn.dataset.id);
+
+        const res  = await fetch('/Admin/Parametros?handler=Eliminar', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.ok) location.reload();
+        else alert(data.error ?? 'Error al eliminar.');
+    });
+
+    // ── Enter en inputs del modal ─────────────────────────────────────────
+    document.getElementById('modalParam').addEventListener('keydown', e => {
+        if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.type !== 'file')
+            document.getElementById('btnGuardar').click();
+    });
+})();
+</script>
+}

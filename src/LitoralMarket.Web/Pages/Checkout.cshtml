@@ -1,0 +1,345 @@
+@page
+@model CheckoutPageModel
+@using System.Globalization
+@{
+    ViewData["Title"] = "Confirmar Pedido";
+    // Costos de envío para el JS (actualización dinámica del total)
+    var costosJson = System.Text.Json.JsonSerializer.Serialize(
+        Model.Direcciones.ToDictionary(
+            d => d.Id.ToString(),
+            d => d.CostoEnvio.ToString("F2", CultureInfo.InvariantCulture)
+        )
+    );
+    var permiteLibreIds = System.Text.Json.JsonSerializer.Serialize(
+        Model.Direcciones.Where(d => d.PermiteLibre).Select(d => d.Id).ToArray()
+    );
+    var subtotal = Model.SubtotalProductos;
+}
+
+<h2 class="mb-4"><i class="bi bi-bag-check me-2"></i>Confirmar pedido</h2>
+
+@if (Model.Errores.Any())
+{
+    <div class="alert alert-danger d-flex gap-2 align-items-start">
+        <i class="bi bi-exclamation-triangle-fill fs-5 mt-1"></i>
+        <div>
+            <strong>No se puede confirmar el pedido:</strong>
+            <ul class="mb-0 mt-1">
+                @foreach (var error in Model.Errores)
+                {
+                    <li>@error</li>
+                }
+            </ul>
+        </div>
+    </div>
+}
+
+<form method="post" id="formCheckout">
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="Datos.ClienteId" />
+
+    <div class="row g-4">
+
+        <!-- ===== Columna izquierda ===== -->
+        <div class="col-lg-7 d-flex flex-column gap-3">
+
+            <!-- Datos del cliente -->
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h6 class="card-title checkout-section-title">
+                        <i class="bi bi-person-fill me-2"></i>Datos de contacto
+                    </h6>
+
+                    @if (!User.Identity!.IsAuthenticated)
+                    {
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label">Nombre completo / Razón social <span class="text-danger">*</span></label>
+                                <input asp-for="Datos.NombreCliente" class="form-control" placeholder="Ej: Juan García" />
+                                <span asp-validation-for="Datos.NombreCliente" class="text-danger small"></span>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Email <span class="text-danger">*</span></label>
+                                <input asp-for="Datos.EmailCliente" class="form-control" type="email" placeholder="correo@ejemplo.com" />
+                                <span asp-validation-for="Datos.EmailCliente" class="text-danger small"></span>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">
+                                    Teléfono <span class="text-danger">*</span>
+                                    <small class="text-muted fw-normal">(para coordinar la entrega)</small>
+                                </label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-telephone"></i></span>
+                                    <input asp-for="Datos.TelefonoCliente"
+                                           class="form-control"
+                                           type="tel"
+                                           placeholder="(0362) 4xxxxxx" />
+                                </div>
+                                <span asp-validation-for="Datos.TelefonoCliente" class="text-danger small"></span>
+                            </div>
+                        </div>
+                        <p class="text-muted small mt-2 mb-0">
+                            <i class="bi bi-shield-lock me-1"></i>Tus datos solo se usan para gestionar tu pedido.
+                        </p>
+                    }
+                    else
+                    {
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Nombre</label>
+                                <input class="form-control" value="@User.FindFirst("nombre")?.Value" disabled />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Email</label>
+                                <input class="form-control" value="@User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value" disabled />
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- Dirección de entrega -->
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h6 class="card-title checkout-section-title">
+                        <i class="bi bi-geo-alt-fill me-2"></i>Dirección de entrega
+                    </h6>
+                    <span asp-validation-for="Datos.DireccionEntregaId" class="text-danger small d-block mb-2"></span>
+
+                    <div class="d-flex flex-column gap-2" id="listaDirecciones">
+                        @foreach (var dir in Model.Direcciones)
+                        {
+                            var icono = dir.TipoEntrega switch {
+                                "retiro"    => "bi-shop",
+                                "fijo"      => "bi-building",
+                                _           => "bi-truck"
+                            };
+                            var seleccionada = dir.Id == Model.Datos.DireccionEntregaId;
+
+                            <label class="dir-opcion @(seleccionada ? "checked" : "")" data-id="@dir.Id">
+                                <input type="radio"
+                                       name="Datos.DireccionEntregaId"
+                                       value="@dir.Id"
+                                       class="dir-radio visually-hidden"
+                                       checked="@(seleccionada ? "checked" : null)" />
+
+                                <div class="dir-opcion-inner">
+                                    <div class="dir-icono">
+                                        <i class="bi @icono"></i>
+                                    </div>
+                                    <div class="dir-info flex-grow-1">
+                                        <div class="dir-nombre">@dir.Descripcion</div>
+                                        @if (!string.IsNullOrEmpty(dir.Localidad))
+                                        {
+                                            <div class="dir-detalle">
+                                                <i class="bi bi-pin-map me-1"></i>@dir.Localidad
+                                            </div>
+                                        }
+                                        @if (!string.IsNullOrEmpty(dir.Referencia))
+                                        {
+                                            <div class="dir-detalle">
+                                                <i class="bi bi-info-circle me-1"></i>@dir.Referencia
+                                            </div>
+                                        }
+                                    </div>
+                                    <div class="dir-costo">
+                                        @if (dir.EsGratis || dir.CostoEnvio == 0)
+                                        {
+                                            <span class="badge-gratis">Gratis</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="dir-costo-valor">+ $@dir.CostoEnvio.ToString("N2")</span>
+                                        }
+                                    </div>
+                                </div>
+
+                                @if (dir.PermiteLibre)
+                                {
+                                                <div class="dir-libre-wrap" id="libre-@dir.Id">
+                                        <input type="text"
+                                               class="form-control form-control-sm mt-2 libre-input"
+                                               data-dir-id="@dir.Id"
+                                               placeholder="Ingresá tu dirección completa (calle, número, piso, ciudad)"
+                                               value="@(seleccionada ? Model.Datos.DireccionEntregaTexto : "")"
+                                               autocomplete="street-address" />
+                                    </div>
+                                }
+                            </label>
+                        }
+
+                        <input type="hidden"
+                               id="hidDireccionTexto"
+                               name="Datos.DireccionEntregaTexto"
+                               value="@Model.Datos.DireccionEntregaTexto" />
+                        <span asp-validation-for="Datos.DireccionEntregaTexto" class="text-danger small d-block mt-1"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Observaciones -->
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h6 class="card-title checkout-section-title">
+                        <i class="bi bi-chat-left-text me-2"></i>Observaciones
+                    </h6>
+                    <textarea asp-for="Datos.Observacion"
+                              class="form-control"
+                              rows="3"
+                              placeholder="Aclaraciones especiales para el pedido (opcional)"></textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== Resumen derecha ===== -->
+        <div class="col-lg-5">
+            <div class="card border-0 shadow-sm checkout-resumen-sticky">
+                <div class="card-body">
+                    <h6 class="card-title checkout-section-title">
+                        <i class="bi bi-receipt me-2"></i>Resumen
+                    </h6>
+
+                    <!-- Ítems -->
+                    <div class="checkout-items-list mb-3">
+                        @foreach (var item in Model.Items)
+                        {
+                            <div class="d-flex justify-content-between align-items-start small mb-1 gap-2">
+                                <span class="text-muted text-truncate" style="max-width:200px;">
+                                    @item.Descripcion
+                                    <span class="fw-semibold text-dark"> × @item.Cantidad.ToString("G", CultureInfo.InvariantCulture)</span>
+                                </span>
+                                <span class="text-nowrap fw-semibold">$@item.Subtotal.ToString("N2")</span>
+                            </div>
+                        }
+                    </div>
+
+                    <hr class="my-2" />
+
+                    <!-- Subtotal productos -->
+                    <div class="d-flex justify-content-between small mb-1">
+                        <span class="text-muted">Subtotal productos</span>
+                        <span>$@subtotal.ToString("N2")</span>
+                    </div>
+
+                    <!-- Costo de envío (dinámico) -->
+                    <div class="d-flex justify-content-between small mb-1" id="filaEnvio">
+                        <span class="text-muted">Envío</span>
+                        <span id="lblCostoEnvio" class="fw-semibold">—</span>
+                    </div>
+
+                    <hr class="my-2" />
+
+                    <!-- Total final -->
+                    <div class="d-flex justify-content-between fs-5 fw-bold">
+                        <span>Total</span>
+                        <span id="lblTotal" style="color:var(--verde);">
+                            $@subtotal.ToString("N2")
+                        </span>
+                    </div>
+
+                    <button type="submit"
+                            class="btn-agregar w-100 mt-3 py-2 fs-6"
+                            @(Model.Errores.Any() ? "disabled" : "")>
+                        <i class="bi bi-check-circle me-2"></i>Confirmar pedido
+                    </button>
+
+                    <a asp-page="/Carrito" class="btn btn-outline-secondary w-100 mt-2">
+                        <i class="bi bi-arrow-left me-1"></i>Modificar carrito
+                    </a>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</form>
+
+@section Scripts {
+<partial name="_ValidationScriptsPartial" />
+<script>
+(function () {
+    const COSTOS        = @Html.Raw(costosJson);
+    const PERMITE_LIBRE = @Html.Raw(permiteLibreIds);
+    const SUBTOTAL      = @subtotal.ToString("F2", CultureInfo.InvariantCulture);
+
+    function fmt(n) {
+        return n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    const hidDireccion = document.getElementById('hidDireccionTexto');
+
+    // Sincroniza el input visible del libre seleccionado → campo oculto de binding
+    function sincronizarLibre(idDir) {
+        const wrap = document.getElementById('libre-' + idDir);
+        if (wrap) {
+            const input = wrap.querySelector('.libre-input');
+            if (input) hidDireccion.value = input.value;
+        } else {
+            hidDireccion.value = '';
+        }
+    }
+
+    function actualizar(idDir) {
+        const costo   = parseFloat(COSTOS[idDir] ?? '0');
+        const total   = parseFloat(SUBTOTAL) + costo;
+        const esLibre = PERMITE_LIBRE.includes(parseInt(idDir));
+
+        // Etiqueta costo envío
+        const lblEnvio = document.getElementById('lblCostoEnvio');
+        if (costo === 0) {
+            lblEnvio.textContent = 'Gratis';
+            lblEnvio.style.color = 'var(--verde)';
+        } else {
+            lblEnvio.textContent = '+ $' + fmt(costo);
+            lblEnvio.style.color = '';
+        }
+
+        // Total
+        document.getElementById('lblTotal').textContent = '$' + fmt(total);
+
+        // Mostrar / ocultar campo de dirección libre
+        document.querySelectorAll('[id^="libre-"]').forEach(el => el.style.display = 'none');
+        if (esLibre) {
+            const wrap = document.getElementById('libre-' + idDir);
+            if (wrap) wrap.style.display = 'block';
+            sincronizarLibre(idDir);
+        } else {
+            hidDireccion.value = '';
+        }
+
+        // Estilo de la opción seleccionada
+        document.querySelectorAll('.dir-opcion').forEach(l => l.classList.remove('checked'));
+        document.querySelectorAll('.dir-radio').forEach(r => {
+            if (r.value == idDir) r.closest('.dir-opcion').classList.add('checked');
+        });
+    }
+
+    // Cada vez que el usuario escribe en un input libre → actualiza el campo oculto
+    document.querySelectorAll('.libre-input').forEach(input => {
+        input.addEventListener('input', function () {
+            hidDireccion.value = this.value;
+        });
+        // Evitar que el click en el text input propague al label y dispare un segundo 'actualizar'
+        input.addEventListener('click', function (e) {
+            e.stopPropagation();
+        });
+    });
+
+    // Inicializar con la opción pre-seleccionada
+    const inicial = document.querySelector('.dir-radio:checked');
+    if (inicial) actualizar(inicial.value);
+
+    // Cambio de opción via radio
+    document.querySelectorAll('.dir-radio').forEach(radio => {
+        radio.addEventListener('change', () => actualizar(radio.value));
+    });
+
+    // Click en el label también activa el radio
+    document.querySelectorAll('.dir-opcion').forEach(label => {
+        label.addEventListener('click', function () {
+            const radio = this.querySelector('.dir-radio');
+            if (radio) { radio.checked = true; actualizar(radio.value); }
+        });
+    });
+})();
+</script>
+}

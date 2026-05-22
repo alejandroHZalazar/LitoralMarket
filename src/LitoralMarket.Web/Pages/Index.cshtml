@@ -1,0 +1,43 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Inicio";
+    ViewData["MostrarSinStock"] = Model.MostrarSinStock;
+}
+
+<div class="row mb-4">
+    <div class="col text-center">
+        <h2>@Model.Titulo</h2>
+        <p class="text-muted">Explorá nuestros productos por categoría o usá el buscador</p>
+    </div>
+</div>
+
+@if (!Model.Productos.Any())
+{
+    <div class="alert alert-info text-center">No hay productos disponibles en este momento.</div>
+}
+else
+{
+    <div class="row row-cols-2 row-cols-md-3 row-cols-lg-4 g-3">
+        @foreach (var producto in Model.Productos)
+        {
+            <div class="col position-relative">
+                <partial name="_ProductoCard" model="producto" />
+            </div>
+        }
+    </div>
+
+    @if (Model.TotalPaginas > 1)
+    {
+        <nav class="mt-4">
+            <ul class="pagination justify-content-center">
+                @for (int i = 1; i <= Model.TotalPaginas; i++)
+                {
+                    <li class="page-item @(i == Model.PaginaActual ? "active" : "")">
+                        <a class="page-link" asp-page="/Index" asp-route-pagina="@i">@i</a>
+                    </li>
+                }
+            </ul>
+        </nav>
+    }
+}

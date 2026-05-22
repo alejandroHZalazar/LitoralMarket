@@ -1,0 +1,149 @@
+using LitoralMarket.Application.Interfaces;
+using LitoralMarket.Infrastructure.Data;
+using LitoralMarket.Infrastructure.Repositories;
+using LitoralMarket.Infrastructure.Services;
+
+using LitoralMarket.Web.Middleware;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
+using System.Threading.RateLimiting;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// EF Core + MySQL
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseMySql(
+        builder.Configuration.GetConnectionString("Default"),
+        ServerVersion.AutoDetect(builder.Configuration.GetConnectionString("Default"))
+    ));
+
+// Autenticación por cookies
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.LoginPath = "/login";
+        options.LogoutPath = "/logout";
+        options.AccessDeniedPath = "/error";
+        options.ExpireTimeSpan = TimeSpan.FromHours(8);
+        options.SlidingExpiration = true;
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SameSite = SameSiteMode.Strict;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+        options.Cookie.Name = "litoral_auth";
+    });
+
+// Rate limiting (built-in .NET 7+)
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("login", limiter =>
+    {
+        limiter.PermitLimit = builder.Configuration.GetValue("RateLimiting:LoginMaxRequests", 5);
+        limiter.Window = TimeSpan.FromSeconds(builder.Configuration.GetValue("RateLimiting:LoginWindowSeconds", 60));
+        limiter.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        limiter.QueueLimit = 0;
+    });
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+});
+
+// Sesión
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession(options =>
+{
+    options.IdleTimeout = TimeSpan.FromHours(2);
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SameSite = SameSiteMode.Strict;
+    options.Cookie.Name = "litoral_session";
+});
+
+// Cache en memoria
+builder.Services.AddMemoryCache();
+
+// Razor Pages con antiforgery
+builder.Services.AddRazorPages(options =>
+{
+    options.Conventions.ConfigureFilter(new Microsoft.AspNetCore.Mvc.AutoValidateAntiforgeryTokenAttribute());
+});
+
+// Web API Controllers (webhooks, etc.)
+builder.Services.AddControllers();
+
+// DI — Repositorios y Servicios
+builder.Services.AddScoped<IProductoRepository, ProductoRepository>();
+builder.Services.AddScoped<IProductoAdminService, ProductoAdminService>();
+builder.Services.AddScoped<IPedidoAdminService, PedidoAdminService>();
+builder.Services.AddScoped<IProveedorAdminService, ProveedorAdminService>();
+builder.Services.AddScoped<IRubroAdminService, RubroAdminService>();
+builder.Services.AddScoped<IDireccionEntregaAdminService, DireccionEntregaAdminService>();
+builder.Services.AddScoped<IProveedorRepository, ProveedorRepository>();
+builder.Services.AddScoped<IDireccionEntregaRepository, DireccionEntregaRepository>();
+builder.Services.AddScoped<IParametrosService, ParametrosService>();
+builder.Services.AddScoped<IParametrosAdminService, ParametrosAdminService>();
+builder.Services.AddScoped<IEstadisticasService, EstadisticasService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<ICarritoService, CarritoService>();
+builder.Services.AddScoped<IPedidoService, PedidoService>();
+builder.Services.AddScoped<IPagoEcommerceService, PagoEcommerceService>();
+builder.Services.AddScoped<IPdfPagoService, PdfPagoService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
+
+// HttpClient para MercadoPago
+builder.Services.AddHttpClient("MercadoPago", c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(30);
+});
+
+// Poller de pagos MercadoPago (background service)
+builder.Services.AddHostedService<LitoralMarket.Infrastructure.Services.MercadoPagoPollerService>();
+
+// HttpContextAccessor para acceder al context en servicios
+builder.Services.AddHttpContextAccessor();
+
+var app = builder.Build();
+
+if (!app.Environment.IsDevelopment())
+{
+    app.UseExceptionHandler("/Error");
+    app.UseHsts();
+}
+
+app.UseHttpsRedirection();
+
+// Archivos estáticos del wwwroot (CSS, JS, imágenes propias)
+app.UseStaticFiles();
+
+app.UseMiddleware<SecurityHeadersMiddleware>();
+
+app.UseRouting();
+app.UseRateLimiter();
+
+app.UseAuthentication();
+app.UseAuthorization();
+
+app.UseSession();
+
+app.UseMiddleware<AccessModeMiddleware>();
+
+app.MapRazorPages();
+app.MapControllers();
+
+// Endpoint público para servir imágenes de productos (longblob en BD)
+app.MapGet("/images/productos/{id:int}", async (int id, LitoralMarket.Infrastructure.Data.AppDbContext db, HttpContext ctx) =>
+{
+    var imagen = await db.Productos
+        .Where(p => p.Id == id)
+        .Select(p => p.Imagen)
+        .FirstOrDefaultAsync();
+
+    if (imagen is null or { Length: 0 }) return Results.NotFound();
+
+    string mime = imagen.Length >= 2 && imagen[0] == 0xFF && imagen[1] == 0xD8 ? "image/jpeg"
+                : imagen.Length >= 4 && imagen[0] == 0x89 && imagen[1] == 0x50 ? "image/png"
+                : imagen.Length >= 3 && imagen[0] == 0x47 && imagen[1] == 0x49 ? "image/gif"
+                : "image/webp";
+
+    ctx.Response.Headers.CacheControl = "public, max-age=86400";
+    return Results.File(imagen, mime, enableRangeProcessing: false);
+});
+
+app.Run();

@@ -1,0 +1,58 @@
+@page "/pago-resultado"
+@model PagoResultadoModel
+@{
+    ViewData["Title"] = Model.Aprobado ? "Pago en proceso" : "Pago pendiente";
+}
+
+<div class="row justify-content-center mt-5">
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm text-center py-5 px-4">
+
+            @if (Model.Aprobado)
+            {
+                <div class="mb-3">
+                    <i class="bi bi-hourglass-split" style="font-size:3.5rem; color:var(--verde);"></i>
+                </div>
+                <h4 class="fw-bold mb-2">¡Pago recibido!</h4>
+                <p class="text-muted mb-4">
+                    Tu pago fue procesado por MercadoPago.<br />
+                    Estamos confirmando tu pedido, en unos instantes recibirás la confirmación.
+                </p>
+                <a asp-page="/Pago" asp-route-id="@Model.PedidoId"
+                   class="btn btn-outline-secondary me-2">
+                    <i class="bi bi-arrow-left me-1"></i>Volver al pedido
+                </a>
+            }
+            else if (Model.Resultado == "pendiente")
+            {
+                <div class="mb-3">
+                    <i class="bi bi-clock-history" style="font-size:3.5rem; color:#f0ad4e;"></i>
+                </div>
+                <h4 class="fw-bold mb-2">Pago pendiente</h4>
+                <p class="text-muted mb-4">
+                    Tu pago está siendo procesado por MercadoPago.<br />
+                    Te notificaremos cuando sea confirmado.
+                </p>
+                <a asp-page="/Pago" asp-route-id="@Model.PedidoId"
+                   class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left me-1"></i>Ver estado del pedido
+                </a>
+            }
+            else
+            {
+                <div class="mb-3">
+                    <i class="bi bi-x-circle-fill" style="font-size:3.5rem; color:#dc3545;"></i>
+                </div>
+                <h4 class="fw-bold mb-2">Pago rechazado</h4>
+                <p class="text-muted mb-4">
+                    Hubo un problema con tu pago. Podés intentar nuevamente.
+                </p>
+                <a asp-page="/Pago" asp-route-id="@Model.PedidoId"
+                   class="btn-agregar me-2 px-4 py-2">
+                    <i class="bi bi-arrow-clockwise me-1"></i>Reintentar
+                </a>
+            }
+
+        </div>
+    </div>
+</div>

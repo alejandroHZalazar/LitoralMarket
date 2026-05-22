@@ -1,0 +1,444 @@
+@page
+@model LitoralMarket.Web.Pages.Admin.Estadisticas.IndexModel
+@{
+    ViewData["Title"] = "Estadísticas";
+}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+
+<!-- ═══ HEADER + FILTROS ═════════════════════════════════════════════════ -->
+<div class="d-flex align-items-center mb-3 flex-wrap gap-2">
+    <h2 class="mb-0 me-auto">Estadísticas e-commerce</h2>
+    <span id="lblCargando" class="text-muted small d-none">
+        <span class="spinner-border spinner-border-sm me-1"></span>Actualizando…
+    </span>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body py-2">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+
+            <!-- Períodos rápidos -->
+            <div class="btn-group btn-group-sm me-2" id="btnPeriodo">
+                <button class="btn btn-outline-secondary" data-dias="7">7 d</button>
+                <button class="btn btn-outline-secondary" data-dias="30">30 d</button>
+                <button class="btn btn-outline-secondary active" data-dias="90">3 m</button>
+                <button class="btn btn-outline-secondary" data-dias="180">6 m</button>
+                <button class="btn btn-outline-secondary" data-dias="365">1 año</button>
+            </div>
+
+            <div class="vr d-none d-md-block"></div>
+
+            <!-- Rango personalizado -->
+            <label class="small text-muted mb-0">Desde</label>
+            <input type="date" id="inputDesde" class="form-control form-control-sm" style="width:150px" />
+            <label class="small text-muted mb-0">Hasta</label>
+            <input type="date" id="inputHasta" class="form-control form-control-sm" style="width:150px" />
+            <button class="btn btn-sm btn-primary" id="btnAplicar">
+                <i class="bi bi-search me-1"></i>Aplicar
+            </button>
+
+            <div class="ms-auto text-muted small" id="lblRango"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ KPI — FINANCIEROS ════════════════════════════════════════════════ -->
+<div class="row g-3 mb-2">
+    <div class="col-12"><span class="text-muted small fw-semibold text-uppercase">Indicadores financieros</span></div>
+</div>
+<div class="row g-3 mb-4" id="kpiFinRow">
+    @for (int i = 0; i < 6; i++)
+    {<div class="col-6 col-md-4 col-xl-2"><div class="card border-0 shadow-sm h-100 placeholder-glow">
+        <div class="card-body text-center py-3">
+            <div class="placeholder col-6 mb-2 rounded"></div>
+            <div class="placeholder col-8 rounded"></div>
+        </div></div></div>}
+</div>
+
+<!-- ═══ KPI — OPERATIVOS ════════════════════════════════════════════════ -->
+<div class="row g-3 mb-2">
+    <div class="col-12"><span class="text-muted small fw-semibold text-uppercase">Indicadores operativos</span></div>
+</div>
+<div class="row g-3 mb-4" id="kpiOpRow">
+    @for (int i = 0; i < 5; i++)
+    {<div class="col-6 col-md-4 col-xl"><div class="card border-0 shadow-sm h-100 placeholder-glow">
+        <div class="card-body text-center py-3">
+            <div class="placeholder col-6 mb-2 rounded"></div>
+            <div class="placeholder col-8 rounded"></div>
+        </div></div></div>}
+</div>
+
+<!-- ═══ GRÁFICOS ═══════════════════════════════════════════════════════ -->
+<div class="row g-3 mb-4">
+    <!-- Donut estados -->
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white fw-semibold border-bottom py-2 px-3">
+                <i class="bi bi-pie-chart me-2 text-primary"></i>Estado de pedidos
+            </div>
+            <div class="card-body d-flex flex-column align-items-center justify-content-center">
+                <div style="position:relative;height:200px;width:200px">
+                    <canvas id="chartEstados"></canvas>
+                    <div id="donutCentro" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none">
+                        <div class="fw-bold" id="donutTotal" style="font-size:1.4rem"></div>
+                        <div class="text-muted small">pedidos</div>
+                    </div>
+                </div>
+                <div id="legendaEstados" class="mt-3 w-100 px-2"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Barras por mes -->
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white fw-semibold border-bottom py-2 px-3">
+                <i class="bi bi-bar-chart me-2 text-primary"></i>Pedidos y ventas por mes
+                <span class="text-muted small fw-normal">(últimos 12 meses)</span>
+            </div>
+            <div class="card-body">
+                <canvas id="chartMeses" style="max-height:240px"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ TOP PRODUCTOS ════════════════════════════════════════════════════ -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white fw-semibold border-bottom py-2 px-3">
+        <i class="bi bi-trophy me-2 text-warning"></i>Top 10 productos más vendidos
+        <span class="text-muted small fw-normal" id="lblRangoProductos"></span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th class="ps-3" style="width:2rem">#</th>
+                    <th>Producto</th>
+                    <th class="text-center" style="width:7rem">Unidades</th>
+                    <th class="text-end" style="width:10rem">Ventas (c/IVA)</th>
+                    <th class="text-end" style="width:10rem">Costo total</th>
+                    <th class="text-end" style="width:10rem">Ganancia</th>
+                    <th class="text-end pe-3" style="width:7rem">Margen %</th>
+                </tr>
+            </thead>
+            <tbody id="tbodyProductos">
+                <tr><td colspan="7" class="text-center py-3 text-muted">Cargando…</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ═══ CLIENTES ════════════════════════════════════════════════════════ -->
+<div class="row g-3">
+    <!-- Autenticados -->
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white border-bottom py-2 px-3">
+                <i class="bi bi-person-check me-2 text-primary"></i>
+                <span class="fw-semibold">Top clientes registrados</span>
+                <span class="text-muted small fw-normal" id="lblRangoRegis"></span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3" style="width:2rem">#</th>
+                            <th>Cliente</th>
+                            <th class="text-center" style="width:6rem">Pedidos</th>
+                            <th class="text-end pe-3" style="width:10rem">Total comprado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyRegistrados">
+                        <tr><td colspan="4" class="text-center py-3 text-muted">Cargando…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Anónimos -->
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white border-bottom py-2 px-3">
+                <i class="bi bi-person-dash me-2 text-secondary"></i>
+                <span class="fw-semibold">Top clientes anónimos</span>
+                <span class="text-muted small fw-normal" id="lblRangoAnon"></span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3" style="width:2rem">#</th>
+                            <th>Identificación</th>
+                            <th class="text-center" style="width:6rem">Pedidos</th>
+                            <th class="text-end pe-3" style="width:10rem">Total comprado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyAnonimos">
+                        <tr><td colspan="4" class="text-center py-3 text-muted">Cargando…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    // ─── Formato ───────────────────────────────────────────────────────────
+    const $ = id => document.getElementById(id);
+    const fmtP = n => '$' + Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const fmtN = n => Number(n).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    const isoFecha = d => d.toISOString().slice(0, 10);
+
+    // ─── Estado inicial: últimos 90 días ───────────────────────────────────
+    let hastaActual = new Date();
+    let desdeActual = new Date(); desdeActual.setDate(desdeActual.getDate() - 89);
+
+    function inicializarFechas(d, h) {
+        $('inputDesde').value = isoFecha(d);
+        $('inputHasta').value = isoFecha(h);
+    }
+    inicializarFechas(desdeActual, hastaActual);
+
+    // ─── Colores por estado ────────────────────────────────────────────────
+    const COLORES = { confirmado:'#198754', pendiente_pago:'#ffc107', cancelado:'#dc3545', borrador:'#adb5bd' };
+    const LABELS  = { confirmado:'Confirmado', pendiente_pago:'Pendiente de pago', cancelado:'Cancelado', borrador:'Borrador' };
+    const col = e => COLORES[e] ?? '#6c757d';
+    const lbl = e => LABELS[e]  ?? e;
+
+    // ─── Charts ────────────────────────────────────────────────────────────
+    let chartE = null, chartM = null;
+    function destruir() { chartE?.destroy(); chartE=null; chartM?.destroy(); chartM=null; }
+
+    // ─── KPI financiero ────────────────────────────────────────────────────
+    function renderKpiFin(d) {
+        const margenColor = d.margenPct >= 30 ? 'text-success' : d.margenPct >= 15 ? 'text-warning' : 'text-danger';
+        const kpis = [
+            { label:'Ventas (c/IVA)',     valor: fmtP(d.totalVentas),     icono:'bi-currency-dollar', color:'text-primary',   nota:null },
+            { label:'Ventas s/IVA',       valor: fmtP(d.totalSinIva),     icono:'bi-receipt',         color:'text-secondary', nota:null },
+            { label:'Costo mercadería',   valor: fmtP(d.costoMercaderia), icono:'bi-box-seam',         color:'text-danger',    nota:null },
+            { label:'Ganancia bruta',     valor: fmtP(d.gananciaBruta),   icono:'bi-graph-up-arrow',  color:'text-success',   nota:'ventas s/IVA − costo' },
+            { label:'Margen bruto',       valor: fmtN(d.margenPct)+'%',   icono:'bi-percent',         color: margenColor,     nota:null },
+            { label:'Ticket promedio',    valor: fmtP(d.ticketPromedio),  icono:'bi-cart-check',      color:'text-info',      nota:null },
+        ];
+        $('kpiFinRow').innerHTML = kpis.map(k => `
+            <div class="col-6 col-md-4 col-xl-2">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body text-center py-3">
+                        <i class="bi ${k.icono} fs-3 ${k.color}"></i>
+                        <div class="fs-5 fw-bold mt-1">${k.valor}</div>
+                        <div class="text-muted small">${k.label}</div>
+                        ${k.nota ? `<div class="text-muted" style="font-size:.7rem">${k.nota}</div>` : ''}
+                    </div>
+                </div>
+            </div>`).join('');
+    }
+
+    // ─── KPI operativo ────────────────────────────────────────────────────
+    function renderKpiOp(d) {
+        const kpis = [
+            { label:'Pedidos confirmados', valor: d.pedidosConfirmados,     icono:'bi-bag-check',     color:'text-success'   },
+            { label:'Pendiente de pago',   valor: d.pendientePago,          icono:'bi-clock',         color:'text-warning'   },
+            { label:'Clientes registrados',valor: d.clientesAutenticados,   icono:'bi-person-check',  color:'text-primary',  nota:'en el período'    },
+            { label:'Clientes anónimos',   valor: d.clientesAnonimos,       icono:'bi-person-dash',   color:'text-secondary',nota:'en el período'    },
+            { label:'Con cuenta total',    valor: d.totalClientesConCuenta, icono:'bi-people',        color:'text-info',     nota:'histórico activos' },
+        ];
+        $('kpiOpRow').innerHTML = kpis.map(k => `
+            <div class="col-6 col-md-4 col-xl">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body text-center py-3">
+                        <i class="bi ${k.icono} fs-3 ${k.color}"></i>
+                        <div class="fs-5 fw-bold mt-1">${k.valor}</div>
+                        <div class="text-muted small">${k.label}</div>
+                        ${k.nota ? `<div class="text-muted" style="font-size:.7rem">(${k.nota})</div>` : ''}
+                    </div>
+                </div>
+            </div>`).join('');
+    }
+
+    // ─── Donut estados ────────────────────────────────────────────────────
+    function renderEstados(lista, totalPedidos) {
+        chartE = new Chart($('chartEstados').getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: lista.map(e => lbl(e.estado)),
+                datasets: [{ data: lista.map(e => e.cantidad), backgroundColor: lista.map(e => col(e.estado)), borderWidth: 2, borderColor:'#fff' }]
+            },
+            options: {
+                cutout:'68%', animation:{ animateRotate:true },
+                plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label: c => ` ${lbl(c.label)}: ${c.raw}` }}}
+            }
+        });
+        $('donutTotal').textContent = totalPedidos;
+
+        $('legendaEstados').innerHTML = lista.map(e => `
+            <div class="d-flex justify-content-between align-items-center mb-1 small">
+                <span>
+                    <span class="d-inline-block rounded-circle me-1"
+                          style="width:9px;height:9px;background:${col(e.estado)}"></span>
+                    ${lbl(e.estado)}
+                </span>
+                <span class="fw-semibold">${e.cantidad}
+                    <span class="text-muted fw-normal ms-1">${fmtP(e.total)}</span>
+                </span>
+            </div>`).join('');
+    }
+
+    // ─── Barras por mes ───────────────────────────────────────────────────
+    function renderMeses(lista) {
+        chartM = new Chart($('chartMeses').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: lista.map(m => m.label),
+                datasets: [
+                    { label:'Ventas ($)', data: lista.map(m => m.total),
+                      backgroundColor:'rgba(13,110,253,.15)', borderColor:'rgba(13,110,253,.8)',
+                      borderWidth:1.5, borderRadius:4, yAxisID:'yTotal' },
+                    { label:'Pedidos', data: lista.map(m => m.cantidad), type:'line',
+                      borderColor:'#198754', backgroundColor:'rgba(25,135,84,.1)',
+                      borderWidth:2, pointRadius:4, tension:0.3, yAxisID:'yPed' }
+                ]
+            },
+            options: {
+                responsive:true, interaction:{mode:'index', intersect:false},
+                scales:{
+                    yTotal:{ position:'left', grid:{color:'#e9ecef'},
+                             ticks:{ callback: v => '$' + Number(v).toLocaleString('es-AR') } },
+                    yPed:  { position:'right', grid:{display:false}, ticks:{stepSize:1} }
+                },
+                plugins:{
+                    legend:{ position:'bottom', labels:{boxWidth:12, font:{size:12}} },
+                    tooltip:{ callbacks:{ label: c => c.datasetIndex===0
+                        ? ` ${fmtP(c.raw)}` : ` ${c.raw} pedidos` }}
+                }
+            }
+        });
+    }
+
+    // ─── Tabla productos ──────────────────────────────────────────────────
+    function renderProductos(lista) {
+        const tb = $('tbodyProductos');
+        if (!lista.length) {
+            tb.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Sin datos para el período.</td></tr>';
+            return;
+        }
+        const maxV = lista[0]?.totalVentas ?? 1;
+        tb.innerHTML = lista.map((p, i) => {
+            const pct      = Math.round((p.totalVentas / maxV) * 100);
+            const margenCls = p.margenPct >= 30 ? 'text-success fw-semibold'
+                            : p.margenPct >= 15 ? 'text-warning fw-semibold'
+                            : 'text-danger fw-semibold';
+            return `<tr>
+                <td class="ps-3 text-muted small">${i + 1}</td>
+                <td>
+                    <div class="small">${p.descripcion}</div>
+                    <div class="progress mt-1" style="height:3px;border-radius:2px">
+                        <div class="progress-bar bg-warning" style="width:${pct}%"></div>
+                    </div>
+                </td>
+                <td class="text-center small">${fmtN(p.cantidadVendida)}</td>
+                <td class="text-end small">${fmtP(p.totalVentas)}</td>
+                <td class="text-end small text-danger">${fmtP(p.costoTotal)}</td>
+                <td class="text-end small text-success fw-semibold">${fmtP(p.gananciaBruta)}</td>
+                <td class="text-end pe-3 small ${margenCls}">${fmtN(p.margenPct)}%</td>
+            </tr>`;
+        }).join('');
+    }
+
+    // ─── Tabla clientes ───────────────────────────────────────────────────
+    function renderTablaClientes(tbId, lista, emptyMsg) {
+        const tb = $(tbId);
+        if (!lista.length) {
+            tb.innerHTML = `<tr><td colspan="4" class="text-center text-muted py-3">${emptyMsg}</td></tr>`;
+            return;
+        }
+        const maxT = lista[0]?.totalCompras ?? 1;
+        tb.innerHTML = lista.map((c, i) => {
+            const pct = Math.round((c.totalCompras / maxT) * 100);
+            return `<tr>
+                <td class="ps-3 text-muted small">${i + 1}</td>
+                <td>
+                    <div class="small">${c.nombre}</div>
+                    <div class="progress mt-1" style="height:3px;border-radius:2px">
+                        <div class="progress-bar ${c.esAnonimo ? 'bg-secondary' : 'bg-primary'}" style="width:${pct}%"></div>
+                    </div>
+                </td>
+                <td class="text-center small">${c.cantidadPedidos}</td>
+                <td class="text-end pe-3 small fw-semibold">${fmtP(c.totalCompras)}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    // ─── Carga principal ──────────────────────────────────────────────────
+    async function cargar(desdeDate, hastaDate) {
+        destruir();
+        $('lblCargando').classList.remove('d-none');
+
+        const dStr = isoFecha(desdeDate);
+        const hStr = isoFecha(hastaDate);
+
+        const rangoText = ` — ${dStr.split('-').reverse().join('/')} al ${hStr.split('-').reverse().join('/')}`;
+        $('lblRango').textContent        = rangoText;
+        $('lblRangoProductos').textContent = rangoText;
+        $('lblRangoRegis').textContent   = rangoText;
+        $('lblRangoAnon').textContent    = rangoText;
+
+        try {
+            const res = await fetch(`/Admin/Estadisticas?handler=Datos&desde=${dStr}&hasta=${hStr}`);
+            const d   = await res.json();
+
+            renderKpiFin(d);
+            renderKpiOp(d);
+
+            const totalPedidos = d.porEstado.reduce((a, e) => a + e.cantidad, 0);
+            if (d.porEstado.length) renderEstados(d.porEstado, totalPedidos);
+
+            renderMeses(d.porMes);
+            renderProductos(d.topProductos);
+            renderTablaClientes('tbodyRegistrados', d.topRegistrados, 'Sin clientes registrados en el período.');
+            renderTablaClientes('tbodyAnonimos',    d.topAnonimos,    'Sin pedidos anónimos en el período.');
+        } catch (err) {
+            console.error(err);
+        } finally {
+            $('lblCargando').classList.add('d-none');
+        }
+    }
+
+    // ─── Períodos rápidos ─────────────────────────────────────────────────
+    $('btnPeriodo').addEventListener('click', e => {
+        const btn = e.target.closest('button[data-dias]');
+        if (!btn) return;
+        document.querySelectorAll('#btnPeriodo button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        const dias = parseInt(btn.dataset.dias);
+        const h    = new Date();
+        const d    = new Date(); d.setDate(d.getDate() - dias + 1);
+        inicializarFechas(d, h);
+        desdeActual = d; hastaActual = h;
+        cargar(d, h);
+    });
+
+    // ─── Filtro personalizado ─────────────────────────────────────────────
+    $('btnAplicar').addEventListener('click', () => {
+        const d = new Date($('inputDesde').value);
+        const h = new Date($('inputHasta').value);
+        if (isNaN(d) || isNaN(h) || d > h) {
+            alert('Rango de fechas inválido.');
+            return;
+        }
+        // Quitar selección de botones rápidos
+        document.querySelectorAll('#btnPeriodo button').forEach(b => b.classList.remove('active'));
+        desdeActual = d; hastaActual = h;
+        cargar(d, h);
+    });
+
+    // ─── Carga inicial ────────────────────────────────────────────────────
+    cargar(desdeActual, hastaActual);
+})();
+</script>
+}

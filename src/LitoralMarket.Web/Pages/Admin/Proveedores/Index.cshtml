@@ -1,0 +1,347 @@
+@page
+@model LitoralMarket.Web.Pages.Admin.Proveedores.IndexModel
+@{
+    ViewData["Title"] = "Administración de Proveedores";
+}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h2 class="mb-0"><i class="bi bi-truck me-2 text-success"></i>Administración de Proveedores</h2>
+    <button class="btn btn-success" onclick="abrirModalNuevo()">
+        <i class="bi bi-plus-lg me-1"></i>Nuevo proveedor
+    </button>
+</div>
+
+@if (TempData["Error"] is string err)
+{
+    <div class="alert alert-danger alert-dismissible fade show">
+        <i class="bi bi-x-circle me-2"></i>@err
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- ===== BUSCADOR ===== -->
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body py-2">
+        <div class="row g-2 align-items-center">
+            <div class="col">
+                <input id="valorBusqueda" type="text" class="form-control form-control-sm"
+                       placeholder="Buscar por nombre o CUIL..." oninput="buscar()" />
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== CONTENIDO: tabla + panel detalle ===== -->
+<div class="row g-3">
+
+    <!-- Tabla -->
+    <div class="col-12 col-lg-8">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body p-0">
+                <div style="max-height:70vh;overflow-y:auto;">
+                    <table class="table table-hover table-sm mb-0 align-middle">
+                        <thead class="table-dark sticky-top">
+                            <tr>
+                                <th>Nombre comercial</th>
+                                <th>CUIL</th>
+                                <th>Email</th>
+                                <th>Teléfono</th>
+                                <th class="text-end">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyProveedores">
+                            <tr><td colspan="5" class="text-center text-muted py-4">
+                                <i class="bi bi-search me-1"></i>Usá el buscador para cargar proveedores
+                            </td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Panel detalle -->
+    <div class="col-12 col-lg-4">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white border-bottom py-2">
+                <span class="fw-semibold small"><i class="bi bi-info-circle me-1 text-success"></i>Detalle</span>
+            </div>
+            <div class="card-body p-2" id="panelDetalle">
+                <p class="text-muted text-center small mt-3">Hacé click en un proveedor para ver su detalle.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- =========================================================
+     MODAL ABM
+     ========================================================= -->
+<div class="modal fade" id="proveedorModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header border-bottom">
+                <h5 class="modal-title fw-bold" id="modalTitulo">
+                    <i class="bi bi-truck me-2 text-success"></i>Proveedor
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <form method="post" asp-page-handler="Guardar" id="formProveedor">
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="Proveedor.Id" id="provId" />
+
+                <div class="modal-body">
+                    <div class="row g-3">
+
+                        <!-- Col izquierda -->
+                        <div class="col-12 col-md-6">
+
+                            <div class="admin-section-title">Identificación</div>
+
+                            <div class="mb-2">
+                                <label class="form-label form-label-sm">Nombre comercial *</label>
+                                <input asp-for="Proveedor.NombreComercial" class="form-control form-control-sm"
+                                       placeholder="Razón social o nombre" />
+                                <span asp-validation-for="Proveedor.NombreComercial" class="text-danger small"></span>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label form-label-sm">CUIL / CUIT</label>
+                                <input asp-for="Proveedor.Cuil" class="form-control form-control-sm"
+                                       placeholder="XX-XXXXXXXX-X" />
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label form-label-sm">Dirección</label>
+                                <input asp-for="Proveedor.Direccion" class="form-control form-control-sm" />
+                            </div>
+
+                            <div class="admin-section-title mt-3">Contacto</div>
+
+                            <div class="mb-2">
+                                <label class="form-label form-label-sm">Email</label>
+                                <input asp-for="Proveedor.Email" class="form-control form-control-sm"
+                                       type="email" placeholder="correo@ejemplo.com" />
+                                <span asp-validation-for="Proveedor.Email" class="text-danger small"></span>
+                            </div>
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <label class="form-label form-label-sm">Teléfono</label>
+                                    <input asp-for="Proveedor.Telefono" class="form-control form-control-sm" />
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label form-label-sm">Celular</label>
+                                    <input asp-for="Proveedor.Celular" class="form-control form-control-sm" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Col derecha -->
+                        <div class="col-12 col-md-6">
+
+                            <div class="admin-section-title">Márgenes de precio</div>
+
+                            <div class="alert alert-info py-2 px-3 small mb-3">
+                                <i class="bi bi-info-circle me-1"></i>
+                                Estos porcentajes se usan al calcular los precios de los productos de este proveedor.<br>
+                                <strong>Lista</strong> = Precio proveedor × (1 + Ganancia%)<br>
+                                <strong>Costo</strong> = Precio proveedor × (1 − Descuento%)
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label form-label-sm">
+                                    <i class="bi bi-graph-up-arrow me-1 text-success"></i>% Ganancia
+                                    <span class="text-muted">(proveedor → lista)</span>
+                                </label>
+                                <div class="input-group input-group-sm">
+                                    <input asp-for="Proveedor.Ganancia" id="inpGanancia"
+                                           class="form-control" type="number" step="0.01" min="0" />
+                                    <span class="input-group-text">%</span>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label form-label-sm">
+                                    <i class="bi bi-tag me-1 text-danger"></i>% Descuento
+                                    <span class="text-muted">(proveedor → costo)</span>
+                                </label>
+                                <div class="input-group input-group-sm">
+                                    <input asp-for="Proveedor.Descuento" id="inpDescuento"
+                                           class="form-control" type="number" step="0.01" min="0" />
+                                    <span class="input-group-text">%</span>
+                                </div>
+                            </div>
+
+                            <!-- Simulador rápido -->
+                            <div class="card border-0 bg-light p-3 mt-2">
+                                <div class="small fw-semibold mb-2 text-muted">
+                                    <i class="bi bi-calculator me-1"></i>Simulador de precios
+                                </div>
+                                <div class="input-group input-group-sm mb-2">
+                                    <span class="input-group-text">$</span>
+                                    <input type="number" id="simPrecio" class="form-control"
+                                           placeholder="Precio proveedor" step="0.01" min="0"
+                                           oninput="simular()" />
+                                </div>
+                                <div class="row g-1 small" id="simResultado" style="display:none">
+                                    <div class="col-6">
+                                        <span class="text-muted">Costo:</span>
+                                        <strong class="text-success" id="simCosto">$0.00</strong>
+                                    </div>
+                                    <div class="col-6">
+                                        <span class="text-muted">Lista:</span>
+                                        <strong class="text-primary" id="simLista">$0.00</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-check-lg me-1"></i>Guardar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- =========================================================
+     MODAL CONFIRMAR BAJA
+     ========================================================= -->
+<div class="modal fade" id="modalConfirmarBaja" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-0 bg-danger text-white">
+                <h6 class="modal-title"><i class="bi bi-exclamation-triangle me-2"></i>Confirmar baja</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>¿Dar de baja al proveedor <strong id="nomProvBaja"></strong>?</p>
+                <p class="text-muted small">La baja es lógica; el proveedor no se eliminará de la base de datos.</p>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger" id="btnEjecutarBaja">
+                    <i class="bi bi-trash me-1"></i>Dar de baja
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<partial name="_ValidationScriptsPartial" />
+<style>
+    .admin-section-title {
+        font-size: 0.68rem; font-weight: 700; letter-spacing: 1px;
+        text-transform: uppercase; color: var(--verde-oscuro);
+        border-bottom: 2px solid rgba(29,176,98,0.15);
+        padding-bottom: 3px; margin-bottom: 8px;
+    }
+    .fila-proveedor:hover { cursor: pointer; }
+    .fila-proveedor.seleccionado { background: rgba(29,176,98,0.1); }
+</style>
+<script>
+let _idBaja = 0;
+const TOKEN = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+
+// ── Búsqueda ──────────────────────────────────────────────────────
+let _timer;
+function buscar() {
+    clearTimeout(_timer);
+    _timer = setTimeout(async () => {
+        const valor = document.getElementById('valorBusqueda').value;
+        const res   = await fetch(`?handler=Buscar&valor=${encodeURIComponent(valor)}`);
+        document.getElementById('tbodyProveedores').innerHTML = await res.text();
+    }, 300);
+}
+
+// ── Detalle ───────────────────────────────────────────────────────
+document.addEventListener('click', async e => {
+    const fila = e.target.closest('.fila-proveedor');
+    if (!fila) return;
+    document.querySelectorAll('.fila-proveedor.seleccionado').forEach(r => r.classList.remove('seleccionado'));
+    fila.classList.add('seleccionado');
+    const res = await fetch(`?handler=Detalle&id=${fila.dataset.id}`);
+    document.getElementById('panelDetalle').innerHTML = await res.text();
+});
+
+// ── Modal Nuevo ───────────────────────────────────────────────────
+function abrirModalNuevo() {
+    document.getElementById('formProveedor').reset();
+    document.getElementById('provId').value = '0';
+    document.getElementById('modalTitulo').innerHTML =
+        '<i class="bi bi-plus-circle me-2 text-success"></i>Nuevo proveedor';
+    document.getElementById('simResultado').style.display = 'none';
+    new bootstrap.Modal(document.getElementById('proveedorModal')).show();
+}
+
+// ── Modal Editar ──────────────────────────────────────────────────
+async function abrirModalEditar(id) {
+    const res = await fetch(`?handler=ProveedorJson&id=${id}`);
+    if (!res.ok) { alert('No se pudo cargar el proveedor.'); return; }
+    const p = await res.json();
+
+    document.getElementById('provId').value                                   = p.id;
+    document.querySelector('[name="Proveedor.NombreComercial"]').value        = p.nombreComercial ?? '';
+    document.querySelector('[name="Proveedor.Cuil"]').value                   = p.cuil            ?? '';
+    document.querySelector('[name="Proveedor.Direccion"]').value              = p.direccion       ?? '';
+    document.querySelector('[name="Proveedor.Email"]').value                  = p.email           ?? '';
+    document.querySelector('[name="Proveedor.Telefono"]').value               = p.telefono        ?? '';
+    document.querySelector('[name="Proveedor.Celular"]').value                = p.celular         ?? '';
+    document.getElementById('inpGanancia').value                              = p.ganancia        ?? 0;
+    document.getElementById('inpDescuento').value                             = p.descuento       ?? 0;
+
+    document.getElementById('simPrecio').value = '';
+    document.getElementById('simResultado').style.display = 'none';
+
+    document.getElementById('modalTitulo').innerHTML =
+        `<i class="bi bi-pencil me-2 text-success"></i>Editar: ${p.nombreComercial ?? ''}`;
+    new bootstrap.Modal(document.getElementById('proveedorModal')).show();
+}
+
+// ── Simulador de precios ──────────────────────────────────────────
+function simular() {
+    const precio    = parseFloat(document.getElementById('simPrecio').value)    || 0;
+    const ganancia  = parseFloat(document.getElementById('inpGanancia').value)  || 0;
+    const descuento = parseFloat(document.getElementById('inpDescuento').value) || 0;
+
+    if (precio <= 0) { document.getElementById('simResultado').style.display = 'none'; return; }
+
+    const lista = precio * (1 + ganancia  / 100);
+    const costo = precio * (1 - descuento / 100);
+
+    document.getElementById('simCosto').textContent = '$' + costo.toFixed(2);
+    document.getElementById('simLista').textContent = '$' + lista.toFixed(2);
+    document.getElementById('simResultado').style.display = '';
+}
+
+// Actualizar simulador al cambiar los porcentajes
+document.getElementById('inpGanancia').addEventListener('input',  simular);
+document.getElementById('inpDescuento').addEventListener('input', simular);
+
+// ── Baja ──────────────────────────────────────────────────────────
+function confirmarEliminar(id, nombre) {
+    _idBaja = id;
+    document.getElementById('nomProvBaja').textContent = nombre;
+    new bootstrap.Modal(document.getElementById('modalConfirmarBaja')).show();
+}
+document.getElementById('btnEjecutarBaja').addEventListener('click', async () => {
+    const fd = new FormData();
+    fd.append('id', _idBaja);
+    fd.append('__RequestVerificationToken', TOKEN);
+    const res = await fetch('?handler=Eliminar', { method: 'POST', body: fd });
+    if (res.ok) {
+        bootstrap.Modal.getInstance(document.getElementById('modalConfirmarBaja')).hide();
+        buscar();
+        document.getElementById('panelDetalle').innerHTML =
+            '<p class="text-muted text-center small mt-3">Proveedor dado de baja.</p>';
+    }
+});
+
+// Cargar al abrir
+buscar();
+</script>
+}

@@ -1,0 +1,236 @@
+@page "{id:int}"
+@model PedidoResumenPageModel
+@using System.Globalization
+@{
+    ViewData["Title"] = $"Pedido #{Model.Resumen?.Id}";
+    var r   = Model.Resumen;
+    var cred = Model.EsModoCredenciales;
+}
+
+@if (r is null)
+{
+    <div class="alert alert-warning">Pedido no encontrado.</div>
+}
+else
+{
+    <!-- Ícono + título (no se muestra en modo credenciales) -->
+    @if (!cred)
+    {
+        @if (r.Estado == "confirmado")
+        {
+            <div class="text-center mb-4">
+                <i class="bi bi-check-circle-fill text-success" style="font-size:4rem;"></i>
+                <h2 class="mt-2">¡Pedido confirmado!</h2>
+                <p class="text-muted">
+                    Tu pedido <strong>#@r.Id</strong> fue confirmado y está siendo preparado.
+                </p>
+            </div>
+        }
+        else
+        {
+            <div class="text-center mb-4">
+                <i class="bi bi-bag-check-fill" style="font-size:4rem; color:var(--verde);"></i>
+                <h2 class="mt-2">¡Pedido recibido!</h2>
+                <p class="text-muted">
+                    Tu pedido <strong>#@r.Id</strong> fue recibido correctamente y está pendiente de pago.
+                </p>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="mb-4">
+            <h2><i class="bi bi-receipt me-2 text-primary"></i>Pedido #@r.Id</h2>
+        </div>
+    }
+
+    @if (Model.EmailEnviado)
+    {
+        <div class="alert alert-success d-flex align-items-start gap-2 mb-4">
+            <i class="bi bi-envelope-check-fill fs-5 mt-1 flex-shrink-0"></i>
+            <div>
+                <strong>Te enviamos un email</strong> con los datos del pedido y el comprobante.<br />
+                Si no lo ves en tu bandeja de entrada, <strong>revisá la carpeta de spam o correo no deseado</strong>.
+            </div>
+        </div>
+    }
+
+    <div class="row justify-content-center g-4">
+
+        <!-- ── Columna principal ── -->
+        <div class="col-md-8">
+
+            <!-- Datos del pedido -->
+            <div class="card shadow-sm border-0 mb-3">
+                <div class="card-body">
+                    <h5 class="card-title checkout-section-title">
+                        <i class="bi bi-receipt me-2"></i>Detalle del pedido
+                    </h5>
+
+                    <dl class="row mb-0 small">
+                        <dt class="col-sm-4 text-muted">Fecha</dt>
+                        <dd class="col-sm-8">@r.Fecha.ToString("dd/MM/yyyy HH:mm")</dd>
+
+                        <dt class="col-sm-4 text-muted">Cliente</dt>
+                        <dd class="col-sm-8">@r.NombreCliente</dd>
+
+                        @if (!string.IsNullOrEmpty(r.EmailCliente))
+                        {
+                            <dt class="col-sm-4 text-muted">Email</dt>
+                            <dd class="col-sm-8">@r.EmailCliente</dd>
+                        }
+
+                        @if (!string.IsNullOrEmpty(r.DireccionEntrega))
+                        {
+                            <dt class="col-sm-4 text-muted">Entrega</dt>
+                            <dd class="col-sm-8">@r.DireccionEntrega</dd>
+                        }
+
+                        @if (!string.IsNullOrEmpty(r.Observacion))
+                        {
+                            <dt class="col-sm-4 text-muted">Observaciones</dt>
+                            <dd class="col-sm-8">@r.Observacion</dd>
+                        }
+
+                        @if (!cred)
+                        {
+                            <dt class="col-sm-4 text-muted">Forma de pago</dt>
+                            <dd class="col-sm-8">
+                                @if (r.MetodoPago == "mercadopago")
+                                {
+                                    <span class="badge rounded-pill"
+                                          style="background:#009EE3;">MercadoPago</span>
+                                }
+                                else if (r.MetodoPago == "reembolso")
+                                {
+                                    <span class="badge rounded-pill bg-secondary">Pago contra reembolso</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                                @if (r.Estado == "pendiente_pago")
+                                {
+                                    <span class="badge rounded-pill bg-warning text-dark ms-1">Pendiente de pago</span>
+                                }
+                            </dd>
+                        }
+                    </dl>
+                </div>
+            </div>
+
+            <!-- Tabla de ítems -->
+            <div class="card shadow-sm border-0 mb-3">
+                <div class="card-body p-0">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead style="background:var(--verde-profundo);color:#fff;">
+                            <tr>
+                                <th class="ps-3 py-2 rounded-top-start">Producto</th>
+                                <th class="text-center py-2">Cant.</th>
+                                <th class="text-end py-2">Precio unit.</th>
+                                <th class="text-end pe-3 py-2 rounded-top-end">Subtotal</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in r.Items)
+                            {
+                                <tr>
+                                    <td class="ps-3 small">@item.Descripcion</td>
+                                    <td class="text-center small">
+                                        @item.Cantidad.ToString("G", CultureInfo.InvariantCulture)
+                                    </td>
+                                    <td class="text-end small">$@item.Precio.ToString("N2")</td>
+                                    <td class="text-end pe-3 small fw-semibold">$@item.Subtotal.ToString("N2")</td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot style="background:#f8f9fa;">
+                            <tr>
+                                <td colspan="3" class="text-end ps-3 small text-muted">Subtotal productos</td>
+                                <td class="text-end pe-3 small">$@r.SubtotalProductos.ToString("N2")</td>
+                            </tr>
+                            @if (r.CostoEnvio > 0)
+                            {
+                                <tr>
+                                    <td colspan="3" class="text-end ps-3 small text-muted">Envío</td>
+                                    <td class="text-end pe-3 small fw-semibold">+ $@r.CostoEnvio.ToString("N2")</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                <tr>
+                                    <td colspan="3" class="text-end ps-3 small text-muted">Envío</td>
+                                    <td class="text-end pe-3 small fw-semibold" style="color:var(--verde);">Gratis</td>
+                                </tr>
+                            }
+                            <tr class="fw-bold fs-6">
+                                <td colspan="3" class="text-end ps-3" style="color:var(--verde-profundo);">TOTAL</td>
+                                <td class="text-end pe-3" style="color:var(--verde);">$@r.Total.ToString("N2")</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Comprobante: siempre visible en credenciales; si hay cobro en otros modos -->
+            @if (cred || r.CobroId.HasValue)
+            {
+                <div class="card border-0 shadow-sm mb-3">
+                    <div class="card-body">
+                        <h6 class="card-title checkout-section-title mb-3">
+                            <i class="bi bi-file-earmark-pdf me-2"></i>Comprobante
+                        </h6>
+
+                        <a href="/descargar-pdf?pedidoId=@r.Id"
+                           target="_blank"
+                           class="btn btn-outline-dark w-100 mb-2">
+                            <i class="bi bi-printer me-2"></i>Imprimir / Descargar comprobante PDF
+                        </a>
+
+                        @if (!cred)
+                        {
+                            <p class="text-muted text-center mb-0" style="font-size:.75rem;">
+                                <i class="bi bi-exclamation-triangle me-1 text-warning"></i>
+                                Este comprobante <strong>no es válido como factura</strong>.
+                                @if (r.MetodoPago == "mercadopago")
+                                {
+                                    <text>La compra se efectivizará al recibir el pago.</text>
+                                }
+                                else
+                                {
+                                    <text>La compra se efectivizará al recibir el pago contra reembolso.</text>
+                                }
+                            </p>
+                        }
+                    </div>
+                </div>
+            }
+
+            <!-- Botones de acción -->
+            <div class="d-flex gap-2">
+                <a asp-page="/Index" class="btn btn-agregar flex-grow-1">
+                    <i class="bi bi-bag me-1"></i>Seguir comprando
+                </a>
+            </div>
+
+        </div>
+
+        <!-- ── Columna lateral: info de pago (no se muestra en modo credenciales) ── -->
+        @if (!cred && r.MetodoPago == "reembolso")
+        {
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body text-center py-4">
+                        <i class="bi bi-truck fs-2 mb-2" style="color:var(--verde);"></i>
+                        <h6 class="fw-bold mb-1">Pago contra reembolso</h6>
+                        <p class="text-muted small mb-0">
+                            Abonás cuando recibís tu pedido.<br />
+                            No necesitás realizar ningún pago adicional.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        }
+
+    </div>
+}

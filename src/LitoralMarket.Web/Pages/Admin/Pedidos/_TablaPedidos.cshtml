@@ -1,0 +1,38 @@
+@model List<LitoralMarket.Application.DTOs.PedidoAdminDto>
+
+@if (!Model.Any())
+{
+    <tr><td colspan="6" class="text-center text-muted py-4">
+        <i class="bi bi-inbox me-1"></i>Sin pedidos para los filtros seleccionados.
+    </td></tr>
+}
+else
+{
+    @foreach (var p in Model)
+    {
+        var badgeClass = p.Estado switch
+        {
+            "confirmado"     => "bg-success",
+            "pendiente_pago" => "bg-warning text-dark",
+            "cancelado"      => "bg-danger",
+            _                => "bg-secondary"
+        };
+        var estadoLabel = p.Estado switch
+        {
+            "confirmado"     => "Confirmado",
+            "pendiente_pago" => "Pendiente",
+            "cancelado"      => "Cancelado",
+            _                => p.Estado ?? "-"
+        };
+        <tr class="fila-pedido" data-id="@p.Id">
+            <td class="fw-semibold">#@p.Id</td>
+            <td class="text-nowrap small">@p.Fecha.ToString("dd/MM/yy HH:mm")</td>
+            <td class="small">@Html.Encode(p.NombreCliente)</td>
+            <td class="text-end text-nowrap small fw-semibold">$@p.Total.ToString("N2")</td>
+            <td class="text-center">
+                <span class="badge @badgeClass">@estadoLabel</span>
+            </td>
+            <td class="text-center small text-muted">@p.CantItems</td>
+        </tr>
+    }
+}

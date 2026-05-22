@@ -1,0 +1,157 @@
+@page
+@model LoginPageModel
+@{
+    ViewData["Title"] = "Ingresar";
+    var modoPublico = Model.ModoAcceso == "publico";
+}
+
+<div class="login-wrapper">
+    <div class="login-card">
+
+        @* ══ Encabezado decorativo ══ *@
+        <div class="login-header">
+            <div class="login-header-icon">
+                @if (modoPublico)
+                {
+                    <i class="bi bi-shield-lock-fill"></i>
+                }
+                else
+                {
+                    <i class="bi bi-bag-fill"></i>
+                }
+            </div>
+            <h1 class="login-title">
+                @(modoPublico ? "Acceso administrador" : "Bienvenido")
+            </h1>
+            <p class="login-subtitle">
+                @(modoPublico ? "Solo usuarios autorizados" : "Ingresá a tu cuenta para continuar")
+            </p>
+        </div>
+
+        @* ══ Cuerpo del formulario ══ *@
+        <div class="login-body">
+
+            @if (!string.IsNullOrEmpty(Model.Error))
+            {
+                <div class="login-error" role="alert">
+                    <i class="bi bi-x-circle-fill"></i>
+                    <span>@Model.Error</span>
+                </div>
+            }
+
+            <form method="post">
+                @Html.AntiForgeryToken()
+
+                @* ── Checkbox "Soy administrador" (solo modo credenciales) ── *@
+                @if (!modoPublico)
+                {
+                    <label class="login-admin-toggle">
+                        <input asp-for="EsAdministrador" type="checkbox"
+                               id="EsAdministrador"
+                               onchange="lmToggleAdmin(this.checked)" />
+                        <i class="bi bi-shield-check text-success fs-5 flex-shrink-0"></i>
+                        <span>
+                            <span class="login-admin-label">Acceder como administrador</span>
+                            <span class="login-admin-hint">Usá tu usuario y contraseña de sistema</span>
+                        </span>
+                    </label>
+                }
+                else
+                {
+                    <input type="hidden" asp-for="EsAdministrador" value="true" />
+                }
+
+                @* ── Campo usuario admin (visible en modo público o si checkbox marcado) ── *@
+                <div id="campoAdmin" class="login-field" style="@(modoPublico ? "" : "display:none")">
+                    <label class="login-label" for="lm-usuario">Usuario</label>
+                    <div class="login-input-wrap">
+                        <i class="bi bi-person-badge login-input-icon"></i>
+                        <input asp-for="NombreAdmin"
+                               class="login-input"
+                               id="lm-usuario"
+                               placeholder="Nombre de usuario"
+                               autocomplete="username" />
+                    </div>
+                </div>
+
+                @* ── Campo email cliente (oculto en modo público) ── *@
+                @if (!modoPublico)
+                {
+                    <div id="campoEmail" class="login-field">
+                        <label class="login-label" for="lm-email">Correo electrónico</label>
+                        <div class="login-input-wrap">
+                            <i class="bi bi-envelope login-input-icon"></i>
+                            <input asp-for="Datos.Email"
+                                   class="login-input"
+                                   id="lm-email"
+                                   type="email"
+                                   placeholder="tu@email.com"
+                                   autocomplete="email" />
+                        </div>
+                        <span asp-validation-for="Datos.Email" class="login-validation-msg"></span>
+                    </div>
+                }
+
+                @* ── Contraseña ── *@
+                <div class="login-field">
+                    <label class="login-label" for="lm-pass">Contraseña</label>
+                    <div class="login-input-wrap has-toggle">
+                        <i class="bi bi-lock login-input-icon"></i>
+                        <input asp-for="Datos.Password"
+                               class="login-input"
+                               id="lm-pass"
+                               type="password"
+                               placeholder="••••••••"
+                               autocomplete="current-password" />
+                        <button type="button"
+                                class="login-pass-toggle"
+                                onclick="lmTogglePass()"
+                                title="Mostrar / ocultar contraseña"
+                                aria-label="Mostrar contraseña">
+                            <i class="bi bi-eye" id="lm-pass-icon"></i>
+                        </button>
+                    </div>
+                    <span asp-validation-for="Datos.Password" class="login-validation-msg"></span>
+                </div>
+
+                @* ── Recordarme ── *@
+                <div class="login-remember">
+                    <input asp-for="Datos.RecordarMe" type="checkbox" id="lm-recordar" />
+                    <label for="lm-recordar">Mantener sesión activa</label>
+                </div>
+
+                <button type="submit" class="login-submit">
+                    <i class="bi bi-box-arrow-in-right"></i>
+                    Ingresar
+                </button>
+
+            </form>
+        </div>
+
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        function lmToggleAdmin(esAdmin) {
+            document.getElementById('campoAdmin').style.display = esAdmin ? '' : 'none';
+            document.getElementById('campoEmail').style.display = esAdmin ? 'none' : '';
+        }
+        function lmTogglePass() {
+            var input = document.getElementById('lm-pass');
+            var icon  = document.getElementById('lm-pass-icon');
+            if (input.type === 'password') {
+                input.type    = 'text';
+                icon.className = 'bi bi-eye-slash';
+            } else {
+                input.type    = 'password';
+                icon.className = 'bi bi-eye';
+            }
+        }
+        document.addEventListener('DOMContentLoaded', function () {
+            var chk = document.getElementById('EsAdministrador');
+            if (chk) lmToggleAdmin(chk.checked);
+        });
+    </script>
+}

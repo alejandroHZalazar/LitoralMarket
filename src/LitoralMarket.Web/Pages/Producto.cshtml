@@ -1,0 +1,74 @@
+@page "{id:int}"
+@model ProductoDetalleModel
+@functions {
+    static string ResolverRutaImagen(string? imagen)
+    {
+        if (string.IsNullOrWhiteSpace(imagen)) return string.Empty;
+        var img = imagen.Trim();
+        if (img.StartsWith("http://") || img.StartsWith("https://") || img.StartsWith("/"))
+            return img;
+        return $"/images/productos/{img}";
+    }
+}
+@{
+    ViewData["Title"] = Model.Producto?.Descripcion ?? "Producto";
+    var rutaImagen = Model.Producto is null ? string.Empty : ResolverRutaImagen(Model.Producto.Imagen);
+}
+
+@if (Model.Producto is null)
+{
+    <div class="alert alert-warning">Producto no encontrado.</div>
+}
+else
+{
+    <div class="row g-4">
+        <div class="col-md-5 text-center">
+            @if (!string.IsNullOrEmpty(rutaImagen))
+            {
+                <img src="@rutaImagen" class="img-fluid rounded shadow"
+                     alt="@Model.Producto.Descripcion" style="max-height:400px;object-fit:contain;" />
+            }
+            else
+            {
+                <div class="d-flex align-items-center justify-content-center bg-light rounded" style="height:300px;">
+                    <i class="bi bi-image text-muted" style="font-size:5rem;"></i>
+                </div>
+            }
+        </div>
+        <div class="col-md-7">
+            <h1 class="fs-2">@Model.Producto.Descripcion</h1>
+            @if (!string.IsNullOrEmpty(Model.Producto.RubroNombre))
+            {
+                <p class="text-muted">
+                    <a asp-page="/Catalogo" asp-route-rubroId="@Model.Producto.RubroId">@Model.Producto.RubroNombre</a>
+                </p>
+            }
+            @if (!string.IsNullOrEmpty(Model.Producto.DescripcionLarga))
+            {
+                <p>@Model.Producto.DescripcionLarga</p>
+            }
+            <h2 class="text-primary my-3">$@Model.Producto.Precio.ToString("N2")</h2>
+
+            @if (!Model.Producto.TieneStock && Model.MostrarSinStock)
+            {
+                <span class="badge bg-secondary fs-6">Agotado</span>
+            }
+            else if (Model.Producto.TieneStock)
+            {
+                <form asp-page="/Carrito" asp-page-handler="Agregar" method="post" class="d-flex align-items-center gap-2">
+                    <input type="hidden" name="productoId" value="@Model.Producto.Id" />
+                    <input type="number" name="cantidad" value="1" min="1" class="form-control" style="width:80px;" />
+                    <button type="submit" class="btn btn-primary px-4">
+                        <i class="bi bi-cart-plus me-1"></i> Agregar al carrito
+                    </button>
+                </form>
+            }
+
+            <div class="mt-3">
+                <a asp-page="/Index" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-arrow-left me-1"></i> Seguir comprando
+                </a>
+            </div>
+        </div>
+    </div>
+}

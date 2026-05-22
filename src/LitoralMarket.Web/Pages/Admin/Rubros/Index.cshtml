@@ -1,0 +1,203 @@
+@page
+@model LitoralMarket.Web.Pages.Admin.Rubros.IndexModel
+@{
+    ViewData["Title"] = "Administración de Rubros";
+}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h2 class="mb-0"><i class="bi bi-tag me-2 text-success"></i>Administración de Rubros</h2>
+    <button class="btn btn-success" onclick="abrirModalNuevo()">
+        <i class="bi bi-plus-lg me-1"></i>Nuevo rubro
+    </button>
+</div>
+
+<!-- ===== BUSCADOR ===== -->
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body py-2">
+        <input id="valorBusqueda" type="text" class="form-control form-control-sm"
+               placeholder="Filtrar por nombre..." oninput="buscar()" />
+    </div>
+</div>
+
+<!-- ===== TABLA ===== -->
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        <div style="max-height:70vh;overflow-y:auto;">
+            <table class="table table-hover table-sm mb-0 align-middle">
+                <thead class="table-dark sticky-top">
+                    <tr>
+                        <th>Descripción</th>
+                        <th class="text-center" style="width:120px">Productos activos</th>
+                        <th class="text-end" style="width:110px">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyRubros">
+                    <tr><td colspan="3" class="text-center text-muted py-4">
+                        <i class="bi bi-hourglass me-1"></i>Cargando...
+                    </td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- =========================================================
+     MODAL ABM
+     ========================================================= -->
+<div class="modal fade" id="rubroModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:420px">
+        <div class="modal-content">
+            <div class="modal-header border-bottom">
+                <h5 class="modal-title fw-bold" id="modalTitulo">
+                    <i class="bi bi-tag me-2 text-success"></i>Rubro
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="alertaModal" class="alert alert-danger d-none py-2 small"></div>
+                <div class="mb-2">
+                    <label class="form-label form-label-sm fw-semibold">Descripción *</label>
+                    <input id="inpDescripcion" type="text" class="form-control"
+                           placeholder="Nombre del rubro" maxlength="200" />
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success" id="btnGuardar">
+                    <i class="bi bi-check-lg me-1"></i>Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- =========================================================
+     MODAL CONFIRMAR ELIMINACIÓN
+     ========================================================= -->
+<div class="modal fade" id="modalConfirmarElim" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-0 bg-danger text-white">
+                <h6 class="modal-title"><i class="bi bi-exclamation-triangle me-2"></i>Confirmar eliminación</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>¿Eliminar el rubro <strong id="nomRubroBaja"></strong>?</p>
+                <p class="text-muted small mb-0">Esta acción es permanente y no se puede deshacer.</p>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger" id="btnEjecutarElim">
+                    <i class="bi bi-trash me-1"></i>Eliminar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+@Html.AntiForgeryToken()
+<style>
+    .fila-rubro:hover { cursor: pointer; }
+    .fila-rubro.seleccionado { background: rgba(29,176,98,0.1); }
+</style>
+<script>
+let _idActual   = 0;
+let _idEliminar = 0;
+const TOKEN = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+
+// ── Búsqueda ──────────────────────────────────────────────────────
+let _timer;
+function buscar() {
+    clearTimeout(_timer);
+    _timer = setTimeout(async () => {
+        const valor = document.getElementById('valorBusqueda').value;
+        const res   = await fetch(`?handler=Buscar&valor=${encodeURIComponent(valor)}`);
+        document.getElementById('tbodyRubros').innerHTML = await res.text();
+    }, 300);
+}
+
+// ── Modal Nuevo ───────────────────────────────────────────────────
+function abrirModalNuevo() {
+    _idActual = 0;
+    document.getElementById('inpDescripcion').value = '';
+    document.getElementById('alertaModal').classList.add('d-none');
+    document.getElementById('modalTitulo').innerHTML =
+        '<i class="bi bi-plus-circle me-2 text-success"></i>Nuevo rubro';
+    new bootstrap.Modal(document.getElementById('rubroModal')).show();
+    setTimeout(() => document.getElementById('inpDescripcion').focus(), 300);
+}
+
+// ── Modal Editar ──────────────────────────────────────────────────
+function abrirModalEditar(id, descripcion) {
+    _idActual = id;
+    document.getElementById('inpDescripcion').value = descripcion;
+    document.getElementById('alertaModal').classList.add('d-none');
+    document.getElementById('modalTitulo').innerHTML =
+        `<i class="bi bi-pencil me-2 text-success"></i>Editar: ${descripcion}`;
+    new bootstrap.Modal(document.getElementById('rubroModal')).show();
+    setTimeout(() => document.getElementById('inpDescripcion').focus(), 300);
+}
+
+// ── Guardar ───────────────────────────────────────────────────────
+document.getElementById('btnGuardar').addEventListener('click', async () => {
+    const desc = document.getElementById('inpDescripcion').value.trim();
+    const alerta = document.getElementById('alertaModal');
+
+    if (!desc) {
+        alerta.textContent = 'La descripción es obligatoria.';
+        alerta.classList.remove('d-none');
+        return;
+    }
+    alerta.classList.add('d-none');
+
+    const fd = new FormData();
+    fd.append('Rubro.Id',          _idActual);
+    fd.append('Rubro.Descripcion', desc);
+    fd.append('__RequestVerificationToken', TOKEN);
+
+    const res  = await fetch('?handler=Guardar', { method: 'POST', body: fd });
+    const data = await res.json();
+
+    if (data.ok) {
+        bootstrap.Modal.getInstance(document.getElementById('rubroModal')).hide();
+        buscar();
+    } else {
+        alerta.textContent = data.error ?? 'Error al guardar.';
+        alerta.classList.remove('d-none');
+    }
+});
+
+// Guardar con Enter
+document.getElementById('inpDescripcion').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('btnGuardar').click();
+});
+
+// ── Eliminar ──────────────────────────────────────────────────────
+function confirmarEliminar(id, nombre, cant) {
+    if (cant > 0) return; // el botón ya está disabled, doble seguridad
+    _idEliminar = id;
+    document.getElementById('nomRubroBaja').textContent = nombre;
+    new bootstrap.Modal(document.getElementById('modalConfirmarElim')).show();
+}
+document.getElementById('btnEjecutarElim').addEventListener('click', async () => {
+    const fd = new FormData();
+    fd.append('id', _idEliminar);
+    fd.append('__RequestVerificationToken', TOKEN);
+
+    const res  = await fetch('?handler=Eliminar', { method: 'POST', body: fd });
+    const data = await res.json();
+
+    bootstrap.Modal.getInstance(document.getElementById('modalConfirmarElim')).hide();
+
+    if (data.ok) {
+        buscar();
+    } else {
+        alert(data.error ?? 'No se pudo eliminar el rubro.');
+    }
+});
+
+// Cargar al abrir
+buscar();
+</script>
+}

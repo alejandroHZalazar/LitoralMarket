@@ -1,0 +1,96 @@
+@using LitoralMarket.Application.DTOs
+@using System.Globalization
+@model ProductoDto
+@functions {
+    static string ResolverRutaImagen(string? imagen)
+    {
+        if (string.IsNullOrWhiteSpace(imagen)) return string.Empty;
+        var img = imagen.Trim();
+        // URL absoluta o ruta absoluta del sitio → usar tal cual
+        if (img.StartsWith("http://") || img.StartsWith("https://") || img.StartsWith("/"))
+            return img;
+        // Solo nombre de archivo → anteponer carpeta por defecto
+        return $"/images/productos/{img}";
+    }
+}
+@{
+    var tieneStock   = Model.Stock > 0;
+    var mostrarAgotado = ViewData["MostrarSinStock"] as bool? ?? false;
+    var step         = Model.Fraccionado ? "0.01" : "1";
+    var stockMaximo  = Model.Stock > 0 ? Model.Stock.ToString("G", CultureInfo.InvariantCulture) : "0";
+    var rutaImagen   = ResolverRutaImagen(Model.Imagen);
+}
+<div class="card h-100 producto-card">
+    <a asp-page="/Producto" asp-route-id="@Model.Id" class="producto-card-img-link">
+        @if (!string.IsNullOrEmpty(rutaImagen))
+        {
+            <img src="@rutaImagen"
+                 class="card-img-top producto-img"
+                 alt="@Model.Descripcion"
+                 loading="lazy"
+                 onerror="this.onerror=null;this.parentElement.innerHTML='<div class=&quot;producto-img-placeholder&quot;><i class=&quot;bi bi-image&quot;></i></div>';" />
+        }
+        else
+        {
+            <div class="producto-img-placeholder">
+                <i class="bi bi-image"></i>
+            </div>
+        }
+    </a>
+
+    @if (Model.EsPromocion)
+    {
+        <span class="badge badge-promo">PROMO</span>
+    }
+
+    <div class="card-body d-flex flex-column gap-2 p-3">
+        <h6 class="card-title mb-0">
+            <a asp-page="/Producto" asp-route-id="@Model.Id"
+               class="text-decoration-none stretched-link-title">
+                @Model.Descripcion
+            </a>
+        </h6>
+
+        <div class="producto-precio">$@Model.Precio.ToString("N2")</div>
+
+        @if (!tieneStock && mostrarAgotado)
+        {
+            <div class="mt-auto">
+                <span class="badge-agotado">
+                    <i class="bi bi-x-circle me-1"></i>Agotado
+                </span>
+            </div>
+        }
+        else if (tieneStock)
+        {
+            <div class="mt-auto">
+                <form class="producto-agregar-form" data-agregar-form
+                      data-producto-id="@Model.Id"
+                      data-nombre="@Model.Descripcion">
+                    @Html.AntiForgeryToken()
+
+                    <div class="cantidad-control">
+                        <button type="button" class="btn-cantidad btn-menos" aria-label="Reducir cantidad">
+                            <i class="bi bi-dash"></i>
+                        </button>
+                        <input type="number"
+                               name="cantidad"
+                               value="@(Model.Fraccionado ? "0.50" : "1")"
+                               min="@step"
+                               max="@stockMaximo"
+                               step="@step"
+                               class="cantidad-input"
+                               aria-label="Cantidad" />
+                        <button type="button" class="btn-cantidad btn-mas" aria-label="Aumentar cantidad">
+                            <i class="bi bi-plus"></i>
+                        </button>
+                    </div>
+
+                    <button type="submit" class="btn-agregar w-100">
+                        <i class="bi bi-cart-plus me-1"></i>Agregar
+                    </button>
+                </form>
+            </div>
+        }
+    </div>
+</div>
