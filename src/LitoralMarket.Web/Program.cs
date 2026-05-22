@@ -5,11 +5,25 @@ using LitoralMarket.Infrastructure.Services;
 
 using LitoralMarket.Web.Middleware;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// ── Detrás de un reverse proxy (Railway, Heroku, etc.) ─────────────────
+// Railway termina SSL en el edge y reenvía HTTP al contenedor.
+// Sin esto, Request.IsHttps == false y UseHttpsRedirection() entra en loop.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor
+                             | ForwardedHeaders.XForwardedProto
+                             | ForwardedHeaders.XForwardedHost;
+    // Aceptar headers desde cualquier proxy (Railway no expone una IP fija)
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 // EF Core + MySQL
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -29,7 +43,10 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.SlidingExpiration = true;
         options.Cookie.HttpOnly = true;
         options.Cookie.SameSite = SameSiteMode.Strict;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+        // SameAsRequest: en HTTPS marca Secure, en HTTP no. Esto evita que en
+        // Railway (que reenvía HTTP al contenedor) las cookies queden bloqueadas.
+        // Con ForwardedHeaders activo, Request.IsHttps refleja correctamente el TLS del edge.
+        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
         options.Cookie.Name = "litoral_auth";
     });
 
@@ -101,13 +118,22 @@ builder.Services.AddHttpContextAccessor();
 
 var app = builder.Build();
 
+// CRÍTICO: ForwardedHeaders debe ir ANTES que cualquier middleware que mire
+// Request.IsHttps o Request.Scheme (auth cookies, HttpsRedirection, etc.)
+app.UseForwardedHeaders();
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
     app.UseHsts();
 }
 
-app.UseHttpsRedirection();
+// En Railway el TLS lo termina el proxy; no redirigimos HTTPS adentro del contenedor.
+// En desarrollo local sí queremos forzar HTTPS.
+if (app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 // Archivos estáticos del wwwroot (CSS, JS, imágenes propias)
 app.UseStaticFiles();

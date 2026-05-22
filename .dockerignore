@@ -1,0 +1,40 @@
+# Build outputs — siempre se regeneran adentro del contenedor
+**/bin/
+**/obj/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# Rider / VSCode
+.idea/
+.vscode/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Config local — NUNCA copiar al imagen, las credenciales van por env vars
+**/appsettings.Development.json
+.env
+.env.*
+
+# Claude
+.claude/
+
+# Scripts locales / SQL no necesarios en runtime
+scripts/
+sql/
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# Dockerfile en sí
+Dockerfile
+.dockerignore
+
+# Logs
+*.log
