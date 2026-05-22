@@ -325,46 +325,128 @@ public class EmailService : IEmailService
         message.Subject = asunto;
         message.Body    = builder.ToMessageBody();
 
-        using var smtp = new SmtpClient();
+        // Timeout de operaciones SMTP (read/write socket). Default de MailKit es 100s.
+        // Lo bajamos para fallar rápido en caso de bloqueos de red (Railway, etc.).
+        using var smtp = new SmtpClient { Timeout = 30_000 };
+
+        // Timeouts cortos por fase, vía CancellationToken — permiten distinguir
+        // "Railway bloquea SMTP" (timeout en CONNECT, ~15 s) de "credenciales mal"
+        // (rechazo rápido en AUTH).
+        var fase = "init";
         try
         {
-            await smtp.ConnectAsync(host, port, socketOptions);
+            // ── FASE 1: CONNECT ────────────────────────────────────────────
+            fase = "connect";
+            _logger.LogInformation(
+                "EmailService: fase=CONNECT host={Host}:{Port} tls={Tls}",
+                host, port, socketOptions);
 
+            using (var ctsConnect = new CancellationTokenSource(TimeSpan.FromSeconds(15)))
+            {
+                await smtp.ConnectAsync(host, port, socketOptions, ctsConnect.Token);
+            }
+            _logger.LogInformation("EmailService: fase=CONNECT OK");
+
+            // ── FASE 2: AUTHENTICATE ──────────────────────────────────────
             if (!string.IsNullOrWhiteSpace(usuario) && !string.IsNullOrWhiteSpace(password))
-                await smtp.AuthenticateAsync(usuario, password);
+            {
+                fase = "authenticate";
+                _logger.LogInformation("EmailService: fase=AUTH usuario={Usuario}", usuario);
 
-            await smtp.SendAsync(message);
+                using var ctsAuth = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                await smtp.AuthenticateAsync(usuario, password, ctsAuth.Token);
+
+                _logger.LogInformation("EmailService: fase=AUTH OK");
+            }
+
+            // ── FASE 3: SEND ──────────────────────────────────────────────
+            fase = "send";
+            _logger.LogInformation("EmailService: fase=SEND → {Destino}", emailDestino);
+
+            using (var ctsSend = new CancellationTokenSource(TimeSpan.FromSeconds(30)))
+            {
+                await smtp.SendAsync(message, ctsSend.Token);
+            }
+
+            // ── FASE 4: DISCONNECT ─────────────────────────────────────────
+            fase = "disconnect";
             await smtp.DisconnectAsync(true);
 
             _logger.LogInformation(
                 "EmailService: ✓ enviado — '{Asunto}' → {Destino}", asunto, emailDestino);
             return true;
         }
+        catch (OperationCanceledException)
+        {
+            // Timeout específico por fase — el más revelador es CONNECT
+            if (fase == "connect")
+            {
+                _logger.LogError(
+                    "EmailService: TIMEOUT en fase=CONNECT host={Host}:{Port}. " +
+                    "Causa MÁS PROBABLE: tu hosting (Railway/Render/Fly) bloquea SMTP outbound. " +
+                    "Soluciones: (1) cambiar a Resend/SendGrid/Mailgun (HTTPS, no SMTP) — recomendado; " +
+                    "(2) probar puerto 465 con SMTP_SSL=1; " +
+                    "(3) validar localmente con `telnet {Host} {Port}`.",
+                    host, port, host, port);
+            }
+            else
+            {
+                _logger.LogError(
+                    "EmailService: TIMEOUT en fase={Fase} host={Host}:{Port}", fase, host, port);
+            }
+            try { await smtp.DisconnectAsync(false); } catch { }
+            return false;
+        }
+        catch (MailKit.Security.AuthenticationException ex)
+        {
+            // 535 / 534 → credenciales inválidas o seguridad de Gmail bloqueando
+            _logger.LogError(
+                "EmailService: AUTH FALLÓ en fase={Fase} usuario={Usuario} — {Msg}. " +
+                "Si es Gmail: tiene que ser App Password (16 chars, 2FA activado), NO la contraseña normal. " +
+                "Si es Office365: la cuenta debe permitir SMTP AUTH (a veces desactivado por política org).",
+                fase, usuario, ex.Message);
+            try { await smtp.DisconnectAsync(false); } catch { }
+            return false;
+        }
         catch (MailKit.Net.Smtp.SmtpCommandException ex)
         {
             // Error de protocolo SMTP: el servidor rechazó el comando
             // StatusCode y Response dan la causa exacta (ej: 535 = auth failed, 550 = relay denied)
             _logger.LogError(
-                "EmailService: SMTP rechazó el comando — " +
-                "host={Host}:{Port} tls={Tls} errorCode={Code} statusCode={Status} — {SmtpMsg} — asunto='{Asunto}'",
-                host, port, socketOptions, (int)ex.StatusCode, ex.StatusCode, ex.Message, asunto);
+                "EmailService: SMTP rechazó comando en fase={Fase} — " +
+                "host={Host}:{Port} errorCode={Code} statusCode={Status} — {SmtpMsg} — asunto='{Asunto}'",
+                fase, host, port, (int)ex.StatusCode, ex.StatusCode, ex.Message, asunto);
+            try { await smtp.DisconnectAsync(false); } catch { }
             return false;
         }
         catch (MailKit.Net.Smtp.SmtpProtocolException ex)
         {
-            // Error de protocolo TLS/negociación
             _logger.LogError(
-                "EmailService: error de protocolo SMTP/TLS — " +
-                "host={Host}:{Port} tls={Tls} — {Msg} — asunto='{Asunto}'",
-                host, port, socketOptions, ex.Message, asunto);
+                "EmailService: error de protocolo SMTP/TLS en fase={Fase} — " +
+                "host={Host}:{Port} — {Msg}",
+                fase, host, port, ex.Message);
+            try { await smtp.DisconnectAsync(false); } catch { }
+            return false;
+        }
+        catch (System.Net.Sockets.SocketException ex)
+        {
+            // Errores de socket: red caída, DNS, conexión rechazada
+            _logger.LogError(
+                "EmailService: error de SOCKET en fase={Fase} host={Host}:{Port} — " +
+                "errorCode={Code} ({Name}) — {Msg}. " +
+                "Si SocketErrorCode=ConnectionRefused o NetworkUnreachable, " +
+                "tu hosting bloquea el puerto SMTP.",
+                fase, host, port, ex.ErrorCode, ex.SocketErrorCode, ex.Message);
+            try { await smtp.DisconnectAsync(false); } catch { }
             return false;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex,
-                "EmailService: excepción inesperada — " +
-                "host={Host}:{Port} tls={Tls} tipo={Tipo} — asunto='{Asunto}' → {Destino}",
-                host, port, socketOptions, ex.GetType().Name, asunto, emailDestino);
+                "EmailService: excepción inesperada en fase={Fase} — " +
+                "host={Host}:{Port} tipo={Tipo} — asunto='{Asunto}' → {Destino}",
+                fase, host, port, ex.GetType().Name, asunto, emailDestino);
+            try { await smtp.DisconnectAsync(false); } catch { }
             return false;
         }
     }
