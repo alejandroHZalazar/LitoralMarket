@@ -93,6 +93,9 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
 
+            @* El form abarca solo el modal-body. El footer queda como hijo directo de
+               modal-content para que modal-dialog-scrollable lo ancle al borde inferior.
+               El botón Guardar usa form="formProducto" para asociarse al form externo. *@
             <form method="post" asp-page-handler="Guardar" enctype="multipart/form-data" id="formProducto">
                 @Html.AntiForgeryToken()
                 <input type="hidden" asp-for="Producto.Id" id="prodId" />
@@ -268,13 +271,16 @@
                     </div>
                 </div>
 
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-success">
-                        <i class="bi bi-check-lg me-1"></i>Guardar
-                    </button>
-                </div>
             </form>
+            @* Footer FUERA del form — hijo directo de modal-content.
+               Bootstrap modal-dialog-scrollable lo ancla al borde inferior sin que
+               overflow:hidden lo clipee. form="formProducto" asocia el submit al form. *@
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" form="formProducto" class="btn btn-success">
+                    <i class="bi bi-check-lg me-1"></i>Guardar
+                </button>
+            </div>
         </div>
     </div>
 </div>
