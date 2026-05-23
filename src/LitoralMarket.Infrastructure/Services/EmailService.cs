@@ -1,3 +1,7 @@
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using LitoralMarket.Application.Interfaces;
 using LitoralMarket.Infrastructure.Data;
 using MailKit.Net.Smtp;
@@ -6,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MimeKit;
+using MimeKit.IO;
 using MimeKit.Text;
 
 namespace LitoralMarket.Infrastructure.Services;
@@ -45,9 +50,19 @@ public class EmailService : IEmailService
         _config = config;
     }
 
-    // Env var tiene prioridad sobre valor de BD (permite override en Railway sin tocar la BD)
+    // Env var tiene prioridad sobre valor de BD (permite override en Railway sin tocar la BD).
+    // Lee desde IConfiguration y, si falla, directo del SO. Esto evita problemas si por
+    // algún motivo IConfiguration en producción no está leyendo las env vars correctamente.
     private string? EnvOrParam(string envKey, string? dbValue)
-        => _config[envKey] is { Length: > 0 } v ? v : dbValue;
+    {
+        var fromCfg = _config[envKey];
+        if (!string.IsNullOrWhiteSpace(fromCfg)) return fromCfg;
+
+        var fromEnv = Environment.GetEnvironmentVariable(envKey);
+        if (!string.IsNullOrWhiteSpace(fromEnv)) return fromEnv;
+
+        return dbValue;
+    }
 
     // ──────────────────────────────────────────────────────────────
     // Confirmación de pedido (pago contra reembolso o MP aprobado)
@@ -259,44 +274,107 @@ public class EmailService : IEmailService
     }
 
     // ──────────────────────────────────────────────────────────────
-    // Envío SMTP real con MailKit
+    // Envío de email — elige proveedor automáticamente:
     //
-    // Variables de entorno Railway (sobreescriben BD):
-    //   SMTP_HOST        → host del servidor SMTP
-    //   SMTP_PORT        → puerto (587 STARTTLS / 465 SSL)
-    //   SMTP_SSL         → "1" para SSL directo en 465; "0" o ausente para STARTTLS en 587
-    //   SMTP_USERNAME    → cuenta de autenticación SMTP
-    //   SMTP_PASSWORD    → contraseña o App Password
-    //   SMTP_FROM        → dirección remitente (From)
+    //   Si está definida RESEND_API_KEY → usa Resend HTTP API (recomendado en
+    //   Railway/Render/Fly que bloquean SMTP outbound).
+    //
+    //   Si no → cae al envío SMTP clásico vía MailKit (puede fallar con
+    //   TimeoutException en hostings que bloqueen puertos 25/465/587).
+    //
+    // Variables de entorno (sobreescriben tabla parametros):
+    //   RESEND_API_KEY   → si está, usa Resend (HTTPS); ignora todo lo SMTP
+    //   SMTP_FROM        → dirección remitente (obligatorio en ambos proveedores)
     //   SMTP_FROM_NAME   → nombre visible del remitente
+    //   SMTP_HOST/PORT/SSL/USERNAME/PASSWORD → solo para fallback SMTP
     //
     // Office365 → SMTP_HOST=smtp.office365.com  SMTP_PORT=587  SMTP_SSL=0
-    // Gmail     → SMTP_HOST=smtp.gmail.com       SMTP_PORT=587  SMTP_SSL=0  (App Password requerido)
+    // Gmail     → SMTP_HOST=smtp.gmail.com       SMTP_PORT=587  SMTP_SSL=0  (App Password)
     // Gmail SSL → SMTP_HOST=smtp.gmail.com       SMTP_PORT=465  SMTP_SSL=1
+    // Resend    → RESEND_API_KEY=re_xxx  SMTP_FROM=tu@dominio-verificado.com
     // ──────────────────────────────────────────────────────────────
     private async Task<bool> EnviarAsync(string emailDestino, string asunto, BodyBuilder builder)
     {
-        // ── Leer configuración: env var tiene prioridad sobre BD ──────────
+        // ── 0. DIAGNÓSTICO de configuración al inicio (visible en Railway Logs) ──
+        // Leemos las env vars desde DOS fuentes para detectar problemas de IConfiguration:
+        //   • _config[]  → ASP.NET IConfiguration (debería incluir env vars por default)
+        //   • Environment.GetEnvironmentVariable() → lectura directa del SO (sin transformaciones)
+        // Si ambos son null/empty, la env var realmente no está seteada en Railway.
+        // Si _config[] es null pero Environment.GetEnvironmentVariable() no, es un bug de config.
+        var resendKeyCfg = _config["RESEND_API_KEY"];
+        var resendKeyEnv = Environment.GetEnvironmentVariable("RESEND_API_KEY");
+        var resendKey    = !string.IsNullOrWhiteSpace(resendKeyCfg) ? resendKeyCfg : resendKeyEnv;
+
+        var smtpHostCfg = _config["SMTP_HOST"];
+        var smtpHostEnv = Environment.GetEnvironmentVariable("SMTP_HOST");
+
+        _logger.LogInformation(
+            "EmailService: provider check → " +
+            "RESEND_API_KEY: cfg={CfgLen} env={EnvLen} | " +
+            "SMTP_HOST: cfg='{SmtpCfg}' env='{SmtpEnv}'",
+            resendKeyCfg?.Length.ToString() ?? "null",
+            resendKeyEnv?.Length.ToString() ?? "null",
+            smtpHostCfg ?? "(null)",
+            smtpHostEnv ?? "(null)");
+
+        // ── 1. From/From-Name: necesarios para AMBOS proveedores ──────────
+        var remitenteCfg    = _config["SMTP_FROM"];
+        var remitenteEnv    = Environment.GetEnvironmentVariable("SMTP_FROM");
+        var remitenteFromDb = await _params.GetValorAsync("mail", "remitente");
+        var remitente       = !string.IsNullOrWhiteSpace(remitenteCfg) ? remitenteCfg
+                            : !string.IsNullOrWhiteSpace(remitenteEnv) ? remitenteEnv
+                            : remitenteFromDb;
+
+        var nombreCfg       = _config["SMTP_FROM_NAME"];
+        var nombreEnv       = Environment.GetEnvironmentVariable("SMTP_FROM_NAME");
+        var nombreFromDb    = await _params.GetValorAsync("mail", "nombreRemitente");
+        var nombreRemitente = !string.IsNullOrWhiteSpace(nombreCfg) ? nombreCfg
+                            : !string.IsNullOrWhiteSpace(nombreEnv) ? nombreEnv
+                            : nombreFromDb
+                            ?? "LitoralMarket";
+
+        if (string.IsNullOrWhiteSpace(remitente))
+        {
+            _logger.LogWarning(
+                "EmailService: falta SMTP_FROM (dirección remitente). " +
+                "Configurala como env var en Railway o en parametros (mail/remitente). " +
+                "Asunto: {Asunto} → {Destino}",
+                asunto, emailDestino);
+            return false;
+        }
+
+        // ── 2. PROVIDER PRIORITY: Resend HTTP > SMTP ──────────────────────
+        if (!string.IsNullOrWhiteSpace(resendKey))
+        {
+            _logger.LogInformation(
+                "EmailService: → USANDO RESEND (HTTP API) from='{From}' to='{To}'",
+                remitente, emailDestino);
+            return await EnviarPorResendAsync(
+                emailDestino, asunto, builder, resendKey, remitente, nombreRemitente);
+        }
+
+        _logger.LogWarning(
+            "EmailService: ⚠️ RESEND_API_KEY no detectada (ni en IConfiguration ni en env directa). " +
+            "Cayendo a SMTP — esto va a fallar en Railway porque bloquea SMTP outbound. " +
+            "Verificá en Railway → Variables que RESEND_API_KEY esté definida " +
+            "Y que hiciste Redeploy DESPUÉS de agregarla.");
+
+        // ── Fallback: SMTP clásico ────────────────────────────────────────
         var host            = EnvOrParam("SMTP_HOST",      await _params.GetValorAsync("mail", "host"));
         var portStr         = EnvOrParam("SMTP_PORT",      await _params.GetValorAsync("mail", "port"));
         var sslStr          = EnvOrParam("SMTP_SSL",       await _params.GetValorAsync("mail", "ssl"));
         var usuario         = EnvOrParam("SMTP_USERNAME",  await _params.GetValorAsync("mail", "usuario"));
         var password        = EnvOrParam("SMTP_PASSWORD",  await _params.GetValorAsync("mail", "password"));
-        var remitente       = EnvOrParam("SMTP_FROM",      await _params.GetValorAsync("mail", "remitente"));
-        var nombreRemitente = EnvOrParam("SMTP_FROM_NAME", await _params.GetValorAsync("mail", "nombreRemitente"))
-                              ?? "LitoralMarket";
 
-        // Fuente real de cada parámetro (para el log de diagnóstico)
         bool viaEnv = _config["SMTP_HOST"] is { Length: > 0 };
 
-        if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(remitente))
+        if (string.IsNullOrWhiteSpace(host))
         {
             _logger.LogWarning(
-                "EmailService: SMTP no configurado — host='{Host}' remitente='{Remitente}'. " +
-                "Configurá las variables de entorno SMTP_HOST y SMTP_FROM en Railway, " +
-                "o los parámetros mail/host y mail/remitente en la tabla parametros. " +
+                "EmailService: SMTP no configurado y RESEND_API_KEY ausente. " +
+                "Para Railway: agregá RESEND_API_KEY (recomendado) o SMTP_HOST. " +
                 "Asunto: {Asunto} → {Destino}",
-                host ?? "(vacío)", remitente ?? "(vacío)", asunto, emailDestino);
+                asunto, emailDestino);
             return false;
         }
 
@@ -449,6 +527,175 @@ public class EmailService : IEmailService
             try { await smtp.DisconnectAsync(false); } catch { }
             return false;
         }
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // Envío vía Resend HTTP API
+    //
+    // Endpoint: POST https://api.resend.com/emails
+    // Auth: Authorization: Bearer {RESEND_API_KEY}
+    //
+    // Ventaja sobre SMTP: usa HTTPS (puerto 443) → no se ve afectado por
+    // bloqueos de SMTP outbound en Railway/Render/Fly/Heroku.
+    //
+    // Requisitos:
+    //   • RESEND_API_KEY env var (obtenida en https://resend.com/api-keys)
+    //   • SMTP_FROM debe estar verificado en Resend:
+    //       - dominio propio verificado (DNS DKIM/SPF) → cualquier @tu-dominio.com
+    //       - sin dominio verificado → solo onboarding@resend.dev y solo enviás
+    //         al email registrado en tu cuenta Resend (modo test)
+    // ──────────────────────────────────────────────────────────────
+    private async Task<bool> EnviarPorResendAsync(
+        string emailDestino,
+        string asunto,
+        BodyBuilder builder,
+        string resendKey,
+        string remitente,
+        string nombreRemitente)
+    {
+        _logger.LogInformation(
+            "EmailService: [RESEND] enviando vía HTTP API — '{Asunto}' → {Destino} (from={From})",
+            asunto, emailDestino, remitente);
+
+        try
+        {
+            // ── Construir lista de attachments + linked resources (inline) ──
+            var attachments = new List<object>();
+
+            foreach (var resource in builder.LinkedResources)
+            {
+                var item = await ConvertirMimeEntityParaResendAsync(resource, esInline: true);
+                if (item is not null) attachments.Add(item);
+            }
+            foreach (var attach in builder.Attachments)
+            {
+                var item = await ConvertirMimeEntityParaResendAsync(attach, esInline: false);
+                if (item is not null) attachments.Add(item);
+            }
+
+            // ── Formato From: "Nombre <email@dominio>" si hay nombre ──
+            var fromHeader = !string.IsNullOrWhiteSpace(nombreRemitente)
+                ? $"{nombreRemitente} <{remitente}>"
+                : remitente;
+
+            // ── Payload Resend ──
+            var payload = new ResendPayload
+            {
+                From        = fromHeader,
+                To          = new[] { emailDestino },
+                Subject     = asunto,
+                Html        = builder.HtmlBody ?? string.Empty,
+                Attachments = attachments.Count > 0 ? attachments : null
+            };
+
+            var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions
+            {
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+                PropertyNamingPolicy   = JsonNamingPolicy.SnakeCaseLower
+            });
+
+            // ── POST con timeout controlado de 30 s ──
+            var http = _http.CreateClient();
+            http.Timeout = TimeSpan.FromSeconds(30);
+            http.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue("Bearer", resendKey);
+
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            using var cts     = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+
+            HttpResponseMessage resp;
+            try
+            {
+                resp = await http.PostAsync("https://api.resend.com/emails", content, cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogError(
+                    "EmailService: [RESEND] TIMEOUT al POST a api.resend.com — " +
+                    "verificá conectividad HTTPS desde Railway y validez de RESEND_API_KEY");
+                return false;
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError(ex,
+                    "EmailService: [RESEND] error de red al POST — {Msg}", ex.Message);
+                return false;
+            }
+
+            var respBody = await resp.Content.ReadAsStringAsync();
+
+            if (!resp.IsSuccessStatusCode)
+            {
+                // Códigos comunes: 401 (API key inválida), 403 (dominio no verificado),
+                // 422 (payload inválido), 429 (rate limit)
+                _logger.LogError(
+                    "EmailService: [RESEND] HTTP {Code} — body={Body} — asunto='{Asunto}' → {Destino}. " +
+                    "401=API key inválida; 403=remitente no verificado en Resend; " +
+                    "422=payload inválido; 429=rate limit.",
+                    (int)resp.StatusCode, respBody, asunto, emailDestino);
+                return false;
+            }
+
+            _logger.LogInformation(
+                "EmailService: [RESEND] ✓ enviado — '{Asunto}' → {Destino} — resp={Body}",
+                asunto, emailDestino, respBody);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "EmailService: [RESEND] excepción inesperada {Tipo} — '{Asunto}' → {Destino}",
+                ex.GetType().Name, asunto, emailDestino);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Convierte un MimeEntity (attachment o linked resource) al formato JSON
+    /// que espera la API de Resend: { filename, content (base64), content_id?, content_type }
+    /// </summary>
+    private static async Task<object?> ConvertirMimeEntityParaResendAsync(
+        MimeEntity entity, bool esInline)
+    {
+        if (entity is not MimePart part || part.Content is null) return null;
+
+        // Decodificar el contenido a bytes raw (sin codificación MIME)
+        using var ms = new MemoryStream();
+        await part.Content.DecodeToAsync(ms);
+        var bytes = ms.ToArray();
+        if (bytes.Length == 0) return null;
+
+        var b64 = Convert.ToBase64String(bytes);
+
+        if (esInline)
+        {
+            // ContentId puede venir entre <>, Resend lo quiere sin
+            var cid = part.ContentId?.Trim('<', '>') ?? string.Empty;
+            return new
+            {
+                filename     = part.FileName ?? "inline",
+                content      = b64,
+                content_id   = cid,
+                content_type = part.ContentType.MimeType
+            };
+        }
+
+        return new
+        {
+            filename     = part.FileName ?? "attachment",
+            content      = b64,
+            content_type = part.ContentType.MimeType
+        };
+    }
+
+    /// <summary>DTO interno para serializar el payload a Resend con snake_case.</summary>
+    private sealed class ResendPayload
+    {
+        public string From    { get; set; } = string.Empty;
+        public string[] To    { get; set; } = Array.Empty<string>();
+        public string Subject { get; set; } = string.Empty;
+        public string Html    { get; set; } = string.Empty;
+        public List<object>? Attachments { get; set; }
     }
 
     // ──────────────────────────────────────────────────────────────
