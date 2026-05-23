@@ -2,18 +2,28 @@ using LitoralMarket.Application.DTOs;
 using LitoralMarket.Application.Interfaces;
 using LitoralMarket.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace LitoralMarket.Infrastructure.Services;
 
 public class PedidoAdminService : IPedidoAdminService
 {
-    private readonly AppDbContext  _db;
-    private readonly IPedidoService _pedidoSvc;
+    private readonly AppDbContext               _db;
+    private readonly IPedidoService             _pedidoSvc;
+    private readonly IServiceScopeFactory       _scopeFactory;
+    private readonly ILogger<PedidoAdminService> _logger;
 
-    public PedidoAdminService(AppDbContext db, IPedidoService pedidoSvc)
+    public PedidoAdminService(
+        AppDbContext                db,
+        IPedidoService              pedidoSvc,
+        IServiceScopeFactory        scopeFactory,
+        ILogger<PedidoAdminService> logger)
     {
-        _db        = db;
-        _pedidoSvc = pedidoSvc;
+        _db           = db;
+        _pedidoSvc    = pedidoSvc;
+        _scopeFactory = scopeFactory;
+        _logger       = logger;
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -123,7 +133,55 @@ public class PedidoAdminService : IPedidoAdminService
 
     // ──────────────────────────────────────────────────────────────
     // Confirmación manual — reutiliza el mismo flujo que MercadoPago
+    // y dispara notificaciones por email igual que el webhook automático.
+    //
+    // ConfirmarPagoAsync() solo actualiza estado + descuenta stock; NO manda
+    // emails. Acá los disparamos fire-and-forget con scope propio para que
+    // el HTTP del admin no quede bloqueado esperando la respuesta de Resend.
     // ──────────────────────────────────────────────────────────────
-    public async Task ConfirmarManualAsync(int id) =>
+    public async Task ConfirmarManualAsync(int id)
+    {
+        _logger.LogInformation(
+            "ConfirmarManualAsync: iniciando confirmación manual de pedido #{Id}", id);
+
         await _pedidoSvc.ConfirmarPagoAsync(id);
+
+        _logger.LogInformation(
+            "ConfirmarManualAsync: pedido #{Id} confirmado en BD. Disparando emails en background...", id);
+
+        // Fire-and-forget de ambos emails (comprador + admin) con scope nuevo
+        // para evitar ObjectDisposedException si el request finaliza antes.
+        DispararEmailFireAndForget(id, "confirmacion-comprador",
+            (email, pid) => email.EnviarConfirmacionPedidoAsync(pid));
+
+        DispararEmailFireAndForget(id, "notificacion-admin",
+            (email, pid) => email.EnviarNotificacionAdminAsync(pid));
+    }
+
+    private void DispararEmailFireAndForget(
+        int pedidoId, string descripcion, Func<IEmailService, int, Task> accion)
+    {
+        var pid = pedidoId;
+        _ = Task.Run(async () =>
+        {
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var email = scope.ServiceProvider.GetRequiredService<IEmailService>();
+            try
+            {
+                _logger.LogInformation(
+                    "ConfirmarManual/{Desc}: invocando IEmailService para pedido #{Id}",
+                    descripcion, pid);
+                await accion(email, pid);
+                _logger.LogInformation(
+                    "ConfirmarManual/{Desc}: IEmailService devolvió OK para pedido #{Id}",
+                    descripcion, pid);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "ConfirmarManual/{Desc}: excepción enviando email para pedido #{Id}",
+                    descripcion, pid);
+            }
+        });
+    }
 }
