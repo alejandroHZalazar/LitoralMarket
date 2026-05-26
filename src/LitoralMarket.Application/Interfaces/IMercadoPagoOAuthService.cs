@@ -9,14 +9,15 @@ namespace LitoralMarket.Application.Interfaces;
 /// </summary>
 public interface IMercadoPagoOAuthService
 {
-    /// <summary>Construye la URL de autorización de MP con el state anti-CSRF.</summary>
-    Task<string> BuildOAuthUrlAsync(string state, string redirectUri);
+    /// <summary>Construye la URL de autorización de MP con state anti-CSRF y PKCE code_challenge.</summary>
+    Task<string> BuildOAuthUrlAsync(string state, string redirectUri, string codeChallenge);
 
     /// <summary>
     /// Intercambia el <paramref name="code"/> recibido por tokens y los persiste en BD.
+    /// Requiere el <paramref name="codeVerifier"/> original (PKCE).
     /// Actualiza accessToken, refreshToken, publicKey, userId, connectedAt, expiresAt.
     /// </summary>
-    Task<bool> ExchangeCodeAsync(string code, string redirectUri);
+    Task<bool> ExchangeCodeAsync(string code, string redirectUri, string codeVerifier);
 
     /// <summary>
     /// Devuelve el access token activo.

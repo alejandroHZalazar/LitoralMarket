@@ -56,21 +56,23 @@ public class MercadoPagoOAuthService : IMercadoPagoOAuthService
         _logger = logger;
     }
 
-    // ── Build OAuth URL ───────────────────────────────────────────────────────
-    public Task<string> BuildOAuthUrlAsync(string state, string redirectUri)
+    // ── Build OAuth URL (con PKCE) ────────────────────────────────────────────
+    public Task<string> BuildOAuthUrlAsync(string state, string redirectUri, string codeChallenge)
     {
         var url = UrlAuth
             + $"?client_id={Uri.EscapeDataString(ClientId)}"
             + "&response_type=code"
             + "&platform_id=mp"
             + $"&state={Uri.EscapeDataString(state)}"
-            + $"&redirect_uri={Uri.EscapeDataString(redirectUri)}";
+            + $"&redirect_uri={Uri.EscapeDataString(redirectUri)}"
+            + $"&code_challenge={Uri.EscapeDataString(codeChallenge)}"
+            + "&code_challenge_method=S256";
 
         return Task.FromResult(url);
     }
 
-    // ── Intercambio code → tokens ─────────────────────────────────────────────
-    public async Task<bool> ExchangeCodeAsync(string code, string redirectUri)
+    // ── Intercambio code → tokens (con PKCE) ──────────────────────────────────
+    public async Task<bool> ExchangeCodeAsync(string code, string redirectUri, string codeVerifier)
     {
         _logger.LogInformation("MP OAuth: exchange authorization_code para redirectUri={Uri}", redirectUri);
 
@@ -80,7 +82,8 @@ public class MercadoPagoOAuthService : IMercadoPagoOAuthService
             ["client_secret"] = ClientSecret,
             ["grant_type"]    = "authorization_code",
             ["code"]          = code,
-            ["redirect_uri"]  = redirectUri
+            ["redirect_uri"]  = redirectUri,
+            ["code_verifier"] = codeVerifier
         });
     }
 

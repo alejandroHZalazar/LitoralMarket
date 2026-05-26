@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using LitoralMarket.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,8 +19,9 @@ namespace LitoralMarket.Web.Controllers;
 [Route("mp")]
 public class MercadoPagoOAuthController : Controller
 {
-    private const string AdminPage  = "/Admin/Configuracion/MercadoPago";
-    private const string CookieKey  = "mp_oauth_state";
+    private const string AdminPage      = "/Admin/Configuracion/MercadoPago";
+    private const string CookieState    = "mp_oauth_state";
+    private const string CookieVerifier = "mp_oauth_verifier";
 
     private readonly IMercadoPagoOAuthService    _oauth;
     private readonly IConfiguration              _config;
@@ -53,21 +56,27 @@ public class MercadoPagoOAuthController : Controller
             return Redirect(AdminPage);
         }
 
-        // Generar state anti-CSRF y guardarlo en cookie HttpOnly firmada.
-        // SameSite=Lax permite que la cookie viaje en el redirect GET desde MP.
-        var state = Guid.NewGuid().ToString("N");
-        Response.Cookies.Append(CookieKey, state, new CookieOptions
+        // Generar state anti-CSRF y PKCE (code_verifier + code_challenge).
+        // Ambos viajan en cookies HttpOnly con SameSite=Lax para sobrevivir al
+        // redirect cross-site desde MP.
+        var state         = Guid.NewGuid().ToString("N");
+        var codeVerifier  = GenerateCodeVerifier();
+        var codeChallenge = ComputeCodeChallenge(codeVerifier);
+
+        var cookieOpts = new CookieOptions
         {
-            HttpOnly = true,
-            Secure   = true,
-            SameSite = SameSiteMode.Lax,
-            Expires  = DateTimeOffset.UtcNow.AddMinutes(15),
+            HttpOnly    = true,
+            Secure      = true,
+            SameSite    = SameSiteMode.Lax,
+            Expires     = DateTimeOffset.UtcNow.AddMinutes(15),
             IsEssential = true,
-            Path     = "/"
-        });
+            Path        = "/"
+        };
+        Response.Cookies.Append(CookieState,    state,        cookieOpts);
+        Response.Cookies.Append(CookieVerifier, codeVerifier, cookieOpts);
 
         var redirectUri = BuildRedirectUri();
-        var oauthUrl    = await _oauth.BuildOAuthUrlAsync(state, redirectUri);
+        var oauthUrl    = await _oauth.BuildOAuthUrlAsync(state, redirectUri, codeChallenge);
 
         _logger.LogInformation(
             "MP OAuth Connect: redirigiendo a MP — redirectUri={Uri} state={State}",
@@ -103,11 +112,12 @@ public class MercadoPagoOAuthController : Controller
         }
 
         // ── 2. Validar state anti-CSRF (desde cookie firmada) ───────────────
-        Request.Cookies.TryGetValue(CookieKey, out var cookieState);
+        Request.Cookies.TryGetValue(CookieState,    out var cookieState);
+        Request.Cookies.TryGetValue(CookieVerifier, out var cookieVerifier);
 
-        if (string.IsNullOrEmpty(cookieState))
+        if (string.IsNullOrEmpty(cookieState) || string.IsNullOrEmpty(cookieVerifier))
         {
-            _logger.LogWarning("MP OAuth Callback: cookie sin state — posible expiración o CSRF.");
+            _logger.LogWarning("MP OAuth Callback: cookies de state/verifier ausentes — posible expiración o CSRF.");
             TempData["Error"] =
                 "La sesión OAuth expiró o es inválida. Hacé clic en \"Conectar\" nuevamente.";
             return Redirect(AdminPage);
@@ -123,8 +133,9 @@ public class MercadoPagoOAuthController : Controller
             return Redirect(AdminPage);
         }
 
-        // Limpiar la cookie (one-time use)
-        Response.Cookies.Delete(CookieKey);
+        // Limpiar las cookies (one-time use)
+        Response.Cookies.Delete(CookieState);
+        Response.Cookies.Delete(CookieVerifier);
 
         // ── 3. Validar code ─────────────────────────────────────────────────
         if (string.IsNullOrWhiteSpace(code))
@@ -141,7 +152,7 @@ public class MercadoPagoOAuthController : Controller
         _logger.LogInformation(
             "MP OAuth Callback: intercambiando code — redirectUri={Uri}", redirectUri);
 
-        var ok = await _oauth.ExchangeCodeAsync(code, redirectUri);
+        var ok = await _oauth.ExchangeCodeAsync(code, redirectUri, cookieVerifier);
 
         if (!ok)
         {
@@ -176,4 +187,32 @@ public class MercadoPagoOAuthController : Controller
         // Construir dinámicamente — ForwardedHeaders ya ajustó Scheme a https en Railway
         return $"{Request.Scheme}://{Request.Host}/mp/callback";
     }
+
+    // ── PKCE helpers (RFC 7636) ───────────────────────────────────────────────
+
+    /// <summary>
+    /// Genera un code_verifier aleatorio (43-128 chars URL-safe) — RFC 7636 §4.1.
+    /// </summary>
+    private static string GenerateCodeVerifier()
+    {
+        var bytes = new byte[32]; // → 43 chars base64url
+        RandomNumberGenerator.Fill(bytes);
+        return Base64UrlEncode(bytes);
+    }
+
+    /// <summary>
+    /// Calcula code_challenge = BASE64URL(SHA256(code_verifier)) — RFC 7636 §4.2.
+    /// </summary>
+    private static string ComputeCodeChallenge(string codeVerifier)
+    {
+        var hash = SHA256.HashData(Encoding.ASCII.GetBytes(codeVerifier));
+        return Base64UrlEncode(hash);
+    }
+
+    /// <summary>Base64 URL-safe sin padding (RFC 4648 §5).</summary>
+    private static string Base64UrlEncode(byte[] bytes) =>
+        Convert.ToBase64String(bytes)
+               .TrimEnd('=')
+               .Replace('+', '-')
+               .Replace('/', '_');
 }
