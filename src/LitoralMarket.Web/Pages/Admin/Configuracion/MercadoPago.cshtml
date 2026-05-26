@@ -1,0 +1,300 @@
+@page
+@model LitoralMarket.Web.Pages.Admin.Configuracion.MercadoPagoModel
+@{
+    ViewData["Title"] = "Configuración MercadoPago";
+    var info    = Model.Info;
+    var okCreds = info.ClientIdConfigurado && info.ClientSecretConfigurado;
+}
+
+<!-- ── Encabezado ──────────────────────────────────────────────────────── -->
+<div class="d-flex align-items-center justify-content-between mb-4">
+    <div class="d-flex align-items-center gap-3">
+        <div class="rounded-3 d-flex align-items-center justify-content-center"
+             style="width:48px;height:48px;background:#009EE3;">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="30" height="30">
+                <path fill="#fff" d="M24 4C13 4 4 13 4 24s9 20 20 20 20-9 20-20S35 4 24 4zm0 6c3.9 0 7.4 1.5 10 3.8L10 27.5C9.4 26.4 9 25.2 9 24c0-8.3 6.7-14 15-14zm0 28c-3.9 0-7.4-1.5-10-3.8L38 20.5c.6 1.1 1 2.3 1 3.5 0 7.7-6.7 14-15 14z"/>
+            </svg>
+        </div>
+        <div>
+            <h2 class="mb-0 fw-bold">Mercado Pago</h2>
+            <span class="text-muted small">Conexión OAuth — cobros en tu cuenta</span>
+        </div>
+    </div>
+    <a asp-page="/Admin/Parametros/Index" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-sliders2 me-1"></i>Ver todos los parámetros
+    </a>
+</div>
+
+<!-- ── Alertas de flash ───────────────────────────────────────────────── -->
+@if (Model.MensajeExito is not null)
+{
+    <div class="alert alert-success alert-dismissible fade show d-flex align-items-center gap-2 mb-4">
+        <i class="bi bi-check-circle-fill fs-5"></i>
+        <div>@Model.MensajeExito</div>
+        <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (Model.MensajeError is not null)
+{
+    <div class="alert alert-danger alert-dismissible fade show d-flex align-items-center gap-2 mb-4">
+        <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+        <div>@Model.MensajeError</div>
+        <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<div class="row g-4">
+
+    <!-- ── Columna izquierda: Estado de conexión ─────────────────────── -->
+    <div class="col-12 col-lg-7">
+
+        @if (info.Conectado)
+        {
+            <!-- ══ CONECTADO ══ -->
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-bottom d-flex align-items-center gap-2 py-3">
+                    <span class="badge rounded-pill px-3 py-2 fw-semibold"
+                          style="background:#e6faf0;color:#1db862;font-size:.85rem;">
+                        <i class="bi bi-circle-fill me-1" style="font-size:.5rem;vertical-align:middle;"></i>
+                        Conectado
+                    </span>
+                    <span class="text-muted small ms-auto">Cuenta de Mercado Pago vinculada</span>
+                </div>
+                <div class="card-body py-4">
+
+                    <!-- Datos de conexión -->
+                    <div class="row g-3 mb-4">
+                        <div class="col-12 col-sm-6">
+                            <div class="p-3 rounded-3" style="background:#f8f9fa;">
+                                <div class="text-muted small mb-1">
+                                    <i class="bi bi-person-fill me-1"></i>User ID
+                                </div>
+                                <div class="fw-semibold font-monospace">@info.UserId</div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-sm-6">
+                            <div class="p-3 rounded-3" style="background:#f8f9fa;">
+                                <div class="text-muted small mb-1">
+                                    <i class="bi bi-key-fill me-1"></i>Public Key
+                                </div>
+                                <div class="fw-semibold font-monospace small">
+                                    @(info.PublicKeyMascara ?? "—")
+                                </div>
+                            </div>
+                        </div>
+                        @if (info.ConnectedAt is not null)
+                        {
+                            <div class="col-12 col-sm-6">
+                                <div class="p-3 rounded-3" style="background:#f8f9fa;">
+                                    <div class="text-muted small mb-1">
+                                        <i class="bi bi-calendar-check me-1"></i>Fecha de conexión
+                                    </div>
+                                    <div class="fw-semibold">@info.ConnectedAt</div>
+                                </div>
+                            </div>
+                        }
+                        @if (info.ExpiresAt is not null)
+                        {
+                            <div class="col-12 col-sm-6">
+                                <div class="p-3 rounded-3" style="background:#f8f9fa;">
+                                    <div class="text-muted small mb-1">
+                                        <i class="bi bi-clock-history me-1"></i>Vencimiento del token
+                                    </div>
+                                    <div class="fw-semibold">@info.ExpiresAt</div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    <!-- Info seguridad -->
+                    <div class="d-flex align-items-start gap-2 p-3 rounded-3 mb-4"
+                         style="background:#f0fdf4;border:1px solid #86efac;">
+                        <i class="bi bi-shield-check text-success fs-5 flex-shrink-0 mt-1"></i>
+                        <div class="small text-success">
+                            Los pagos del checkout se acreditan directamente en tu cuenta de Mercado Pago.<br />
+                            El token se renueva automáticamente cuando está por vencer.
+                        </div>
+                    </div>
+
+                    <!-- Acciones -->
+                    <div class="d-flex gap-2 flex-wrap">
+                        <a href="/mp/connect"
+                           id="btnReconectar"
+                           class="btn btn-outline-primary"
+                           onclick="mostrarCargando(this)">
+                            <i class="bi bi-arrow-repeat me-1"></i>Reconectar cuenta
+                        </a>
+                        <form method="post" asp-page-handler="Desconectar"
+                              onsubmit="return confirm('¿Desconectar Mercado Pago? Los pagos dejarán de procesarse hasta reconectar.')">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="btn btn-outline-danger">
+                                <i class="bi bi-x-circle me-1"></i>Desconectar cuenta
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        }
+        else
+        {
+            <!-- ══ NO CONECTADO ══ -->
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-bottom d-flex align-items-center gap-2 py-3">
+                    <span class="badge rounded-pill px-3 py-2 fw-semibold"
+                          style="background:#fff7ed;color:#c2410c;font-size:.85rem;">
+                        <i class="bi bi-circle-fill me-1" style="font-size:.5rem;vertical-align:middle;"></i>
+                        No conectado
+                    </span>
+                </div>
+                <div class="card-body text-center py-5">
+                    <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-4"
+                         style="width:80px;height:80px;background:#f0f9ff;">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="44" height="44">
+                            <path fill="#009EE3" d="M24 4C13 4 4 13 4 24s9 20 20 20 20-9 20-20S35 4 24 4zm0 6c3.9 0 7.4 1.5 10 3.8L10 27.5C9.4 26.4 9 25.2 9 24c0-8.3 6.7-14 15-14zm0 28c-3.9 0-7.4-1.5-10-3.8L38 20.5c.6 1.1 1 2.3 1 3.5 0 7.7-6.7 14-15 14z"/>
+                        </svg>
+                    </div>
+
+                    <h5 class="fw-bold mb-2">Mercado Pago no conectado</h5>
+                    <p class="text-muted mb-4" style="max-width:400px;margin:0 auto 1.5rem;">
+                        Conectá tu cuenta de Mercado Pago para que los pagos del checkout
+                        se acrediten directamente en tu cuenta.
+                    </p>
+
+                    @if (!okCreds)
+                    {
+                        <div class="alert alert-warning d-inline-flex align-items-start gap-2 text-start mb-4"
+                             style="max-width:420px;">
+                            <i class="bi bi-exclamation-triangle-fill flex-shrink-0 mt-1"></i>
+                            <div class="small">
+                                <strong>Credenciales de la app no configuradas.</strong><br />
+                                Agregá <code>MercadoPagoOAuth:ClientId</code> y
+                                <code>MercadoPagoOAuth:ClientSecret</code> en
+                                <code>appsettings.json</code> o como variables de entorno en Railway.
+                            </div>
+                        </div>
+                        <br />
+                    }
+
+                    <a href="/mp/connect"
+                       id="btnConectar"
+                       class="btn btn-lg px-5 py-3 fw-bold"
+                       style="background:#009EE3;color:#fff;border:none;border-radius:12px;position:relative;z-index:5;pointer-events:auto;"
+                       onclick="mostrarCargando(this)">
+                        <i class="bi bi-link-45deg me-2"></i>Conectar mi Mercado Pago
+                    </a>
+
+                    @if (okCreds)
+                    {
+                        <p class="text-muted small mt-3">
+                            <i class="bi bi-shield-lock me-1"></i>
+                            Serás redirigido al sitio oficial de Mercado Pago para autorizar la conexión.
+                        </p>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- ── Columna derecha: Info y requisitos ────────────────────────── -->
+    <div class="col-12 col-lg-5">
+
+        <!-- Cómo funciona -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-bottom py-3">
+                <span class="fw-semibold small">
+                    <i class="bi bi-info-circle me-1 text-primary"></i>Cómo funciona
+                </span>
+            </div>
+            <div class="card-body">
+                <ol class="list-group list-group-flush list-group-numbered small text-muted">
+                    <li class="list-group-item border-0 px-0 py-2">
+                        Hacé clic en <strong>"Conectar mi Mercado Pago"</strong>
+                    </li>
+                    <li class="list-group-item border-0 px-0 py-2">
+                        Iniciás sesión con tu cuenta de Mercado Pago y autorizás la app
+                    </li>
+                    <li class="list-group-item border-0 px-0 py-2">
+                        El sistema obtiene y guarda automáticamente tus credenciales
+                    </li>
+                    <li class="list-group-item border-0 px-0 py-2">
+                        Los pagos del checkout se acreditan en tu cuenta
+                    </li>
+                    <li class="list-group-item border-0 px-0 py-2">
+                        El token se renueva automáticamente sin tu intervención
+                    </li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- Estado de credenciales de app -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-bottom py-3">
+                <span class="fw-semibold small">
+                    <i class="bi bi-gear me-1 text-secondary"></i>Credenciales de la app
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between py-2 border-bottom">
+                    <span class="small text-muted">Client ID</span>
+                    @if (info.ClientIdConfigurado)
+                    {
+                        <span class="badge bg-success-subtle text-success">
+                            <i class="bi bi-check me-1"></i>Configurado
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-danger-subtle text-danger">
+                            <i class="bi bi-x me-1"></i>No configurado
+                        </span>
+                    }
+                </div>
+                <div class="d-flex align-items-center justify-content-between py-2">
+                    <span class="small text-muted">Client Secret</span>
+                    @if (info.ClientSecretConfigurado)
+                    {
+                        <span class="badge bg-success-subtle text-success">
+                            <i class="bi bi-check me-1"></i>Configurado
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-danger-subtle text-danger">
+                            <i class="bi bi-x me-1"></i>No configurado
+                        </span>
+                    }
+                </div>
+                <div class="mt-3 p-3 rounded-2 small" style="background:#f8f9fa;font-size:.78rem;">
+                    <div class="text-muted mb-1 fw-semibold">Configurar en Railway:</div>
+                    <code class="d-block">MercadoPagoOAuth__ClientId=TU_CLIENT_ID</code>
+                    <code class="d-block">MercadoPagoOAuth__ClientSecret=TU_SECRET</code>
+                    <code class="d-block mt-1">MercadoPagoOAuth__RedirectUri=</code>
+                    <code class="d-block" style="font-size:.72rem;">https://tu-dominio.com/mp/callback</code>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+@section Scripts {
+<script>
+function mostrarCargando(el) {
+    // Diferimos el cambio visual para no interferir con la navegación del <a href>
+    setTimeout(function () {
+        var icono = el.querySelector('i');
+        if (icono) icono.className = 'bi bi-arrow-repeat spin me-2';
+        el.textContent = '';
+        if (icono) el.prepend(icono);
+        el.insertAdjacentText('beforeend', 'Conectando...');
+        el.style.opacity = '0.75';
+    }, 0);
+    // No retornamos false — dejamos que el navegador siga el href
+}
+</script>
+<style>
+@@keyframes spin { to { transform: rotate(360deg); } }
+.spin { display:inline-block; animation: spin .8s linear infinite; }
+</style>
+}

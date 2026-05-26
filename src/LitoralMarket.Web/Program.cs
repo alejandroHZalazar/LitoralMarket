@@ -103,6 +103,7 @@ builder.Services.AddScoped<IPedidoService, PedidoService>();
 builder.Services.AddScoped<IPagoEcommerceService, PagoEcommerceService>();
 builder.Services.AddScoped<IPdfPagoService, PdfPagoService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<IMercadoPagoOAuthService, MercadoPagoOAuthService>();
 
 // HttpClient para MercadoPago
 builder.Services.AddHttpClient("MercadoPago", c =>
