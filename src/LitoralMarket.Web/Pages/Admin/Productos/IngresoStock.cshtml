@@ -1,0 +1,684 @@
+@page
+@model LitoralMarket.Web.Pages.Admin.Productos.IngresoStockModel
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery AntiforgeryService
+@{
+    ViewData["Title"] = "Ingreso de Stock";
+    var csrfToken = AntiforgeryService.GetAndStoreTokens(HttpContext).RequestToken!;
+}
+
+<input type="hidden" id="csrfToken" value="@csrfToken" />
+
+<!-- ── HEADER ─────────────────────────────────────────────────────── -->
+<div class="d-flex align-items-center gap-2 mb-3">
+    <h2 class="mb-0 fw-bold">
+        <i class="bi bi-box-arrow-in-down me-2 text-success"></i>Ingreso Masivo de Stock
+    </h2>
+    <a asp-page="/Admin/Productos/Index" class="btn btn-sm btn-outline-secondary ms-auto">
+        <i class="bi bi-arrow-left me-1"></i>Productos
+    </a>
+</div>
+
+<!-- ── ALERTA GLOBAL ──────────────────────────────────────────────── -->
+<div id="alertaGlobal" class="d-none mb-3"></div>
+
+<!-- ── FILA SUPERIOR: buscador + ingreso rápido ──────────────────── -->
+<div class="row g-3 mb-3">
+
+    <!-- BUSCADOR -->
+    <div class="col-12 col-lg-7">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body p-2">
+
+                <!-- Input de búsqueda -->
+                <div class="row g-2 align-items-center mb-2">
+                    <div class="col-auto">
+                        <select id="tipoBusqueda" class="form-select form-select-sm"
+                                style="min-width:140px" onchange="buscarProductos()">
+                            <option value="0">Cód. Proveedor</option>
+                            <option value="1">Cód. Barras</option>
+                            <option value="2" selected>Descripción</option>
+                        </select>
+                    </div>
+                    <div class="col position-relative">
+                        <div class="input-group">
+                            <span class="input-group-text bg-white border-end-0">
+                                <i class="bi bi-search text-muted"></i>
+                            </span>
+                            <input id="valorBusqueda" type="text"
+                                   class="form-control border-start-0 ps-0"
+                                   placeholder="Escribí o escaneá…  [Alt+B]"
+                                   autocomplete="off" />
+                        </div>
+
+                        <!-- Dropdown de resultados -->
+                        <div id="dropResultados"
+                             class="position-absolute w-100 bg-white border rounded shadow-sm d-none"
+                             style="z-index:1050;top:calc(100% + 4px);left:0;max-height:240px;overflow-y:auto;">
+                            <table class="table table-hover table-sm mb-0">
+                                <tbody id="tbodyResultados"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Producto actualmente seleccionado -->
+                <div id="prodSeleccionado" class="d-none rounded px-2 py-1"
+                     style="background:rgba(29,176,98,.08);border:1px solid rgba(29,176,98,.2)">
+                    <div class="d-flex align-items-start gap-2">
+                        <i class="bi bi-check-circle-fill text-success mt-1 flex-shrink-0"></i>
+                        <div class="flex-fill min-w-0">
+                            <div class="fw-semibold small text-truncate" id="lblProdDesc">—</div>
+                            <div class="text-muted" style="font-size:.76rem">
+                                <span class="me-2"><i class="bi bi-upc me-1"></i><span id="lblProdCodProv">—</span></span>
+                                <span><i class="bi bi-bar-chart me-1"></i><span id="lblProdCodBar">—</span></span>
+                            </div>
+                        </div>
+                        <div class="text-end flex-shrink-0">
+                            <div class="text-muted" style="font-size:.72rem">Stock actual</div>
+                            <div class="fw-bold text-success" id="lblProdStock">0</div>
+                        </div>
+                        <button type="button" class="btn-close btn-close-sm flex-shrink-0 mt-1"
+                                onclick="limpiarSeleccion()" title="Quitar selección"></button>
+                    </div>
+                </div>
+
+                <div id="msgSinProd" class="text-muted small text-center py-1">
+                    <i class="bi bi-hand-index me-1"></i>Buscá y seleccioná un producto
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- INGRESO RÁPIDO -->
+    <div class="col-12 col-lg-5">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body p-3">
+                <label class="form-label form-label-sm fw-semibold text-uppercase text-muted mb-2"
+                       style="font-size:.68rem;letter-spacing:.8px">
+                    <i class="bi bi-plus-circle me-1 text-success"></i>
+                    Cantidad a ingresar
+                    <kbd class="ms-1 opacity-50" style="font-size:.6rem">Alt+C</kbd>
+                </label>
+
+                <div class="d-flex gap-2 align-items-stretch">
+                    <input id="inpCantidad" type="number" min="1" step="1" value="1"
+                           inputmode="numeric"
+                           class="form-control text-center fw-bold"
+                           style="font-size:2rem;width:100px;height:56px;padding:0;"
+                           title="Cantidad entera a ingresar [Alt+C]" />
+
+                    <button id="btnAgregar" type="button"
+                            class="btn btn-success flex-fill fw-semibold"
+                            style="height:56px;font-size:1rem;"
+                            onclick="agregarAGrilla()">
+                        <i class="bi bi-plus-lg me-1"></i>Agregar
+                        <kbd class="ms-1 opacity-60" style="font-size:.65rem">F2</kbd>
+                    </button>
+                </div>
+
+                <div id="errAgregar" class="text-danger small mt-2 d-none">
+                    <i class="bi bi-exclamation-circle me-1"></i><span id="errAgregarMsg"></span>
+                </div>
+
+                <!-- Proyección en tiempo real -->
+                <div id="panelProyeccion" class="d-none mt-2 text-center">
+                    <span class="text-muted small">Nuevo stock proyectado:&nbsp;</span>
+                    <span class="fw-bold text-success fs-6" id="lblProyeccion">—</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── GRILLA DE ÍTEMS ────────────────────────────────────────────── -->
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white border-bottom py-2 d-flex justify-content-between align-items-center">
+        <span class="fw-semibold small">
+            <i class="bi bi-list-check me-1 text-success"></i>Productos a ingresar
+        </span>
+        <div class="d-flex align-items-center gap-2">
+            <span class="text-muted small" id="lblResumenHeader">Sin productos</span>
+            <button type="button" class="btn btn-sm btn-outline-secondary py-0"
+                    onclick="limpiarGrilla()" title="Limpiar lista [F6]">
+                <i class="bi bi-trash me-1"></i>Limpiar
+                <kbd style="font-size:.6rem">F6</kbd>
+            </button>
+        </div>
+    </div>
+
+    <div class="card-body p-0">
+        <div style="max-height:42vh;overflow-y:auto;">
+            <table class="table table-sm table-hover mb-0 align-middle">
+                <thead class="table-dark sticky-top">
+                    <tr>
+                        <th class="ps-2" style="width:105px">Cód.Prov.</th>
+                        <th style="width:110px">Cód.Barras</th>
+                        <th>Descripción</th>
+                        <th class="text-center" style="width:90px">Stock actual</th>
+                        <th class="text-center" style="width:80px">Cant.</th>
+                        <th class="text-center" style="width:100px">Nuevo stock</th>
+                        <th class="text-center" style="width:48px"></th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyGrilla"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card-footer bg-white border-top py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div class="small">
+            <span class="text-muted">Productos:&nbsp;</span>
+            <strong id="lblTotalProductos">0</strong>
+            <span class="text-muted ms-2">Unidades:&nbsp;</span>
+            <strong id="lblTotalUnidades">0</strong>
+        </div>
+        <button id="btnConfirmar" type="button"
+                class="btn btn-success px-4 fw-semibold"
+                onclick="confirmarIngreso()" disabled>
+            <i class="bi bi-check-circle me-2"></i>Confirmar Ingreso de Stock
+            <kbd class="ms-2 opacity-60" style="font-size:.65rem">F4</kbd>
+        </button>
+    </div>
+</div>
+
+@section Scripts {
+<style>
+    /* ── Resultados dropdown ── */
+    .fila-resultado { cursor: pointer; }
+    .fila-resultado:hover { background: rgba(29,176,98,.08); }
+    .fila-resultado.focus-kb {
+        background: rgba(29,176,98,.18);
+        outline: 2px solid rgba(29,176,98,.4);
+        outline-offset: -2px;
+    }
+
+    /* ── Grilla ── */
+    .fila-grilla { cursor: default; }
+    .fila-grilla.seleccionada { background: rgba(29,176,98,.09) !important; }
+    .fila-grilla td { vertical-align: middle; }
+
+    /* ── Kbd chips ── */
+    kbd { background: #e9ecef; color: #495057; border-radius: 3px;
+          font-size: .7rem; padding: 1px 4px; box-shadow: none; }
+
+    /* ── Cantidad input: no spinners en Firefox ── */
+    #inpCantidad { -moz-appearance: textfield; }
+    #inpCantidad::-webkit-outer-spin-button,
+    #inpCantidad::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+</style>
+<script>
+'use strict';
+
+// ──────────────────────────────────────────────────────────────────────────
+// Estado global
+// ──────────────────────────────────────────────────────────────────────────
+const TOKEN        = document.getElementById('csrfToken')?.value ?? '';
+let   _grilla      = [];      // [{ productoId, codProveedor, codBarras, descripcion, stockActual, cantidad }]
+let   _prodSel     = null;    // producto actualmente seleccionado en el buscador
+let   _idxSel      = null;    // índice de la fila seleccionada en la grilla (para Delete)
+let   _busqTimer   = null;
+let   _idxFocusKb  = -1;      // índice del resultado con foco de teclado
+
+// ──────────────────────────────────────────────────────────────────────────
+// BÚSQUEDA
+// ──────────────────────────────────────────────────────────────────────────
+const inpBusq  = document.getElementById('valorBusqueda');
+const dropRes  = document.getElementById('dropResultados');
+const tbodyRes = document.getElementById('tbodyResultados');
+
+function buscarProductos(inmediato = false) {
+    clearTimeout(_busqTimer);
+    _busqTimer = setTimeout(_ejecutarBusqueda, inmediato ? 0 : 260);
+}
+
+async function _ejecutarBusqueda() {
+    const tipo  = document.getElementById('tipoBusqueda').value;
+    const valor = inpBusq.value.trim();
+    if (!valor) { cerrarDropdown(); return; }
+
+    tbodyRes.innerHTML =
+        '<tr><td colspan="3" class="text-center text-muted py-2 small">' +
+        '<span class="spinner-border spinner-border-sm me-1"></span>Buscando…</td></tr>';
+    dropRes.classList.remove('d-none');
+
+    const res  = await fetch(`?handler=Buscar&tipo=${tipo}&valor=${encodeURIComponent(valor)}`);
+    tbodyRes.innerHTML = await res.text();
+
+    // Auto-seleccionar primer resultado: flujo teclado/scanner no requiere mouse
+    const _primeros = tbodyRes.querySelectorAll('.fila-resultado');
+    _idxFocusKb = _primeros.length > 0 ? 0 : -1;
+    _actualizarFocusKb(_primeros);
+}
+
+function cerrarDropdown() {
+    dropRes.classList.add('d-none');
+    tbodyRes.innerHTML = '';
+    _idxFocusKb = -1;
+}
+
+// Teclado en el buscador
+inpBusq.addEventListener('input',   () => buscarProductos());
+inpBusq.addEventListener('keydown', async e => {
+    const filas = tbodyRes.querySelectorAll('.fila-resultado');
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        _idxFocusKb = Math.min(_idxFocusKb + 1, filas.length - 1);
+        _actualizarFocusKb(filas);
+        return;
+    }
+    if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        _idxFocusKb = Math.max(_idxFocusKb - 1, 0);   // mínimo 0: nunca pierde el resaltado
+        _actualizarFocusKb(filas);
+        return;
+    }
+
+    // Tab: si el dropdown está abierto, selecciona el ítem resaltado y pasa a Cantidad
+    if (e.key === 'Tab') {
+        if (!dropRes.classList.contains('d-none') && filas.length > 0) {
+            e.preventDefault();
+            const idx = _idxFocusKb >= 0 ? _idxFocusKb : 0;
+            await seleccionarProducto(parseInt(filas[idx].dataset.id, 10));
+            // seleccionarProducto ya mueve el foco a inpCantidad
+        }
+        // Si dropdown cerrado → Tab natural del browser (va a siguiente campo)
+        return;
+    }
+
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        if (_idxFocusKb >= 0 && filas[_idxFocusKb]) {
+            // Hay ítem resaltado → seleccionarlo (caso normal con resultados visibles)
+            await seleccionarProducto(parseInt(filas[_idxFocusKb].dataset.id, 10));
+        } else if (filas.length > 0) {
+            // Dropdown abierto sin foco explícito → seleccionar primero
+            await seleccionarProducto(parseInt(filas[0].dataset.id, 10));
+        } else {
+            // Sin resultados en DOM todavía (scanner: Enter llega antes que el debounce)
+            // → ejecutar búsqueda inmediata; si devuelve 1 resultado lo selecciona
+            clearTimeout(_busqTimer);
+            await _ejecutarBusqueda();
+            const frescos = tbodyRes.querySelectorAll('.fila-resultado');
+            if (frescos.length === 1)
+                await seleccionarProducto(parseInt(frescos[0].dataset.id, 10));
+            // Si hay múltiples: quedan resaltados con el primero, el usuario elige con ↓/Enter
+        }
+        return;
+    }
+
+    if (e.key === 'Escape') {
+        cerrarDropdown();  // solo cierra el dropdown; conserva el texto del buscador
+        return;
+    }
+});
+
+function _actualizarFocusKb(filas) {
+    filas.forEach((f, i) => f.classList.toggle('focus-kb', i === _idxFocusKb));
+    if (_idxFocusKb >= 0) filas[_idxFocusKb].scrollIntoView({ block: 'nearest' });
+}
+
+// Cerrar dropdown al perder foco (delay para que el click se procese antes)
+inpBusq.addEventListener('blur', () => setTimeout(cerrarDropdown, 160));
+
+// Clic en fila resultado (event delegation en tbody)
+tbodyRes.addEventListener('click', async e => {
+    const fila = e.target.closest('.fila-resultado');
+    if (!fila) return;
+    await seleccionarProducto(parseInt(fila.dataset.id, 10));
+});
+
+async function seleccionarProducto(id) {
+    const res = await fetch(`?handler=Producto&id=${id}`);
+    const d   = await res.json();
+    if (!d.ok) { mostrarErrAgregar(d.error ?? 'Error al cargar el producto.'); return; }
+
+    _prodSel = d;
+    cerrarDropdown();
+
+    // Mostrar info del producto
+    document.getElementById('lblProdDesc').textContent   = d.descripcion ?? '—';
+    document.getElementById('lblProdCodProv').textContent = d.codProveedor ?? '—';
+    document.getElementById('lblProdCodBar').textContent  = d.codBarras    ?? '—';
+    document.getElementById('lblProdStock').textContent   = fmt(d.stockActual);
+
+    document.getElementById('prodSeleccionado').classList.remove('d-none');
+    document.getElementById('msgSinProd').classList.add('d-none');
+    document.getElementById('errAgregar').classList.add('d-none');
+
+    // Limpiar buscador
+    inpBusq.value = '';
+
+    // Actualizar proyección
+    actualizarProyeccion();
+
+    // Foco en cantidad
+    const inp = document.getElementById('inpCantidad');
+    inp.focus();
+    inp.select();
+}
+
+function limpiarSeleccion() {
+    _prodSel = null;
+    document.getElementById('prodSeleccionado').classList.add('d-none');
+    document.getElementById('msgSinProd').classList.remove('d-none');
+    document.getElementById('panelProyeccion').classList.add('d-none');
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// CAMPO CANTIDAD
+// ──────────────────────────────────────────────────────────────────────────
+const inpCant = document.getElementById('inpCantidad');
+
+// Solo enteros positivos
+inpCant.addEventListener('input', () => {
+    let v = inpCant.value.replace(/[^0-9]/g, '');
+    if (v.startsWith('0')) v = v.replace(/^0+/, '') || '';
+    inpCant.value = v;
+    actualizarProyeccion();
+});
+inpCant.addEventListener('focus',  () => inpCant.select());
+inpCant.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); agregarAGrilla(); }
+});
+
+function actualizarProyeccion() {
+    if (!_prodSel) return;
+    const cant = parseInt(inpCant.value, 10);
+    const panel = document.getElementById('panelProyeccion');
+    if (!isNaN(cant) && cant > 0) {
+        document.getElementById('lblProyeccion').textContent =
+            fmt(_prodSel.stockActual + cant);
+        panel.classList.remove('d-none');
+    } else {
+        panel.classList.add('d-none');
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// AGREGAR A GRILLA
+// ──────────────────────────────────────────────────────────────────────────
+function agregarAGrilla() {
+    ocultarErrAgregar();
+
+    if (!_prodSel) {
+        mostrarErrAgregar('Seleccioná un producto primero.');
+        inpBusq.focus();
+        return;
+    }
+
+    const cantidad = parseInt(inpCant.value, 10);
+    if (!Number.isInteger(cantidad) || cantidad <= 0) {
+        mostrarErrAgregar('La cantidad debe ser un número entero mayor a cero.');
+        inpCant.focus(); inpCant.select();
+        return;
+    }
+
+    // Si ya está en la grilla → sumar cantidad
+    const existente = _grilla.find(r => r.productoId === _prodSel.id);
+    if (existente) {
+        existente.cantidad += cantidad;
+    } else {
+        _grilla.unshift({
+            productoId:   _prodSel.id,
+            codProveedor: _prodSel.codProveedor ?? '',
+            codBarras:    _prodSel.codBarras    ?? '',
+            descripcion:  _prodSel.descripcion  ?? '',
+            stockActual:  _prodSel.stockActual,
+            cantidad
+        });
+    }
+
+    renderGrilla();
+
+    // Reset para siguiente ingreso
+    limpiarSeleccion();
+    inpCant.value = '1';
+    inpBusq.value = '';
+    inpBusq.focus();
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// GRILLA
+// ──────────────────────────────────────────────────────────────────────────
+const tbodyGrilla = document.getElementById('tbodyGrilla');
+
+tbodyGrilla.addEventListener('click', e => {
+    // Botón quitar
+    const btnQ = e.target.closest('.btn-quitar');
+    if (btnQ) {
+        quitarFila(parseInt(btnQ.dataset.idx, 10));
+        return;
+    }
+    // Seleccionar fila
+    const fila = e.target.closest('.fila-grilla');
+    if (fila) seleccionarFila(parseInt(fila.dataset.idx, 10));
+});
+
+function renderGrilla() {
+    _idxSel = null;
+
+    if (_grilla.length === 0) {
+        tbodyGrilla.innerHTML =
+            '<tr><td colspan="7" class="text-center text-muted py-5 small">' +
+            '<i class="bi bi-box-arrow-in-down fs-3 d-block mb-2 opacity-25"></i>' +
+            'Agregá productos usando el buscador</td></tr>';
+        document.getElementById('btnConfirmar').disabled = true;
+    } else {
+        tbodyGrilla.innerHTML = _grilla.map((r, idx) => `
+<tr class="fila-grilla" data-idx="${idx}">
+  <td class="ps-2 small font-monospace text-muted">${encH(r.codProveedor) || '—'}</td>
+  <td class="small font-monospace text-muted">${encH(r.codBarras) || '—'}</td>
+  <td class="small">${encH(r.descripcion)}</td>
+  <td class="text-center small">${fmt(r.stockActual)}</td>
+  <td class="text-center"><span class="badge bg-success">+${r.cantidad}</span></td>
+  <td class="text-center small fw-semibold text-success">${fmt(r.stockActual + r.cantidad)}</td>
+  <td class="text-center pe-2">
+    <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 btn-quitar"
+            data-idx="${idx}" title="Quitar [Delete]">
+      <i class="bi bi-x-lg" style="font-size:.75rem;pointer-events:none"></i>
+    </button>
+  </td>
+</tr>`).join('');
+        document.getElementById('btnConfirmar').disabled = false;
+    }
+
+    // Totalizadores
+    const totalProd = _grilla.length;
+    const totalUds  = _grilla.reduce((s, r) => s + r.cantidad, 0);
+    document.getElementById('lblTotalProductos').textContent = totalProd;
+    document.getElementById('lblTotalUnidades').textContent  = totalUds;
+    document.getElementById('lblResumenHeader').textContent  =
+        totalProd === 0 ? 'Sin productos' : `${totalProd} prod. · ${totalUds} uds.`;
+}
+
+function seleccionarFila(idx) {
+    document.querySelectorAll('.fila-grilla.seleccionada')
+            .forEach(r => r.classList.remove('seleccionada'));
+    _idxSel = idx;
+    const fila = tbodyGrilla.querySelector(`.fila-grilla[data-idx="${idx}"]`);
+    if (fila) fila.classList.add('seleccionada');
+}
+
+function quitarFila(idx) {
+    _grilla.splice(idx, 1);
+    renderGrilla();
+}
+
+function limpiarGrilla() {
+    if (_grilla.length === 0) return;
+    if (!confirm(`¿Limpiar toda la lista? (${_grilla.length} producto${_grilla.length !== 1 ? 's' : ''})`))
+        return;
+    _grilla = [];
+    limpiarSeleccion();
+    inpCant.value = '1';
+    inpBusq.value = '';
+    cerrarDropdown();
+    renderGrilla();
+    inpBusq.focus();
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// CONFIRMAR MASIVO
+// ──────────────────────────────────────────────────────────────────────────
+async function confirmarIngreso() {
+    if (_grilla.length === 0) {
+        mostrarAlerta('warning', '<i class="bi bi-exclamation-triangle me-2"></i>No hay productos en la lista.');
+        return;
+    }
+
+    const btn = document.getElementById('btnConfirmar');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Procesando…';
+
+    const totalProd = _grilla.length;
+    const totalUds  = _grilla.reduce((s, r) => s + r.cantidad, 0);
+
+    try {
+        const payload = {
+            items: _grilla.map(r => ({
+                productoId:  r.productoId,
+                cantidad:    r.cantidad,
+                observacion: null
+            }))
+        };
+
+        const res  = await fetch('?handler=ConfirmarMasivo', {
+            method:  'POST',
+            headers: {
+                'Content-Type':              'application/json',
+                'RequestVerificationToken':  TOKEN
+            },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+
+        if (!data.ok) {
+            mostrarAlerta('danger',
+                `<i class="bi bi-x-circle me-2"></i><strong>Error:</strong> ${data.error ?? 'Error desconocido.'}`);
+            return;
+        }
+
+        // Éxito
+        mostrarAlerta('success',
+            `<i class="bi bi-check-circle-fill me-2"></i>` +
+            `<strong>Ingreso de stock realizado correctamente.</strong> ` +
+            `${totalProd} producto${totalProd !== 1 ? 's' : ''}, ${totalUds} unidad${totalUds !== 1 ? 'es' : ''}.`);
+
+        // Reset completo
+        _grilla = [];
+        limpiarSeleccion();
+        inpCant.value = '1';
+        inpBusq.value = '';
+        cerrarDropdown();
+        renderGrilla();
+        inpBusq.focus();
+
+    } catch (err) {
+        mostrarAlerta('danger',
+            `<i class="bi bi-x-circle me-2"></i>Error de conexión: ${err.message}`);
+    } finally {
+        btn.innerHTML = '<i class="bi bi-check-circle me-2"></i>Confirmar Ingreso de Stock ' +
+                        '<kbd class="ms-2 opacity-60" style="font-size:.65rem">F4</kbd>';
+        btn.disabled  = _grilla.length === 0;
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// ATAJOS DE TECLADO GLOBALES
+// ──────────────────────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+    const tag = document.activeElement?.tagName ?? '';
+
+    // Alt+B → buscador
+    if (e.altKey && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        inpBusq.focus(); inpBusq.select();
+        return;
+    }
+
+    // Alt+C → cantidad
+    if (e.altKey && e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        inpCant.focus(); inpCant.select();
+        return;
+    }
+
+    // F2 → agregar
+    if (e.key === 'F2') {
+        e.preventDefault();
+        agregarAGrilla();
+        return;
+    }
+
+    // F4 → confirmar
+    if (e.key === 'F4') {
+        e.preventDefault();
+        if (_grilla.length > 0) confirmarIngreso();
+        return;
+    }
+
+    // F6 → limpiar grilla
+    if (e.key === 'F6') {
+        e.preventDefault();
+        limpiarGrilla();
+        return;
+    }
+
+    // Delete → quitar fila seleccionada (solo si el foco NO está en un input de texto)
+    if (e.key === 'Delete' && _idxSel !== null && tag !== 'INPUT' && tag !== 'TEXTAREA') {
+        e.preventDefault();
+        quitarFila(_idxSel);
+        return;
+    }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// ALERTAS
+// ──────────────────────────────────────────────────────────────────────────
+let _alertTimer;
+function mostrarAlerta(tipo, html) {
+    const el = document.getElementById('alertaGlobal');
+    el.className = `alert alert-${tipo} d-flex align-items-center justify-content-between gap-2 py-2 px-3`;
+    el.innerHTML = `<span>${html}</span>` +
+        `<button type="button" class="btn-close flex-shrink-0"
+                 onclick="this.parentElement.classList.add('d-none')"></button>`;
+    el.classList.remove('d-none');
+    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    clearTimeout(_alertTimer);
+    if (tipo === 'success') _alertTimer = setTimeout(() => el.classList.add('d-none'), 9000);
+}
+
+function mostrarErrAgregar(msg) {
+    document.getElementById('errAgregarMsg').textContent = msg;
+    document.getElementById('errAgregar').classList.remove('d-none');
+}
+function ocultarErrAgregar() {
+    document.getElementById('errAgregar').classList.add('d-none');
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// UTILIDADES
+// ──────────────────────────────────────────────────────────────────────────
+function fmt(n) {
+    if (n === null || n === undefined) return '0';
+    const num = parseFloat(n);
+    return Number.isInteger(num)
+        ? num.toLocaleString('es-AR')
+        : num.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+function encH(s) {
+    if (!s) return '';
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// INIT
+// ──────────────────────────────────────────────────────────────────────────
+renderGrilla();         // mostrar estado vacío inicial
+inpBusq.focus();        // foco en buscador al cargar
+</script>
+}

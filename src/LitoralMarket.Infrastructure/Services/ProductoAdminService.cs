@@ -3,6 +3,7 @@ using LitoralMarket.Application.Interfaces;
 using LitoralMarket.Domain.Entities;
 using LitoralMarket.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace LitoralMarket.Infrastructure.Services;
 
@@ -196,5 +197,136 @@ public class ProductoAdminService : IProductoAdminService
         if (p is null) return;
         p.Baja = true;
         await _db.SaveChangesAsync();
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // Ingreso masivo de stock (transaccional)
+    // ──────────────────────────────────────────────────────────────
+    public async Task IngresoStockMasivoAsync(IEnumerable<IngresoItemRequest> items)
+    {
+        // Agrupar por productoId por si el caller envía duplicados
+        var agrupados = items
+            .GroupBy(i => i.ProductoId)
+            .Select(g => new
+            {
+                ProductoId  = g.Key,
+                Cantidad    = g.Sum(i => i.Cantidad),
+                Observacion = g.First().Observacion
+            })
+            .ToList();
+
+        if (!agrupados.Any())
+            throw new InvalidOperationException("No se recibieron productos para ingresar.");
+
+        if (agrupados.Any(a => a.Cantidad <= 0))
+            throw new InvalidOperationException("Todas las cantidades deben ser mayores a cero.");
+
+        // Cargar todos los productos de una sola consulta
+        var ids      = agrupados.Select(a => a.ProductoId).ToList();
+        var productos = await _db.Productos
+            .Include(p => p.Stock)
+            .Where(p => ids.Contains(p.Id))
+            .ToListAsync();
+
+        var faltantes = ids.Except(productos.Select(p => p.Id)).ToList();
+        if (faltantes.Any())
+            throw new InvalidOperationException(
+                $"Productos no encontrados: {string.Join(", ", faltantes)}.");
+
+        // Ejecutar todo en una transacción
+        await using var tx = await _db.Database.BeginTransactionAsync();
+        try
+        {
+            foreach (var item in agrupados)
+            {
+                var producto = productos.First(p => p.Id == item.ProductoId);
+                var stockAnt = producto.Stock?.Cantidad ?? 0m;
+                var stockAct = stockAnt + item.Cantidad;
+
+                if (producto.Stock is null)
+                    _db.StockProductos.Add(new StockProducto
+                    {
+                        FkProducto = item.ProductoId,
+                        Cantidad   = stockAct
+                    });
+                else
+                    producto.Stock.Cantidad = stockAct;
+
+                _db.ProductosMovimientos.Add(new ProductosMovimiento
+                {
+                    FkProducto     = item.ProductoId,
+                    TipoMovimiento = 1,
+                    Descripcion    = string.IsNullOrWhiteSpace(item.Observacion)
+                                         ? (producto.Descripcion ?? "Ingreso de stock")
+                                         : item.Observacion,
+                    StockAnt       = stockAnt,
+                    StockAct       = stockAct,
+                    Cantidad       = item.Cantidad,
+                    Costo          = 0,
+                    Venta          = 0,
+                    FechaMov       = DateTime.Now
+                });
+            }
+
+            await _db.SaveChangesAsync();
+            await tx.CommitAsync();
+        }
+        catch
+        {
+            await tx.RollbackAsync();
+            throw;
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // Ingreso de stock (producto individual)
+    // ──────────────────────────────────────────────────────────────
+    public async Task<decimal> IngresoStockAsync(int productoId, decimal cantidad, string? observacion)
+    {
+        if (cantidad <= 0)
+            throw new ArgumentOutOfRangeException(nameof(cantidad), "La cantidad debe ser mayor a cero.");
+
+        var producto = await _db.Productos
+            .Include(p => p.Stock)
+            .FirstOrDefaultAsync(p => p.Id == productoId);
+
+        if (producto is null)
+            throw new InvalidOperationException("Producto no encontrado.");
+
+        var stockAnt = producto.Stock?.Cantidad ?? 0m;
+        var stockAct = stockAnt + cantidad;
+
+        // Crear el registro de stock si no existe
+        if (producto.Stock is null)
+        {
+            _db.StockProductos.Add(new StockProducto
+            {
+                FkProducto = productoId,
+                Cantidad   = stockAct
+            });
+        }
+        else
+        {
+            producto.Stock.Cantidad = stockAct;
+        }
+
+        // Movimiento de ingreso (TipoMovimiento = 1)
+        _db.ProductosMovimientos.Add(new ProductosMovimiento
+        {
+            FkProducto     = productoId,
+            TipoMovimiento = 1,
+            Descripcion    = string.IsNullOrWhiteSpace(observacion)
+                                 ? (producto.Descripcion ?? "Ingreso de stock")
+                                 : observacion,
+            StockAnt       = stockAnt,
+            StockAct       = stockAct,
+            Cantidad       = cantidad,
+            Costo          = 0,
+            Venta          = 0,
+            FechaMov       = DateTime.Now
+        });
+
+        await _db.SaveChangesAsync();
+        return stockAct;
     }
 }

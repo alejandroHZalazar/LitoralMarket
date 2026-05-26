@@ -1,6 +1,7 @@
 @page
 @model PagoPageModel
 @using System.Globalization
+@using LitoralMarket.Application.Helpers
 @{
     ViewData["Title"] = "Seleccionar método de pago";
     var subtotalItems = Model.Pedido?.Items.Sum(i => i.Subtotal) ?? 0;
@@ -113,6 +114,29 @@
                             <div>
                                 <strong>Te enviamos un email</strong> con el link de pago y el comprobante.<br />
                                 Si no lo ves en tu bandeja de entrada, <strong>revisá la carpeta de spam o correo no deseado</strong>.
+                            </div>
+                        </div>
+                    }
+
+                    @* ── Coordinación de entrega por WhatsApp ── *@
+                    @if (!string.IsNullOrWhiteSpace(Model.TelefonoWhatsApp))
+                    {
+                        var _waNum = PhoneHelper.NormalizarParaWhatsApp(Model.TelefonoWhatsApp);
+                        <div class="d-flex align-items-start gap-3 mt-3 p-3 rounded text-start"
+                             style="background:#f0fdf4;border:1px solid #86efac;">
+                            <i class="bi bi-whatsapp flex-shrink-0 mt-1" style="font-size:1.4rem;color:#25D366;"></i>
+                            <div>
+                                <strong class="small">📦 Coordinación de entrega</strong><br />
+                                <span class="text-muted" style="font-size:.82rem;">
+                                    Una vez confirmado el pago, coordiná la entrega por WhatsApp:
+                                </span>
+                                <div class="mt-1">
+                                    <a href="https://wa.me/@_waNum" target="_blank" rel="noopener noreferrer"
+                                       class="btn btn-sm fw-semibold px-3"
+                                       style="background:#25D366;color:#fff;border:none;">
+                                        <i class="bi bi-whatsapp me-1"></i>@Model.TelefonoWhatsApp
+                                    </a>
+                                </div>
                             </div>
                         </div>
                     }

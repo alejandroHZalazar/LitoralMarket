@@ -19,6 +19,8 @@ public class PedidoResumenPageModel : PageModel
     public PedidoResumenDto? Resumen           { get; private set; }
     public bool              EmailEnviado      { get; private set; }
     public bool              EsModoCredenciales{ get; private set; }
+    /// <summary>Teléfono de contacto para coordinación de entrega por WhatsApp (null si no configurado).</summary>
+    public string?           TelefonoWhatsApp  { get; private set; }
 
     public async Task<IActionResult> OnGetAsync(int id)
     {
@@ -50,6 +52,10 @@ public class PedidoResumenPageModel : PageModel
 
         // Viene desde el flujo de reembolso si Pago.cshtml.cs lo guardó en TempData
         EmailEnviado = TempData["EmailEnviado"] is bool b && b;
+
+        // Teléfono de contacto para coordinación de entrega (solo para clientes, no admin)
+        if (!User.IsInRole("admin"))
+            TelefonoWhatsApp = await _params.GetValorAsync("empresa", "telefono");
 
         return Page();
     }

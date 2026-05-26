@@ -2,6 +2,12 @@ using System.ComponentModel.DataAnnotations;
 
 namespace LitoralMarket.Application.DTOs;
 
+/// <summary>Ítem para ingreso masivo de stock.</summary>
+/// <param name="ProductoId">Id del producto.</param>
+/// <param name="Cantidad">Unidades a ingresar (entero positivo).</param>
+/// <param name="Observacion">Descripción opcional del movimiento.</param>
+public record IngresoItemRequest(int ProductoId, int Cantidad, string? Observacion = null);
+
 public class ProductoAdminDto
 {
     public int     Id              { get; set; }

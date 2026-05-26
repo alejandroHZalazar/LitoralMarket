@@ -179,14 +179,6 @@
 
                             <!-- Precios -->
                             <div class="admin-section-title">Precios</div>
-                            <div class="row g-2 mb-2">
-                                <div class="col-6">
-                                    <label class="form-label form-label-sm">IVA (%)</label>
-                                    <input asp-for="Producto.Iva" id="inpIva"
-                                           class="form-control form-control-sm" type="number"
-                                           step="0.01" min="0" />
-                                </div>
-                            </div>
                             <div class="mb-2">
                                 <label class="form-label form-label-sm">Precio proveedor</label>
                                 <div class="input-group input-group-sm">
@@ -403,7 +395,6 @@ async function abrirModalEditar(id) {
     document.querySelector('[name="Producto.CodBarras"]').value        = p.codBarras       ?? '';
     document.querySelector('[name="Producto.FkRubro"]').value          = p.fkRubro         ?? '';
     document.querySelector('[name="Producto.FkProveedor"]').value      = p.fkProveedor     ?? '';
-    document.querySelector('[name="Producto.Iva"]').value              = p.iva             ?? 0;
     document.getElementById('inpPrecioProveedor').value                = p.precioProveedor ?? 0;
     document.getElementById('inpPrecioCosto').value                    = p.precioCosto     ?? 0;
     document.getElementById('inpPrecioLista').value                    = p.precioLista     ?? 0;

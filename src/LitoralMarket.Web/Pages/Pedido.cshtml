@@ -1,6 +1,7 @@
 @page "{id:int}"
 @model PedidoResumenPageModel
 @using System.Globalization
+@using LitoralMarket.Application.Helpers
 @{
     ViewData["Title"] = $"Pedido #{Model.Resumen?.Id}";
     var r   = Model.Resumen;
@@ -51,6 +52,29 @@ else
             <div>
                 <strong>Te enviamos un email</strong> con los datos del pedido y el comprobante.<br />
                 Si no lo ves en tu bandeja de entrada, <strong>revisá la carpeta de spam o correo no deseado</strong>.
+            </div>
+        </div>
+    }
+
+    @if (!cred && !string.IsNullOrWhiteSpace(Model.TelefonoWhatsApp))
+    {
+        var _waNumero = PhoneHelper.NormalizarParaWhatsApp(Model.TelefonoWhatsApp);
+        <div class="alert d-flex align-items-start gap-3 mb-4 border-0 shadow-sm"
+             style="background:#f0fdf4;border-left:4px solid #25D366 !important;">
+            <i class="bi bi-whatsapp flex-shrink-0 mt-1" style="font-size:1.6rem;color:#25D366;"></i>
+            <div>
+                <strong>📦 Coordinación de entrega</strong><br />
+                <span class="text-muted small">
+                    Para coordinar el horario de entrega de tu pedido, comunicate por WhatsApp:
+                </span>
+                <div class="mt-2">
+                    <a href="https://wa.me/@_waNumero" target="_blank" rel="noopener noreferrer"
+                       class="btn btn-sm fw-semibold px-3"
+                       style="background:#25D366;color:#fff;border:none;">
+                        <i class="bi bi-whatsapp me-1"></i>@Model.TelefonoWhatsApp
+                    </a>
+                    <span class="ms-2 text-muted small">Nuestro equipo te ayudará a definir el horario.</span>
+                </div>
             </div>
         </div>
     }

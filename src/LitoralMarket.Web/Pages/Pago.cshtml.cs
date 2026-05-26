@@ -9,22 +9,26 @@ public class PagoPageModel : PageModel
 {
     private readonly IPagoEcommerceService _pagos;
     private readonly IPedidoService        _pedidos;
+    private readonly IParametrosService    _params;
 
-    public PagoPageModel(IPagoEcommerceService pagos, IPedidoService pedidos)
+    public PagoPageModel(IPagoEcommerceService pagos, IPedidoService pedidos, IParametrosService parametros)
     {
         _pagos   = pagos;
         _pedidos = pedidos;
+        _params  = parametros;
     }
 
     [BindProperty(SupportsGet = true)]
     public int Id { get; set; }
 
-    public PedidoResumenDto? Pedido              { get; private set; }
-    public ResultadoPagoDto? Resultado           { get; private set; }
-    public bool              MetodoReembolso     { get; private set; }
-    public bool              MetodoMercadoPago   { get; private set; }
-    public bool              PagoYaProcesado     { get; private set; }
+    public PedidoResumenDto?  Pedido             { get; private set; }
+    public ResultadoPagoDto?  Resultado          { get; private set; }
+    public bool               MetodoReembolso    { get; private set; }
+    public bool               MetodoMercadoPago  { get; private set; }
+    public bool               PagoYaProcesado    { get; private set; }
     public CobroEcommerceDto? CobroExistente     { get; private set; }
+    /// <summary>Teléfono normalizado para link wa.me (null si no configurado).</summary>
+    public string?            TelefonoWhatsApp   { get; private set; }
 
     [BindProperty]
     public SeleccionPagoDto Seleccion { get; set; } = new();
@@ -65,6 +69,7 @@ public class PagoPageModel : PageModel
         }
 
         (MetodoReembolso, MetodoMercadoPago) = await _pagos.ObtenerMetodosHabilitadosAsync();
+        TelefonoWhatsApp = await _params.GetValorAsync("empresa", "telefono");
         Seleccion.PedidoId = Id;
 
         return Page();
@@ -76,6 +81,7 @@ public class PagoPageModel : PageModel
         {
             Pedido = await _pedidos.ObtenerResumenAsync(Id);
             (MetodoReembolso, MetodoMercadoPago) = await _pagos.ObtenerMetodosHabilitadosAsync();
+            TelefonoWhatsApp = await _params.GetValorAsync("empresa", "telefono");
             Seleccion.PedidoId = Id;
             return Page();
         }
@@ -122,6 +128,7 @@ public class PagoPageModel : PageModel
         PagoYaProcesado   = true;
         Pedido            = await _pedidos.ObtenerResumenAsync(pedidoId);
         (MetodoReembolso, MetodoMercadoPago) = await _pagos.ObtenerMetodosHabilitadosAsync();
+        TelefonoWhatsApp = await _params.GetValorAsync("empresa", "telefono");
         Seleccion.PedidoId = pedidoId;
         return Page();
     }

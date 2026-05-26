@@ -17,4 +17,16 @@ public interface IProductoAdminService
 
     /// <summary>Baja lógica (Baja = true).</summary>
     Task BajaLogicaAsync(int id);
+
+    /// <summary>
+    /// Incrementa el stock del producto y registra un movimiento de ingreso (TipoMovimiento = 1).
+    /// Devuelve el stock resultante.
+    /// </summary>
+    Task<decimal> IngresoStockAsync(int productoId, decimal cantidad, string? observacion);
+
+    /// <summary>
+    /// Ingreso masivo de stock: actualiza varios productos en una única transacción.
+    /// Lanza <see cref="InvalidOperationException"/> si algún producto no existe o la cantidad es inválida.
+    /// </summary>
+    Task IngresoStockMasivoAsync(IEnumerable<IngresoItemRequest> items);
 }

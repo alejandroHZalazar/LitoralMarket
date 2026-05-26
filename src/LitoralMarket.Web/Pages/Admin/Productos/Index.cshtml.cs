@@ -96,7 +96,6 @@ public class IndexModel : PageModel
   <div class=""row g-1 small"">
     <div class=""col-6""><span class=""text-muted"">Cód. Prov.:</span> <strong>{System.Net.WebUtility.HtmlEncode(p.CodProveedor ?? "-")}</strong></div>
     <div class=""col-6""><span class=""text-muted"">Cód. Barras:</span> <strong>{System.Net.WebUtility.HtmlEncode(p.CodBarras ?? "-")}</strong></div>
-    <div class=""col-6""><span class=""text-muted"">IVA:</span> <strong>{p.Iva:N1}%</strong></div>
     <div class=""col-6""><span class=""text-muted"">Dolarizado:</span> <strong>{(p.Dolarizado ? "Sí" : "No")}</strong></div>
   </div>
   <hr class=""my-2""/>
@@ -189,9 +188,11 @@ public class IndexModel : PageModel
         Producto.PrecioProveedor = Parse(Request.Form["Producto.PrecioProveedor"]);
         Producto.PrecioCosto     = Parse(Request.Form["Producto.PrecioCosto"]);
         Producto.PrecioLista     = Parse(Request.Form["Producto.PrecioLista"]);
-        Producto.Iva             = Parse(Request.Form["Producto.Iva"]);
         Producto.StockActual     = Parse(Request.Form["Producto.StockActual"]);
         Producto.StockMinimo     = Parse(Request.Form["Producto.StockMinimo"]);
+
+        // IVA siempre fijo en 1 — no se expone en la interfaz
+        Producto.Iva = 1;
 
         ModelState.Remove(nameof(Producto) + "." + nameof(Producto.PrecioProveedor));
         ModelState.Remove(nameof(Producto) + "." + nameof(Producto.PrecioCosto));
