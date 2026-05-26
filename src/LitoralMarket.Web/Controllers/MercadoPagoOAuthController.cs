@@ -7,18 +7,18 @@ namespace LitoralMarket.Web.Controllers;
 /// <summary>
 /// Maneja el flujo OAuth de MercadoPago:
 ///
-///   GET /mp/connect   → genera state, guarda en sesión y redirige a MP
-///   GET /mp/callback  → recibe code, valida state, intercambia tokens, persiste
+///   GET /mp/connect   → genera state, guarda en cookie firmada y redirige a MP
+///   GET /mp/callback  → recibe code, valida state desde cookie, intercambia tokens
 ///
-/// Solo accesible por admins autenticados.
-/// El state anti-CSRF se almacena en sesión y se verifica en el callback.
+/// /connect requiere admin. /callback es AllowAnonymous porque el browser viene
+/// desde MP (cross-site) y la cookie de auth puede no enviarse — el state firmado
+/// en la cookie HttpOnly anti-CSRF es la garantía de seguridad.
 /// </summary>
-[Authorize(Roles = "admin")]
 [Route("mp")]
 public class MercadoPagoOAuthController : Controller
 {
-    private const string AdminPage   = "/Admin/Configuracion/MercadoPago";
-    private const string SessionKey  = "mp_oauth_state";
+    private const string AdminPage  = "/Admin/Configuracion/MercadoPago";
+    private const string CookieKey  = "mp_oauth_state";
 
     private readonly IMercadoPagoOAuthService    _oauth;
     private readonly IConfiguration              _config;
@@ -40,6 +40,7 @@ public class MercadoPagoOAuthController : Controller
     /// formulario de autorización de MercadoPago.
     /// </summary>
     [HttpGet("connect")]
+    [Authorize(Roles = "admin")]
     public async Task<IActionResult> Connect()
     {
         var info = await _oauth.GetConnectionInfoAsync();
@@ -52,15 +53,25 @@ public class MercadoPagoOAuthController : Controller
             return Redirect(AdminPage);
         }
 
-        // Generar state anti-CSRF y persistirlo en sesión
+        // Generar state anti-CSRF y guardarlo en cookie HttpOnly firmada.
+        // SameSite=Lax permite que la cookie viaje en el redirect GET desde MP.
         var state = Guid.NewGuid().ToString("N");
-        HttpContext.Session.SetString(SessionKey, state);
+        Response.Cookies.Append(CookieKey, state, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure   = true,
+            SameSite = SameSiteMode.Lax,
+            Expires  = DateTimeOffset.UtcNow.AddMinutes(15),
+            IsEssential = true,
+            Path     = "/"
+        });
 
         var redirectUri = BuildRedirectUri();
         var oauthUrl    = await _oauth.BuildOAuthUrlAsync(state, redirectUri);
 
         _logger.LogInformation(
-            "MP OAuth Connect: redirigiendo a MP — redirectUri={Uri}", redirectUri);
+            "MP OAuth Connect: redirigiendo a MP — redirectUri={Uri} state={State}",
+            redirectUri, state);
 
         return Redirect(oauthUrl);
     }
@@ -71,12 +82,17 @@ public class MercadoPagoOAuthController : Controller
     /// Valida el state, intercambia el code por tokens y persiste en BD.
     /// </summary>
     [HttpGet("callback")]
+    [AllowAnonymous]
     public async Task<IActionResult> Callback(
         [FromQuery] string? code,
         [FromQuery] string? state,
         [FromQuery] string? error,
         [FromQuery] string? error_description)
     {
+        _logger.LogInformation(
+            "MP OAuth Callback: recibido — codePresent={HasCode} state={State} error={Err}",
+            !string.IsNullOrEmpty(code), state, error);
+
         // ── 1. Error explícito de MP ────────────────────────────────────────
         if (!string.IsNullOrEmpty(error))
         {
@@ -86,29 +102,29 @@ public class MercadoPagoOAuthController : Controller
             return Redirect(AdminPage);
         }
 
-        // ── 2. Validar state anti-CSRF ──────────────────────────────────────
-        var sessionState = HttpContext.Session.GetString(SessionKey);
+        // ── 2. Validar state anti-CSRF (desde cookie firmada) ───────────────
+        Request.Cookies.TryGetValue(CookieKey, out var cookieState);
 
-        if (string.IsNullOrEmpty(sessionState))
+        if (string.IsNullOrEmpty(cookieState))
         {
-            _logger.LogWarning("MP OAuth Callback: sesión sin state — posible expiración o CSRF.");
+            _logger.LogWarning("MP OAuth Callback: cookie sin state — posible expiración o CSRF.");
             TempData["Error"] =
                 "La sesión OAuth expiró o es inválida. Hacé clic en \"Conectar\" nuevamente.";
             return Redirect(AdminPage);
         }
 
-        if (state != sessionState)
+        if (state != cookieState)
         {
             _logger.LogWarning(
-                "MP OAuth Callback: state no coincide — session={Sess} received={Recv}",
-                sessionState, state);
+                "MP OAuth Callback: state no coincide — cookie={Cookie} received={Recv}",
+                cookieState, state);
             TempData["Error"] =
                 "Error de seguridad: el estado de la solicitud no coincide. Iniciá el proceso nuevamente.";
             return Redirect(AdminPage);
         }
 
-        // Limpiar el state de sesión (one-time use)
-        HttpContext.Session.Remove(SessionKey);
+        // Limpiar la cookie (one-time use)
+        Response.Cookies.Delete(CookieKey);
 
         // ── 3. Validar code ─────────────────────────────────────────────────
         if (string.IsNullOrWhiteSpace(code))
