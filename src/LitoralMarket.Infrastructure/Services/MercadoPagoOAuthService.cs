@@ -74,13 +74,13 @@ public class MercadoPagoOAuthService : IMercadoPagoOAuthService
     {
         _logger.LogInformation("MP OAuth: exchange authorization_code para redirectUri={Uri}", redirectUri);
 
-        return await PostTokenAsync(new
+        return await PostTokenAsync(new Dictionary<string, string>
         {
-            client_id     = ClientId,
-            client_secret = ClientSecret,
-            grant_type    = "authorization_code",
-            code,
-            redirect_uri  = redirectUri
+            ["client_id"]     = ClientId,
+            ["client_secret"] = ClientSecret,
+            ["grant_type"]    = "authorization_code",
+            ["code"]          = code,
+            ["redirect_uri"]  = redirectUri
         });
     }
 
@@ -96,12 +96,12 @@ public class MercadoPagoOAuthService : IMercadoPagoOAuthService
 
         _logger.LogInformation("MP OAuth: intentando refresh_token.");
 
-        return await PostTokenAsync(new
+        return await PostTokenAsync(new Dictionary<string, string>
         {
-            client_id     = ClientId,
-            client_secret = ClientSecret,
-            grant_type    = "refresh_token",
-            refresh_token = refreshToken
+            ["client_id"]     = ClientId,
+            ["client_secret"] = ClientSecret,
+            ["grant_type"]    = "refresh_token",
+            ["refresh_token"] = refreshToken
         });
     }
 
@@ -198,25 +198,25 @@ public class MercadoPagoOAuthService : IMercadoPagoOAuthService
     }
 
     // ── POST al endpoint de tokens MP ─────────────────────────────────────────
-    private async Task<bool> PostTokenAsync(object payload)
+    private async Task<bool> PostTokenAsync(Dictionary<string, string> payload)
     {
         try
         {
             var http    = _http.CreateClient("MercadoPago");
-            var json    = JsonSerializer.Serialize(payload,
-                new JsonSerializerOptions { WriteIndented = false });
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var content = new FormUrlEncodedContent(payload);
 
-            var resp = await http.PostAsync(UrlToken, content);
+            var req = new HttpRequestMessage(HttpMethod.Post, UrlToken) { Content = content };
+            req.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+
+            var resp = await http.SendAsync(req);
             var body = await resp.Content.ReadAsStringAsync();
 
             if (!resp.IsSuccessStatusCode)
             {
-                // No loggear body completo (puede contener info sensible)
+                // El body de error de MP no trae secretos — viene tipo {"error":"invalid_grant", ...}
                 _logger.LogError(
-                    "MP OAuth: error HTTP {Code} en POST oauth/token. " +
-                    "Verificá client_id / client_secret y redirect_uri.",
-                    (int)resp.StatusCode);
+                    "MP OAuth: error HTTP {Code} en POST oauth/token — body={Body}",
+                    (int)resp.StatusCode, body);
                 return false;
             }
 
