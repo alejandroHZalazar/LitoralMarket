@@ -42,7 +42,10 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.ExpireTimeSpan = TimeSpan.FromHours(8);
         options.SlidingExpiration = true;
         options.Cookie.HttpOnly = true;
-        options.Cookie.SameSite = SameSiteMode.Strict;
+        // Lax (no Strict): Strict en Safari iOS + ITP rompe POSTs de login y callbacks
+        // cross-site (ej. retorno desde MercadoPago OAuth). Lax sigue siendo seguro
+        // contra CSRF en POSTs cross-site — solo permite la cookie en navegaciones GET top-level.
+        options.Cookie.SameSite = SameSiteMode.Lax;
         // SameAsRequest: en HTTPS marca Secure, en HTTP no. Esto evita que en
         // Railway (que reenvía HTTP al contenedor) las cookies queden bloqueadas.
         // Con ForwardedHeaders activo, Request.IsHttps refleja correctamente el TLS del edge.
@@ -69,8 +72,23 @@ builder.Services.AddSession(options =>
 {
     options.IdleTimeout = TimeSpan.FromHours(2);
     options.Cookie.HttpOnly = true;
-    options.Cookie.SameSite = SameSiteMode.Strict;
+    options.Cookie.SameSite = SameSiteMode.Lax;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+    options.Cookie.IsEssential = true;
     options.Cookie.Name = "litoral_session";
+});
+
+// Antiforgery — config explícita (sino hereda defaults con SameSite=Strict
+// que rompe POST de formularios en Safari iOS con ITP, generando 400 sin body
+// que el browser interpreta como "descargar archivo Login").
+builder.Services.AddAntiforgery(options =>
+{
+    options.Cookie.Name        = "litoral_csrf";
+    options.Cookie.HttpOnly    = true;
+    options.Cookie.SameSite    = SameSiteMode.Lax;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+    options.Cookie.IsEssential = true;
+    options.HeaderName         = "X-XSRF-TOKEN";
 });
 
 // Cache en memoria
@@ -140,6 +158,19 @@ if (app.Environment.IsDevelopment())
 app.UseStaticFiles();
 
 app.UseMiddleware<SecurityHeadersMiddleware>();
+
+// Si una respuesta 400/500 quedara sin Content-Type (caso típico: antiforgery
+// fallido en Safari iOS), forzar text/html para que el browser no la trate
+// como descarga de archivo con el último segmento de la URL como nombre.
+app.Use(async (ctx, next) =>
+{
+    await next();
+    if (ctx.Response.StatusCode >= 400
+        && string.IsNullOrEmpty(ctx.Response.ContentType))
+    {
+        ctx.Response.ContentType = "text/html; charset=utf-8";
+    }
+});
 
 app.UseRouting();
 app.UseRateLimiter();
