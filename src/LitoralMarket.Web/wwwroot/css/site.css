@@ -60,6 +60,11 @@ body {
   box-shadow: var(--sombra);
   border-bottom: 2.5px solid var(--dorado);
   padding: 0;
+  /* Stacking context propio + capa por encima de Bootstrap .sticky-top (1020).
+     Sin esto, los <thead class="sticky-top"> de las grillas (ej. IngresoStock)
+     quedan por encima del menú admin y lo tapan al abrir el dropdown. */
+  position: relative;
+  z-index: 1030;
 }
 
 /* ------- FILA 1: brand + buscador + acciones ------- */
@@ -391,6 +396,10 @@ body {
   margin-top: 10px;
   border-top: 3px solid var(--dorado);
   overflow: hidden;
+  /* Por encima de cualquier sticky-top (1020) y fixed-top (1030) — el menú
+     admin SIEMPRE debe estar visible al desplegarse, incluso sobre grillas
+     con headers sticky o paneles flotantes de la página. */
+  z-index: 1035;
 }
 .navbar-lm .dropdown-item {
   font-size: 0.875rem;
