@@ -197,6 +197,7 @@ public class PagoEstadoController : ControllerBase
             var root = doc.RootElement;
 
             if (!root.TryGetProperty("elements", out var elements)
+                || elements.ValueKind != JsonValueKind.Array
                 || elements.GetArrayLength() == 0)
                 return new DeteccionPago("pendiente", string.Empty);
 
