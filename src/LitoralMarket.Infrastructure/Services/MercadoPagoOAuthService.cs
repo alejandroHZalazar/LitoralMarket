@@ -301,32 +301,57 @@ public class MercadoPagoOAuthService : IMercadoPagoOAuthService
         }
         catch (Exception ex)
         {
-            // Cualquier otro error — loggear tipo + mensaje + primera línea del stack
+            // Loggear tipo + mensaje + inner exception (ej: MySqlException con el error real de BD)
+            var inner = ex.InnerException;
             var stack = ex.StackTrace?.Split('\n').FirstOrDefault()?.Trim() ?? "n/a";
             _logger.LogError(
-                "MP OAuth: excepción inesperada en PostTokenAsync — {ExType}: {ExMsg} | stack0={Stack}",
-                ex.GetType().Name, ex.Message, stack);
+                "MP OAuth: excepción en PostTokenAsync — {ExType}: {ExMsg} | " +
+                "inner={InnerType}: {InnerMsg} | stack0={Stack}",
+                ex.GetType().Name, ex.Message,
+                inner?.GetType().Name ?? "none", inner?.Message ?? "—",
+                stack);
             return false;
         }
     }
 
-    // ── Upsert parametro ──────────────────────────────────────────────────────
+    // ── Upsert parametro ─────────────────────────────────────────────────────
+    // Usa SQL nativo para evitar problemas con columnas NOT NULL no mapeadas
+    // en la tabla `parametros` del sistema GUGA. Primero intenta UPDATE; si no
+    // existe la fila, hace INSERT solo con las columnas que conocemos.
     private async Task UpsertAsync(string nombre, string valor)
     {
-        var existing = await _db.Parametros
-            .FirstOrDefaultAsync(p => p.Modulo == Modulo && p.ParametroNombre == nombre);
+        // UPDATE primero (caso normal: fila ya existe)
+        var rowsUpdated = await _db.Database.ExecuteSqlRawAsync(
+            "UPDATE parametros SET valor = {0} WHERE modulo = {1} AND parametro = {2}",
+            valor, Modulo, nombre);
 
-        if (existing is null)
-            _db.Parametros.Add(new Parametro
+        if (rowsUpdated == 0)
+        {
+            // Fila no existe → INSERT. Si la tabla tiene columnas NOT NULL adicionales
+            // sin default, esto fallará e indicará cuáles faltan en el log de abajo.
+            try
             {
-                Modulo          = Modulo,
-                ParametroNombre = nombre,
-                Valor           = valor
-            });
-        else
-            existing.Valor = valor;
+                await _db.Database.ExecuteSqlRawAsync(
+                    "INSERT INTO parametros (modulo, parametro, valor) VALUES ({0}, {1}, {2})",
+                    Modulo, nombre, valor);
 
-        await _db.SaveChangesAsync();
+                _logger.LogInformation(
+                    "MP OAuth: fila nueva creada en parametros — {Mod}/{Nom}", Modulo, nombre);
+            }
+            catch (Exception insertEx)
+            {
+                // Loggear el error MySQL real (inner exception) para diagnóstico
+                var inner = insertEx.InnerException;
+                _logger.LogError(
+                    "MP OAuth: no se pudo insertar parametros({Mod}/{Nom}) — " +
+                    "{ExType}: {ExMsg} | inner={InnerType}: {InnerMsg}",
+                    Modulo, nombre,
+                    insertEx.GetType().Name, insertEx.Message,
+                    inner?.GetType().Name ?? "none", inner?.Message ?? "—");
+                throw; // re-lanzar para que PostTokenAsync lo capture
+            }
+        }
+
         InvalidarCache(nombre);
     }
 
