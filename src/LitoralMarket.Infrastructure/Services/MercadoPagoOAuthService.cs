@@ -203,6 +203,23 @@ public class MercadoPagoOAuthService : IMercadoPagoOAuthService
     // ── POST al endpoint de tokens MP ─────────────────────────────────────────
     private async Task<bool> PostTokenAsync(Dictionary<string, string> payload)
     {
+        // Log pre-request: confirma qué campos se envían (sin valores sensibles)
+        var grantType = payload.TryGetValue("grant_type", out var gt) ? gt : "?";
+        var hasClientId     = !string.IsNullOrEmpty(ClientId);
+        var hasClientSecret = !string.IsNullOrEmpty(ClientSecret);
+        _logger.LogInformation(
+            "MP OAuth: POST oauth/token — grant={Grant} hasClientId={HasId} hasSecret={HasSec} url={Url}",
+            grantType, hasClientId, hasClientSecret, UrlToken);
+
+        if (!hasClientId || !hasClientSecret)
+        {
+            _logger.LogError(
+                "MP OAuth: credenciales de app vacías — ClientId={HasId} ClientSecret={HasSec}. " +
+                "Verificá las variables de entorno MercadoPagoOAuth__ClientId y MercadoPagoOAuth__ClientSecret.",
+                hasClientId, hasClientSecret);
+            return false;
+        }
+
         try
         {
             var http    = _http.CreateClient("MercadoPago");
@@ -211,8 +228,14 @@ public class MercadoPagoOAuthService : IMercadoPagoOAuthService
             var req = new HttpRequestMessage(HttpMethod.Post, UrlToken) { Content = content };
             req.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
 
+            _logger.LogInformation("MP OAuth: enviando request a {Url}…", UrlToken);
+
             var resp = await http.SendAsync(req);
             var body = await resp.Content.ReadAsStringAsync();
+
+            _logger.LogInformation(
+                "MP OAuth: respuesta recibida — HTTP {Code} bodyLen={Len}",
+                (int)resp.StatusCode, body.Length);
 
             if (!resp.IsSuccessStatusCode)
             {
@@ -235,7 +258,7 @@ public class MercadoPagoOAuthService : IMercadoPagoOAuthService
 
             if (string.IsNullOrWhiteSpace(accessToken))
             {
-                _logger.LogError("MP OAuth: la respuesta no contiene access_token.");
+                _logger.LogError("MP OAuth: la respuesta no contiene access_token. body={Body}", body);
                 return false;
             }
 
@@ -258,9 +281,31 @@ public class MercadoPagoOAuthService : IMercadoPagoOAuthService
 
             return true;
         }
+        catch (TaskCanceledException ex)
+        {
+            // Timeout del HttpClient (30s configurados en Program.cs)
+            _logger.LogError(
+                "MP OAuth: TIMEOUT al conectar con {Url} — {ExType}: {ExMsg}. " +
+                "Aumentá el timeout del HttpClient 'MercadoPago' en Program.cs.",
+                UrlToken, ex.GetType().Name, ex.Message);
+            return false;
+        }
+        catch (HttpRequestException ex)
+        {
+            // Error de red: DNS, SSL, conexión rechazada
+            _logger.LogError(
+                "MP OAuth: ERROR DE RED conectando a {Url} — {ExType}: {ExMsg} | StatusCode={Status}. " +
+                "Verificá conectividad de Railway hacia api.mercadopago.com.",
+                UrlToken, ex.GetType().Name, ex.Message, ex.StatusCode);
+            return false;
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "MP OAuth: excepción inesperada en PostTokenAsync.");
+            // Cualquier otro error — loggear tipo + mensaje + primera línea del stack
+            var stack = ex.StackTrace?.Split('\n').FirstOrDefault()?.Trim() ?? "n/a";
+            _logger.LogError(
+                "MP OAuth: excepción inesperada en PostTokenAsync — {ExType}: {ExMsg} | stack0={Stack}",
+                ex.GetType().Name, ex.Message, stack);
             return false;
         }
     }

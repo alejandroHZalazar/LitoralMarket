@@ -124,9 +124,12 @@ builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IMercadoPagoOAuthService, MercadoPagoOAuthService>();
 
 // HttpClient para MercadoPago
+// Timeout 60s: el endpoint oauth/token puede tardar en Railway por cold-start del container
+// o latencia hacia los servidores de MP en Brasil.
 builder.Services.AddHttpClient("MercadoPago", c =>
 {
-    c.Timeout = TimeSpan.FromSeconds(30);
+    c.Timeout = TimeSpan.FromSeconds(60);
+    c.DefaultRequestHeaders.Add("User-Agent", "LitoralMarket/1.0 (.NET 8)");
 });
 
 // Poller de pagos MercadoPago (background service)
