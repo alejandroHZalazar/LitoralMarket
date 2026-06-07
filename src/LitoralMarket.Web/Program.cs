@@ -132,8 +132,10 @@ builder.Services.AddHttpClient("MercadoPago", c =>
     c.DefaultRequestHeaders.Add("User-Agent", "LitoralMarket/1.0 (.NET 8)");
 });
 
-// Poller de pagos MercadoPago (background service)
-builder.Services.AddHostedService<LitoralMarket.Infrastructure.Services.MercadoPagoPollerService>();
+// Poller de pagos MercadoPago — DESHABILITADO: reemplazado por webhooks
+// Los webhooks se reciben en POST /api/mp-webhook (MpWebhookController).
+// Para reactivar el poller como backup, descomentar la línea de abajo.
+// builder.Services.AddHostedService<LitoralMarket.Infrastructure.Services.MercadoPagoPollerService>();
 
 // HttpContextAccessor para acceder al context en servicios
 builder.Services.AddHttpContextAccessor();
