@@ -206,7 +206,10 @@ public class PagoEcommerceService : IPagoEcommerceService
                 pending = $"{urlBase}/pago-resultado?pedidoId={pedidoId}&resultado=pendiente"
             },
             auto_return      = "approved",
-            notification_url = $"{urlBase}/api/mp-webhook"
+            notification_url = $"{urlBase}/api/mp-webhook",
+            // Forzar modo estándar (no marketplace) para que funcione con tokens OAuth
+            // en sandbox sin requerir aprobación extra de marketplace por parte de MP.
+            marketplace      = "NONE"
         };
 
         // Llamar API de MercadoPago
