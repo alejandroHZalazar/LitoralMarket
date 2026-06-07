@@ -235,14 +235,7 @@ public class PagoEcommerceService : IPagoEcommerceService
             using var doc = JsonDocument.Parse(responseBody);
             var root = doc.RootElement;
             mpPreferenceId = root.GetProperty("id").GetString() ?? string.Empty;
-
-            // En cuentas de prueba MP devuelve sandbox_init_point.
-            // En producción solo existe init_point. Usamos sandbox si está disponible.
-            var sandboxPoint = root.TryGetProperty("sandbox_init_point", out var sbp)
-                ? sbp.GetString() : null;
-            mpInitPoint = (!string.IsNullOrWhiteSpace(sandboxPoint)
-                ? sandboxPoint
-                : root.GetProperty("init_point").GetString()) ?? string.Empty;
+            mpInitPoint    = root.GetProperty("init_point").GetString() ?? string.Empty;
         }
         catch (Exception ex)
         {

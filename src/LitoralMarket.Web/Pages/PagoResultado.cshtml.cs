@@ -1,6 +1,7 @@
 using LitoralMarket.Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Logging;
 
 namespace LitoralMarket.Web.Pages;
 
@@ -26,9 +27,22 @@ public class PagoResultadoModel : PageModel
         // Si fue aprobado y el pedido ya está confirmado (webhook ya procesó), ir al resumen
         if (Aprobado)
         {
-            var pedido = await _pedidos.ObtenerResumenAsync(pedidoId);
-            if (pedido?.Estado == "confirmado")
-                return RedirectToPage("/Pedido", new { id = pedidoId });
+            try
+            {
+                var pedido = await _pedidos.ObtenerResumenAsync(pedidoId);
+                if (pedido?.Estado == "confirmado")
+                    return RedirectToPage("/Pedido", new { id = pedidoId });
+            }
+            catch (Exception ex)
+            {
+                // Si falla la consulta del pedido, mostrar la página de resultado igual
+                // El poller de MP va a confirmar el pedido en el siguiente ciclo
+                var logger = HttpContext.RequestServices
+                    .GetRequiredService<ILogger<PagoResultadoModel>>();
+                logger.LogError(ex,
+                    "PagoResultado: error consultando pedido {PedidoId} — mostrando página igual",
+                    pedidoId);
+            }
         }
 
         return Page();
