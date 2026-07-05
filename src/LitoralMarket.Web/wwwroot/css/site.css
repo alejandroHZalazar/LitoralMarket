@@ -1,24 +1,13 @@
 /* =============================================
    VARIABLES — Paleta LitoralMarket
-   Verde RGB(29,176,98) | Celeste RGB(148,201,233)
-   Blanco | Dorado
+   Todas las variables de color se definen en
+   cada bloque de tema (data-theme="X").
    ============================================= */
 :root {
-  --verde:           #1DB062;          /* RGB(29, 176, 98)  */
-  --verde-oscuro:    #157847;          /* más oscuro para fondos */
-  --verde-profundo:  #0D5C35;          /* navbar, contraste alto  */
-  --verde-hover:     #199C57;
-  --celeste:         #94C9E9;          /* RGB(148, 201, 233) */
-  --celeste-oscuro:  #5AADD4;
-  --celeste-suave:   rgba(148,201,233,0.18);
-  --dorado:          #C9A84C;
-  --dorado-claro:    #E8C87A;
-  --dorado-suave:    rgba(201,168,76,0.18);
-  --blanco:          #ffffff;
-  --crema:           #F6FAF7;
-  --gris-texto:      #374151;
-  --sombra:          0 6px 24px rgba(0,0,0,0.14);
-  --sombra-suave:    0 2px 10px rgba(0,0,0,0.07);
+  /* Fallback absoluto — blanco puro para texto sobre fondos de color
+     cuando ningún tema está activo (no debería ocurrir con el servidor
+     configurado para emitir data-theme="light" por defecto).          */
+  --blanco: #ffffff;
 }
 
 /* =============================================
@@ -164,7 +153,7 @@ body {
   padding: 0.5rem 1.1rem;
   transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
 }
-.search-form .form-control::placeholder { color: #9aa0a6; }
+.search-form .form-control::placeholder { color: var(--text-placeholder); }
 .search-form .form-control:focus {
   background: var(--blanco);
   border-color: var(--dorado);
@@ -203,7 +192,8 @@ body {
 }
 
 /* Botón Carrito (más sobrio) */
-.btn-carrito {
+.btn-carrito,
+.btn-tema {
   position: relative;
   background: rgba(255,255,255,0.1);
   border: 1.5px solid rgba(255,255,255,0.3);
@@ -218,7 +208,8 @@ body {
   white-space: nowrap;
   transition: background 0.2s, border-color 0.2s;
 }
-.btn-carrito:hover {
+.btn-carrito:hover,
+.btn-tema:hover {
   background: rgba(148,201,233,0.18);
   border-color: var(--celeste);
   color: var(--blanco) !important;
@@ -239,6 +230,16 @@ body {
   justify-content: center;
   border: 2px solid var(--verde-profundo);
   box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+}
+/* Pulso al actualizar el contador del carrito */
+.badge-carrito--pop { animation: badge-pop 0.4s ease; }
+@keyframes badge-pop {
+  0%   { transform: scale(0.5); }
+  60%  { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .badge-carrito--pop { animation: none; }
 }
 
 /* Botón "Mis pedidos" / "Ingresar" / Usuario */
@@ -419,7 +420,7 @@ body {
    FOOTER compacto (mismo lenguaje visual que el navbar)
    ============================================= */
 footer.footer-lm {
-  background: linear-gradient(170deg, var(--verde-profundo) 0%, #0a3d22 100%);
+  background: linear-gradient(170deg, var(--verde-profundo) 0%, color-mix(in srgb, var(--verde-profundo) 60%, black) 100%);
   color: rgba(255,255,255,0.75);
   margin-top: 3rem;
   border-top: 2.5px solid var(--dorado);
@@ -546,7 +547,7 @@ footer.footer-lm {
    MODAL ACERCA DE LITORALSYS
    ============================================= */
 .modal-acerca-de {
-  background: linear-gradient(170deg, var(--verde-profundo) 0%, #0c4727 60%, #081f12 100%);
+  background: linear-gradient(170deg, var(--verde-profundo) 0%, color-mix(in srgb, var(--verde-profundo) 70%, black) 60%, color-mix(in srgb, var(--verde-profundo) 40%, black) 100%);
   border: none;
   border-radius: 18px;
   border-top: 4px solid var(--dorado);
@@ -668,7 +669,7 @@ footer.footer-lm {
   width: 100%;
   object-fit: contain;
   padding: 10px;
-  background: #fafafa;
+  background: var(--bg-subtle);
   transition: transform 0.3s;
 }
 .producto-card:hover .producto-img { transform: scale(1.04); }
@@ -678,8 +679,8 @@ footer.footer-lm {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f3f4f6;
-  color: #bbb;
+  background: var(--bg-subtle);
+  color: var(--text-placeholder);
   font-size: 3rem;
 }
 
@@ -783,6 +784,22 @@ footer.footer-lm {
   width: 100%;
 }
 .btn-agregar:hover { filter: brightness(1.1); }
+/* Press táctil — respuesta instantánea al tocar */
+.btn-agregar:active { transform: scale(0.97); }
+/* Estado de éxito optimista (feedback inmediato al agregar) */
+.btn-agregar--ok {
+  background: linear-gradient(135deg, var(--verde-profundo) 0%, var(--verde-oscuro) 100%);
+  animation: btn-agregar-ok 0.28s ease;
+}
+@keyframes btn-agregar-ok {
+  0%   { transform: scale(0.97); }
+  55%  { transform: scale(1.03); }
+  100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn-agregar--ok { animation: none; }
+  .btn-agregar:active { transform: none; }
+}
 
 /* =============================================
    BOTONES GLOBALES
@@ -903,7 +920,7 @@ footer.footer-lm {
 }
 .dir-detalle {
   font-size: 0.78rem;
-  color: #888;
+  color: var(--text-secondary);
   margin-top: 2px;
 }
 .dir-costo {
@@ -944,7 +961,7 @@ footer.footer-lm {
    TOAST CARRITO
    ============================================= */
 #toastCarrito {
-  background: linear-gradient(135deg, var(--verde-profundo), #0c4727);
+  background: linear-gradient(135deg, var(--verde-profundo), color-mix(in srgb, var(--verde-profundo) 70%, black));
   color: #fff;
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.25);
@@ -986,7 +1003,7 @@ footer.footer-lm {
   position: relative;
   display: inline-block;
   padding: 14px;
-  background: #fff;
+  background: var(--bg-surface);
   border-radius: 12px;
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.10);
 }
@@ -1112,7 +1129,7 @@ footer.footer-lm {
 
 /* ─── Cuerpo blanco ─── */
 .login-body {
-  background: var(--blanco);
+  background: var(--bg-surface);
   padding: 1.9rem 2rem 2.2rem;
 }
 
@@ -1174,7 +1191,7 @@ footer.footer-lm {
 .login-admin-hint {
   font-size: 0.72rem;
   font-weight: 400;
-  color: #6b7280;
+  color: var(--text-secondary);
   display: block;
   margin-top: 1px;
 }
@@ -1187,7 +1204,7 @@ footer.footer-lm {
   font-weight: 700;
   letter-spacing: 0.55px;
   text-transform: uppercase;
-  color: #6b7280;
+  color: var(--text-secondary);
   margin-bottom: 0.45rem;
 }
 .login-input-wrap { position: relative; }
@@ -1210,11 +1227,11 @@ footer.footer-lm {
   width: 100%;
   height: 48px;
   padding: 0 1rem 0 2.75rem;
-  border: 1.5px solid #e5e7eb;
+  border: 1.5px solid var(--border-input);
   border-radius: 12px;
   font-size: 0.92rem;
-  background: #fafafa;
-  color: var(--gris-texto);
+  background: var(--bg-input);
+  color: var(--text-primary);
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
   appearance: none;
@@ -1245,7 +1262,7 @@ footer.footer-lm {
   transform: translateY(-50%);
   background: none;
   border: none;
-  color: #9ca3af;
+  color: var(--text-placeholder);
   padding: 0.3rem 0.4rem;
   cursor: pointer;
   z-index: 2;
@@ -1285,7 +1302,7 @@ footer.footer-lm {
 }
 .login-remember label {
   font-size: 0.82rem;
-  color: #6b7280;
+  color: var(--text-secondary);
   cursor: pointer;
   margin: 0;
   user-select: none;
@@ -1427,4 +1444,270 @@ footer.footer-lm {
 }
 .mp-poll-panel {
   animation: mp-slide-in .35s ease both;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   SISTEMA DE TEMAS — Theme System LitoralMarket
+   Uso: atributo data-theme en <html>
+   Valores: "light" | "dark" | "high-contrast" | "brand"
+   Sistema: sin atributo → sigue prefers-color-scheme del SO
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── LIGHT THEME ─────────────────────────────────────────────────── */
+[data-theme="light"] {
+  /* Marca — verde fresco, celeste cielo, dorado cálido */
+  --verde:           #1DB062;
+  --verde-oscuro:    #157847;
+  --verde-profundo:  #0D5C35;
+  --verde-hover:     #199C57;
+  --celeste:         #94C9E9;
+  --celeste-oscuro:  #5AADD4;
+  --celeste-suave:   rgba(148,201,233,0.18);
+  --dorado:          #C9A84C;
+  --dorado-claro:    #E8C87A;
+  --dorado-suave:    rgba(201,168,76,0.18);
+  /* UI semánticas */
+  --blanco:          #ffffff;
+  --crema:           #F6FAF7;
+  --gris-texto:      #374151;
+  --bg-page:         #F6FAF7;
+  --bg-surface:      #ffffff;
+  --bg-subtle:       #f9fafb;
+  --bg-input:        #ffffff;
+  --text-primary:    #374151;
+  --text-secondary:  #6B7280;
+  --text-placeholder:#9CA3AF;
+  --border-ui:       #E5E7EB;
+  --border-input:    #D1D5DB;
+  --sombra:          0 6px 24px rgba(0,0,0,0.14);
+  --sombra-suave:    0 2px 10px rgba(0,0,0,0.07);
+}
+
+/* ── DARK THEME ─────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  /* Marca — más brillante sobre fondos oscuros */
+  --verde:           #2DD885;
+  --verde-oscuro:    #1EB36B;
+  --verde-profundo:  #145738;
+  --verde-hover:     #26C472;
+  --celeste:         #7BBDE8;
+  --celeste-oscuro:  #5AA5D4;
+  --celeste-suave:   rgba(123,189,232,0.15);
+  --dorado:          #D4A84C;
+  --dorado-claro:    #E8C87A;
+  --dorado-suave:    rgba(212,168,76,0.15);
+  /* UI semánticas */
+  --blanco:          #F3F4F6;
+  --crema:           #111827;
+  --gris-texto:      #E5E7EB;
+  --bg-page:         #111827;
+  --bg-surface:      #1F2937;
+  --bg-subtle:       #374151;
+  --bg-input:        #1F2937;
+  --text-primary:    #F3F4F6;
+  --text-secondary:  #9CA3AF;
+  --text-placeholder:#6B7280;
+  --border-ui:       #374151;
+  --border-input:    #4B5563;
+  --sombra:          0 6px 24px rgba(0,0,0,0.45);
+  --sombra-suave:    0 2px 10px rgba(0,0,0,0.3);
+}
+
+/* Compatibilidad Bootstrap en dark */
+[data-theme="dark"] body                    { background-color: var(--bg-page); color: var(--text-primary); }
+[data-theme="dark"] .card                   { background: var(--bg-surface); border-color: var(--border-ui); color: var(--text-primary); }
+[data-theme="dark"] .card-header           { background: var(--bg-subtle); border-color: var(--border-ui); color: var(--text-primary); }
+[data-theme="dark"] .card-footer           { background: var(--bg-subtle); border-color: var(--border-ui); }
+[data-theme="dark"] .modal-content         { background: var(--bg-surface); color: var(--text-primary); border-color: var(--border-ui); }
+[data-theme="dark"] .modal-header          { border-color: var(--border-ui); }
+[data-theme="dark"] .modal-footer          { border-color: var(--border-ui); }
+[data-theme="dark"] .dropdown-menu         { background: var(--bg-surface); border-color: var(--border-ui); }
+[data-theme="dark"] .dropdown-item         { color: var(--text-primary); }
+[data-theme="dark"] .dropdown-item:hover,
+[data-theme="dark"] .dropdown-item:focus   { background: var(--bg-subtle); color: var(--text-primary); }
+[data-theme="dark"] .dropdown-divider      { border-color: var(--border-ui); }
+[data-theme="dark"] .dropdown-item-text    { color: var(--text-secondary); }
+[data-theme="dark"] .form-control          { background: var(--bg-input); color: var(--text-primary); border-color: var(--border-input); }
+[data-theme="dark"] .form-control:focus    { background: var(--bg-surface); color: var(--text-primary); }
+[data-theme="dark"] .form-control::placeholder { color: var(--text-placeholder); }
+[data-theme="dark"] .form-select           { background: var(--bg-input); color: var(--text-primary); border-color: var(--border-input); }
+[data-theme="dark"] .input-group-text      { background: var(--bg-subtle); color: var(--text-primary); border-color: var(--border-input); }
+[data-theme="dark"] .table                 { color: var(--text-primary); border-color: var(--border-ui); }
+[data-theme="dark"] .table thead th        { background: var(--bg-subtle); color: var(--text-primary); border-color: var(--border-ui); }
+[data-theme="dark"] .table tbody tr:hover td { background: rgba(255,255,255,0.03); }
+[data-theme="dark"] .table-striped>tbody>tr:nth-of-type(odd)>* { background: rgba(255,255,255,0.02); color: var(--text-primary); }
+[data-theme="dark"] .table-bordered td,
+[data-theme="dark"] .table-bordered th     { border-color: var(--border-ui); }
+[data-theme="dark"] .alert-light           { background: var(--bg-subtle); border-color: var(--border-ui); color: var(--text-primary); }
+[data-theme="dark"] .btn-outline-secondary { color: var(--text-secondary); border-color: var(--border-input); }
+[data-theme="dark"] .btn-outline-secondary:hover { background: var(--bg-subtle); color: var(--text-primary); }
+[data-theme="dark"] .btn-outline-danger    { color: #f87171; border-color: #f87171; }
+[data-theme="dark"] .btn-light             { background: var(--bg-subtle); border-color: var(--border-ui); color: var(--text-primary); }
+[data-theme="dark"] .text-muted            { color: var(--text-secondary) !important; }
+[data-theme="dark"] .border                { border-color: var(--border-ui) !important; }
+[data-theme="dark"] .border-bottom         { border-bottom-color: var(--border-ui) !important; }
+[data-theme="dark"] .nav-tabs              { border-color: var(--border-ui); }
+[data-theme="dark"] .nav-tabs .nav-link    { color: var(--text-secondary); }
+[data-theme="dark"] .nav-tabs .nav-link.active { background: var(--bg-surface); border-color: var(--border-ui); color: var(--text-primary); }
+[data-theme="dark"] .list-group-item       { background: var(--bg-surface); border-color: var(--border-ui); color: var(--text-primary); }
+[data-theme="dark"] .badge.bg-light        { background: var(--bg-subtle) !important; color: var(--text-primary) !important; }
+[data-theme="dark"] .page-link             { background: var(--bg-surface); border-color: var(--border-ui); }
+[data-theme="dark"] hr                     { border-color: var(--border-ui); opacity: 1; }
+
+/* ── HIGH CONTRAST THEME ────────────────────────────────────────── */
+[data-theme="high-contrast"] {
+  --verde:           #008000;
+  --verde-oscuro:    #006000;
+  --verde-profundo:  #003800;
+  --verde-hover:     #009000;
+  --celeste:         #0070E0;
+  --celeste-oscuro:  #0050B0;
+  --celeste-suave:   rgba(0,112,224,0.12);
+  --dorado:          #A07000;
+  --dorado-claro:    #C09000;
+  --dorado-suave:    rgba(160,112,0,0.12);
+  --blanco:          #ffffff;
+  --crema:           #ffffff;
+  --gris-texto:      #000000;
+  --bg-page:         #ffffff;
+  --bg-surface:      #ffffff;
+  --bg-subtle:       #eeeeee;
+  --bg-input:        #ffffff;
+  --text-primary:    #000000;
+  --text-secondary:  #111111;
+  --text-placeholder:#444444;
+  --border-ui:       #000000;
+  --border-input:    #000000;
+  --sombra:          0 0 0 2px #000000;
+  --sombra-suave:    0 0 0 1px #000000;
+}
+[data-theme="high-contrast"] .card,
+[data-theme="high-contrast"] .modal-content { border: 2px solid #000 !important; }
+[data-theme="high-contrast"] .form-control,
+[data-theme="high-contrast"] .form-select   { border: 2px solid #000 !important; }
+[data-theme="high-contrast"] a              { text-decoration: underline; }
+[data-theme="high-contrast"] .btn           { border: 2px solid currentColor !important; font-weight: 700; }
+[data-theme="high-contrast"] .text-muted    { color: #444 !important; }
+
+/* ── BRAND / DIETÉTICA THEME ────────────────────────────────────── */
+[data-theme="brand"] {
+  --verde:           #6BAE8E;
+  --verde-oscuro:    #4D8A70;
+  --verde-profundo:  #355E4D;
+  --verde-hover:     #5E9E80;
+  --celeste:         #A8C4B2;
+  --celeste-oscuro:  #7FA894;
+  --celeste-suave:   rgba(168,196,178,0.18);
+  --dorado:          #C9A87C;
+  --dorado-claro:    #DFBC98;
+  --dorado-suave:    rgba(201,168,124,0.18);
+  --blanco:          #FFFEF9;
+  --crema:           #FAF7F2;
+  --gris-texto:      #3D3325;
+  --bg-page:         #FAF7F2;
+  --bg-surface:      #FFFEF9;
+  --bg-subtle:       #F5F0E8;
+  --bg-input:        #FFFEF9;
+  --text-primary:    #3D3325;
+  --text-secondary:  #7A6855;
+  --text-placeholder:#B0A090;
+  --border-ui:       #E8DFD0;
+  --border-input:    #D4C4B0;
+  --sombra:          0 6px 24px rgba(100,80,60,0.12);
+  --sombra-suave:    0 2px 10px rgba(100,80,60,0.07);
+}
+
+/* ── SYSTEM THEME — sigue prefers-color-scheme ───────────────────
+   Se activa cuando NO hay atributo data-theme en <html>           */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --verde:           #1DB062;
+    --verde-oscuro:    #157847;
+    --verde-profundo:  #0D5C35;
+    --verde-hover:     #199C57;
+    --celeste:         #94C9E9;
+    --celeste-oscuro:  #5AADD4;
+    --celeste-suave:   rgba(148,201,233,0.18);
+    --dorado:          #C9A84C;
+    --dorado-claro:    #E8C87A;
+    --dorado-suave:    rgba(201,168,76,0.18);
+    --blanco:          #ffffff;
+    --crema:           #F6FAF7;
+    --gris-texto:      #374151;
+    --bg-page:         #F6FAF7;
+    --bg-surface:      #ffffff;
+    --bg-subtle:       #f9fafb;
+    --bg-input:        #ffffff;
+    --text-primary:    #374151;
+    --text-secondary:  #6B7280;
+    --text-placeholder:#9CA3AF;
+    --border-ui:       #E5E7EB;
+    --border-input:    #D1D5DB;
+    --sombra:          0 6px 24px rgba(0,0,0,0.14);
+    --sombra-suave:    0 2px 10px rgba(0,0,0,0.07);
+  }
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --verde:           #2DD885;
+    --verde-oscuro:    #1EB36B;
+    --verde-profundo:  #145738;
+    --verde-hover:     #26C472;
+    --celeste:         #7BBDE8;
+    --celeste-oscuro:  #5AA5D4;
+    --celeste-suave:   rgba(123,189,232,0.15);
+    --dorado:          #D4A84C;
+    --dorado-claro:    #E8C87A;
+    --dorado-suave:    rgba(212,168,76,0.15);
+    --blanco:          #F3F4F6;
+    --crema:           #111827;
+    --gris-texto:      #E5E7EB;
+    --bg-page:         #111827;
+    --bg-surface:      #1F2937;
+    --bg-subtle:       #374151;
+    --bg-input:        #1F2937;
+    --text-primary:    #F3F4F6;
+    --text-secondary:  #9CA3AF;
+    --text-placeholder:#6B7280;
+    --border-ui:       #374151;
+    --border-input:    #4B5563;
+    --sombra:          0 6px 24px rgba(0,0,0,0.45);
+    --sombra-suave:    0 2px 10px rgba(0,0,0,0.3);
+  }
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) body                    { background-color: var(--bg-page); color: var(--text-primary); }
+  :root:not([data-theme]) .card                   { background: var(--bg-surface); border-color: var(--border-ui); color: var(--text-primary); }
+  :root:not([data-theme]) .card-header           { background: var(--bg-subtle); border-color: var(--border-ui); }
+  :root:not([data-theme]) .modal-content         { background: var(--bg-surface); color: var(--text-primary); border-color: var(--border-ui); }
+  :root:not([data-theme]) .dropdown-menu         { background: var(--bg-surface); border-color: var(--border-ui); }
+  :root:not([data-theme]) .dropdown-item         { color: var(--text-primary); }
+  :root:not([data-theme]) .dropdown-item:hover   { background: var(--bg-subtle); }
+  :root:not([data-theme]) .form-control          { background: var(--bg-input); color: var(--text-primary); border-color: var(--border-input); }
+  :root:not([data-theme]) .form-select           { background: var(--bg-input); color: var(--text-primary); border-color: var(--border-input); }
+  :root:not([data-theme]) .table                 { color: var(--text-primary); border-color: var(--border-ui); }
+  :root:not([data-theme]) .table thead th        { background: var(--bg-subtle); }
+  :root:not([data-theme]) .text-muted            { color: var(--text-secondary) !important; }
+  :root:not([data-theme]) .border                { border-color: var(--border-ui) !important; }
+  :root:not([data-theme]) hr                     { border-color: var(--border-ui); opacity: 1; }
+}
+
+/* ── Switcher de tema — estado activo ────────────────────────────── */
+[data-lm-theme-btn] { position: relative; }
+[data-lm-theme-btn].active {
+  background: var(--bg-subtle);
+  color: var(--verde);
+  font-weight: 600;
+}
+[data-lm-theme-btn].active::after {
+  content: '';
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--verde);
 }

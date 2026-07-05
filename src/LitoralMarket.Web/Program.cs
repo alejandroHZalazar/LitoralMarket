@@ -26,11 +26,20 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 });
 
 // EF Core + MySQL
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseMySql(
-        builder.Configuration.GetConnectionString("Default"),
-        ServerVersion.AutoDetect(builder.Configuration.GetConnectionString("Default"))
-    ));
+var connString    = builder.Configuration.GetConnectionString("Default");
+var serverVersion = ServerVersion.AutoDetect(connString);
+
+// Factory: crea DbContext independientes para ejecutar lecturas en paralelo.
+// El DbContext scoped NO es thread-safe, así que las consultas concurrentes
+// necesitan cada una su propio contexto (una conexión distinta del pool).
+builder.Services.AddDbContextFactory<AppDbContext>(options =>
+    options.UseMySql(connString, serverVersion));
+
+// Contexto scoped (uso normal en repos/servicios) derivado de la misma factory.
+// Se registra explícitamente para evitar el conflicto de lifetime de
+// DbContextOptions que surge al combinar AddDbContext + AddDbContextFactory.
+builder.Services.AddScoped<AppDbContext>(sp =>
+    sp.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext());
 
 // Autenticación por cookies
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)

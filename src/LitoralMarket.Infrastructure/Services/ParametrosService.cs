@@ -1,4 +1,5 @@
 using LitoralMarket.Application.Interfaces;
+using LitoralMarket.Domain.Entities;
 using LitoralMarket.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -48,6 +49,35 @@ public class ParametrosService : IParametrosService
 
     public async Task<string?> GetNombreEmpresaAsync() =>
         await GetValorAsync("empresa", "nombre");
+
+    public async Task<string?> GetColorPrimarioAsync() =>
+        await GetValorAsync("tema", "colorPrimario");
+
+    public async Task<string?> GetColorAcentoAsync() =>
+        await GetValorAsync("tema", "colorAcento");
+
+    public async Task SetValorAsync(string modulo, string parametro, string? valor)
+    {
+        var param = await _db.Parametros
+            .FirstOrDefaultAsync(p => p.Modulo == modulo && p.ParametroNombre == parametro);
+
+        if (param is null)
+        {
+            _db.Parametros.Add(new Parametro
+            {
+                Modulo          = modulo,
+                ParametroNombre = parametro,
+                Valor           = valor
+            });
+        }
+        else
+        {
+            param.Valor = valor;
+        }
+
+        await _db.SaveChangesAsync();
+        _cache.Remove($"param_{modulo}_{parametro}");
+    }
 
     public async Task<byte[]?> GetLogoAsync()
     {

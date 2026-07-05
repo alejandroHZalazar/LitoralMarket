@@ -62,11 +62,13 @@ public class CarritoModel : PageModel
     {
         var pedidoId = await ObtenerPedidoIdAsync();
 
-        // Sincronizar: refresca precios/costos y elimina sin stock
+        // Sincronizar: refresca precios/costos y elimina sin stock (ya persiste el total)
         Eliminados = await _carrito.SincronizarCarritoAsync(pedidoId);
 
         Items = await _carrito.ObtenerItemsAsync(pedidoId);
-        Total = await _carrito.ObtenerTotalAsync(pedidoId);
+        // El total se calcula en memoria desde los items ya cargados: es la misma
+        // suma de subtotales que el sync acaba de persistir, sin round-trips extra.
+        Total = Items.Sum(i => i.Subtotal);
         ViewData["CarritoCount"] = Items.Count;
     }
 

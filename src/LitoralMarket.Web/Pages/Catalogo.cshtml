@@ -35,7 +35,8 @@ else
                 <li class="page-item @(Model.PaginaActual == 1 ? "disabled" : "")">
                     <a class="page-link" asp-page="/Catalogo"
                        asp-route-rubroId="@Model.RubroId"
-                       asp-route-pagina="@(Model.PaginaActual - 1)">
+                       asp-route-pagina="@(Model.PaginaActual - 1)"
+                       rel="@(Model.PaginaActual > 1 ? "prev" : null)">
                         <i class="bi bi-chevron-left"></i>
                     </a>
                 </li>
@@ -80,7 +81,8 @@ else
                 <li class="page-item @(Model.PaginaActual == Model.TotalPaginas ? "disabled" : "")">
                     <a class="page-link" asp-page="/Catalogo"
                        asp-route-rubroId="@Model.RubroId"
-                       asp-route-pagina="@(Model.PaginaActual + 1)">
+                       asp-route-pagina="@(Model.PaginaActual + 1)"
+                       rel="@(Model.PaginaActual < Model.TotalPaginas ? "next" : null)">
                         <i class="bi bi-chevron-right"></i>
                     </a>
                 </li>

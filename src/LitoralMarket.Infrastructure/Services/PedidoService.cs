@@ -12,25 +12,46 @@ public class PedidoService : IPedidoService
     private readonly AppDbContext       _db;
     private readonly IEmailService      _email;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IDbContextFactory<AppDbContext> _ctxFactory;
 
-    public PedidoService(AppDbContext db, IEmailService email, IServiceScopeFactory scopeFactory)
+    public PedidoService(
+        AppDbContext                    db,
+        IEmailService                   email,
+        IServiceScopeFactory            scopeFactory,
+        IDbContextFactory<AppDbContext> ctxFactory)
     {
         _db           = db;
         _email        = email;
         _scopeFactory = scopeFactory;
+        _ctxFactory   = ctxFactory;
     }
 
     public async Task<(bool valido, List<string> errores)> ValidarStockAsync(int pedidoId)
     {
         var errores = new List<string>();
-        var detalles = await _db.PedidoDetalles
-            .Include(d => d.Producto).ThenInclude(p => p!.Stock)
+
+        // Contexto propio de la factory: es una lectura pura, así puede ejecutarse
+        // en paralelo con otras lecturas independientes (el DbContext scoped no
+        // admite consultas concurrentes).
+        await using var db = await _ctxFactory.CreateDbContextAsync();
+
+        // Proyección directa: no materializa la entidad Producto ni carga el blob
+        // 'imagen'. Solo trae cantidad solicitada y stock disponible por línea.
+        var detalles = await db.PedidoDetalles
             .Where(d => d.FkPedido == pedidoId)
+            .Select(d => new
+            {
+                d.Descripcion,
+                d.Cantidad,
+                Stock = d.Producto != null && d.Producto.Stock != null
+                        ? d.Producto.Stock.Cantidad
+                        : (decimal?)0
+            })
             .ToListAsync();
 
         foreach (var d in detalles)
         {
-            var stock = d.Producto?.Stock?.Cantidad ?? 0;
+            var stock = d.Stock ?? 0;
             if (stock < (d.Cantidad ?? 0))
                 errores.Add($"'{d.Descripcion}': stock disponible {stock:N2}, solicitado {d.Cantidad:N2}");
         }
@@ -41,8 +62,10 @@ public class PedidoService : IPedidoService
     /// <inheritdoc />
     public async Task<int> PrepararPagoAsync(int pedidoId, CheckoutDto datos)
     {
+        // Sin Include(Detalles): este método no lee las líneas del pedido, solo
+        // actualiza la cabecera (cliente, dirección, total, estado). Cargarlas era
+        // trabajo muerto que traía todas las filas de detalle sin usarlas.
         var pedido = await _db.Pedidos
-            .Include(p => p.Detalles)
             .FirstOrDefaultAsync(p => p.Id == pedidoId);
 
         if (pedido is null)

@@ -3,14 +3,22 @@ using LitoralMarket.Application.Interfaces;
 using LitoralMarket.Domain.Entities;
 using LitoralMarket.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace LitoralMarket.Infrastructure.Repositories;
 
 public class ProductoRepository : IProductoRepository
 {
     private readonly AppDbContext _db;
+    private readonly IMemoryCache _cache;
+    private const string RubrosCacheKey = "rubros_activos";
+    private static readonly TimeSpan RubrosCacheDuration = TimeSpan.FromMinutes(5);
 
-    public ProductoRepository(AppDbContext db) => _db = db;
+    public ProductoRepository(AppDbContext db, IMemoryCache cache)
+    {
+        _db = db;
+        _cache = cache;
+    }
 
     public async Task<List<ProductoDto>> ObtenerPorRubroAsync(int rubroId, bool incluirSinStock, int pagina, int porPagina)
     {
@@ -40,11 +48,23 @@ public class ProductoRepository : IProductoRepository
     public async Task<ProductoDto?> ObtenerPorIdAsync(int id) =>
         await Proyectar(EntidadesActivas()).FirstOrDefaultAsync(p => p.Id == id);
 
-    public async Task<List<Rubro>> ObtenerRubrosAsync() =>
-        await _db.Rubros
+    public async Task<List<Rubro>> ObtenerRubrosAsync()
+    {
+        // Los rubros cambian rara vez y se consultan en cada request (página + layout).
+        // Se cachean unos minutos para evitar la consulta redundante. AsNoTracking:
+        // solo se leen para mostrar, no se modifican por este contexto.
+        if (_cache.TryGetValue(RubrosCacheKey, out List<Rubro>? rubros) && rubros is not null)
+            return rubros;
+
+        rubros = await _db.Rubros
+            .AsNoTracking()
             .Where(r => r.Descripcion != null)
             .OrderBy(r => r.Descripcion)
             .ToListAsync();
+
+        _cache.Set(RubrosCacheKey, rubros, RubrosCacheDuration);
+        return rubros;
+    }
 
     public async Task<int> ContarPorRubroAsync(int rubroId, bool incluirSinStock)
     {

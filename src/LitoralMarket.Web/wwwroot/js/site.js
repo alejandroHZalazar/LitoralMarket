@@ -39,52 +39,65 @@ document.addEventListener('change', function (e) {
 
 
 /* =============================================
-   AGREGAR AL CARRITO — AJAX
+   AGREGAR AL CARRITO — AJAX con UI optimista
+   El feedback táctil del botón es inmediato (0 ms); el toast y el
+   badge se reconcilian con la respuesta real del servidor. Así la
+   interacción se siente instantánea sin cambiar la lógica del backend.
    ============================================= */
-document.addEventListener('submit', async function (e) {
+document.addEventListener('submit', function (e) {
     const form = e.target.closest('[data-agregar-form]');
     if (!form) return;
 
     e.preventDefault();
+
+    // Guarda contra doble envío mientras hay una petición en curso
+    if (form.dataset.enviando === '1') return;
+    form.dataset.enviando = '1';
 
     const productoId = form.dataset.productoId;
     const nombre     = form.dataset.nombre;
     const cantidad   = form.querySelector('.cantidad-input')?.value ?? '1';
     const token      = form.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
 
-    // Estado de carga en el botón
+    // ── Feedback táctil INMEDIATO en el botón (no espera al servidor) ──
     const btnAgregar = form.querySelector('.btn-agregar');
     const textoOrig  = btnAgregar.innerHTML;
-    btnAgregar.disabled = true;
-    btnAgregar.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Agregando…';
+    btnAgregar.classList.add('btn-agregar--ok');
+    btnAgregar.innerHTML = '<i class="bi bi-check-lg me-1"></i>Agregado';
 
-    try {
-        const body = new URLSearchParams({
-            productoId,
-            cantidad,
-            __RequestVerificationToken: token
-        });
-
-        const res = await fetch('/Carrito?handler=AgregarAjax', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: body.toString()
-        });
-
-        const data = await res.json();
-
-        if (data.ok) {
-            mostrarToast(`✓ "${nombre}" agregado al carrito`, 'success');
-            actualizarBadgeCarrito(data.cantidadCarrito);
-        } else {
-            mostrarToast(data.mensaje || 'Error al agregar el producto', 'error');
-        }
-    } catch (err) {
-        mostrarToast('Error de conexión. Intentá de nuevo.', 'error');
-    } finally {
-        btnAgregar.disabled = false;
+    const restaurarBoton = function () {
+        form.dataset.enviando = '0';
+        btnAgregar.classList.remove('btn-agregar--ok');
         btnAgregar.innerHTML = textoOrig;
-    }
+    };
+
+    const body = new URLSearchParams({
+        productoId,
+        cantidad,
+        __RequestVerificationToken: token
+    });
+
+    fetch('/Carrito?handler=AgregarAjax', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString()
+    })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+            if (data.ok) {
+                mostrarToast(`✓ "${nombre}" agregado al carrito`, 'success');
+                actualizarBadgeCarrito(data.cantidadCarrito);
+                // Deja ver el "Agregado" un instante antes de restaurar
+                setTimeout(restaurarBoton, 850);
+            } else {
+                mostrarToast(data.mensaje || 'Error al agregar el producto', 'error');
+                restaurarBoton();
+            }
+        })
+        .catch(function () {
+            mostrarToast('Error de conexión. Intentá de nuevo.', 'error');
+            restaurarBoton();
+        });
 });
 
 
@@ -128,9 +141,15 @@ function actualizarBadgeCarrito(cantidad) {
         if (!badge) {
             badge = document.createElement('span');
             badge.className = 'badge-carrito';
-            document.querySelector('.btn-carrito')?.appendChild(badge);
+            // Selector explícito: solo el link del carrito, nunca otro botón
+            // que pudiera compartir la clase .btn-carrito por estilo.
+            document.querySelector('a.btn-carrito')?.appendChild(badge);
         }
         badge.textContent = cantidad;
+        // Reinicia la animación de "pop" para que se dispare en cada alta
+        badge.classList.remove('badge-carrito--pop');
+        void badge.offsetWidth;
+        badge.classList.add('badge-carrito--pop');
     } else if (badge) {
         badge.remove();
     }

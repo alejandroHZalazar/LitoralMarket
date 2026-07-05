@@ -21,6 +21,7 @@ public class PagoEcommerceService : IPagoEcommerceService
     private readonly IConfiguration                  _config;
     private readonly ILogger<PagoEcommerceService>   _logger;
     private readonly IServiceScopeFactory            _scopeFactory;
+    private readonly IDbContextFactory<AppDbContext> _ctxFactory;
 
     public PagoEcommerceService(
         AppDbContext                  db,
@@ -29,7 +30,8 @@ public class PagoEcommerceService : IPagoEcommerceService
         IHttpClientFactory            httpFactory,
         IConfiguration                config,
         ILogger<PagoEcommerceService> logger,
-        IServiceScopeFactory          scopeFactory)
+        IServiceScopeFactory          scopeFactory,
+        IDbContextFactory<AppDbContext> ctxFactory)
     {
         _db           = db;
         _params       = parametros;
@@ -38,6 +40,7 @@ public class PagoEcommerceService : IPagoEcommerceService
         _config       = config;
         _logger       = logger;
         _scopeFactory = scopeFactory;
+        _ctxFactory   = ctxFactory;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -79,7 +82,10 @@ public class PagoEcommerceService : IPagoEcommerceService
     // ─────────────────────────────────────────────────────────────
     public async Task<CobroEcommerceDto?> ObtenerCobroPorPedidoAsync(int pedidoId)
     {
-        var cobro = await _db.CobrosEcommerce
+        // Contexto propio de la factory: lectura pura → puede ejecutarse en paralelo
+        // con el resumen del pedido en la pantalla de forma de pago.
+        await using var db = await _ctxFactory.CreateDbContextAsync();
+        var cobro = await db.CobrosEcommerce
             .Where(c => c.FkPedido == pedidoId)
             .OrderByDescending(c => c.FechaCreacion)
             .FirstOrDefaultAsync();

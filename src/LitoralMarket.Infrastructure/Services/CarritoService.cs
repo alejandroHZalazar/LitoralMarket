@@ -8,13 +8,56 @@ namespace LitoralMarket.Infrastructure.Services;
 
 public class CarritoService : ICarritoService
 {
-    private readonly AppDbContext      _db;
-    private readonly IParametrosService _params;
+    private readonly AppDbContext                  _db;
+    private readonly IParametrosService            _params;
+    private readonly IDbContextFactory<AppDbContext> _ctxFactory;
 
-    public CarritoService(AppDbContext db, IParametrosService parametros)
+    public CarritoService(
+        AppDbContext                  db,
+        IParametrosService            parametros,
+        IDbContextFactory<AppDbContext> ctxFactory)
     {
-        _db     = db;
-        _params = parametros;
+        _db         = db;
+        _params     = parametros;
+        _ctxFactory = ctxFactory;
+    }
+
+    /// <summary>
+    /// Carga precios, costos y (opcionalmente) stock de los productos indicados,
+    /// ejecutando cada consulta EN PARALELO sobre su propio DbContext creado por la
+    /// factory. Son lecturas puras sobre tablas distintas → sin riesgo de carrera ni
+    /// inconsistencia. El DbContext scoped no admite consultas concurrentes, de ahí
+    /// la necesidad de contextos independientes.
+    /// </summary>
+    private async Task<(Dictionary<int, decimal?> precios,
+                        Dictionary<int, decimal?> costos,
+                        Dictionary<int, decimal?> stocks)>
+        CargarDatosProductosAsync(List<int> productoIds, bool incluirStock)
+    {
+        await using var ctxPrecios = await _ctxFactory.CreateDbContextAsync();
+        await using var ctxCostos  = await _ctxFactory.CreateDbContextAsync();
+
+        var tPrecios = ctxPrecios.PreciosProductos
+            .Where(p => productoIds.Contains(p.FkProducto!.Value))
+            .ToDictionaryAsync(p => p.FkProducto!.Value, p => p.Precio);
+
+        var tCostos = ctxCostos.CostosProductos
+            .Where(c => productoIds.Contains(c.FkProducto!.Value))
+            .ToDictionaryAsync(c => c.FkProducto!.Value, c => c.Costo);
+
+        if (!incluirStock)
+        {
+            await Task.WhenAll(tPrecios, tCostos);
+            return (tPrecios.Result, tCostos.Result, new Dictionary<int, decimal?>());
+        }
+
+        await using var ctxStock = await _ctxFactory.CreateDbContextAsync();
+        var tStocks = ctxStock.StockProductos
+            .Where(s => productoIds.Contains(s.FkProducto!.Value))
+            .ToDictionaryAsync(s => s.FkProducto!.Value, s => s.Cantidad);
+
+        await Task.WhenAll(tPrecios, tCostos, tStocks);
+        return (tPrecios.Result, tCostos.Result, tStocks.Result);
     }
 
     public async Task<int> ObtenerOCrearBorradorAsync(string guestToken, int? clienteId)
@@ -173,13 +216,8 @@ public class CarritoService : ICarritoService
             .Distinct()
             .ToList();
 
-        var precios = await _db.PreciosProductos
-            .Where(p => productoIds.Contains(p.FkProducto!.Value))
-            .ToDictionaryAsync(p => p.FkProducto!.Value, p => p.Precio);
-
-        var costos = await _db.CostosProductos
-            .Where(c => productoIds.Contains(c.FkProducto!.Value))
-            .ToDictionaryAsync(c => c.FkProducto!.Value, c => c.Costo);
+        // Precios y costos en paralelo (contextos independientes de la factory).
+        var (precios, costos, _) = await CargarDatosProductosAsync(productoIds, incluirStock: false);
 
         foreach (var d in detalles)
         {
@@ -272,6 +310,11 @@ public class CarritoService : ICarritoService
             .Where(d => d.FkPedido == pedidoId)
             .ToListAsync();
 
+        // Carrito vacío: nada que sincronizar. El total ya es consistente (0),
+        // así se evitan las consultas de precios/costos/stock y el SaveChanges.
+        if (detalles.Count == 0)
+            return eliminados;
+
         // P1-C: cargar precios, costos y stock con consultas directas (sin Include del producto/blob)
         var productoIds = detalles
             .Where(d => d.FkProducto.HasValue)
@@ -279,17 +322,8 @@ public class CarritoService : ICarritoService
             .Distinct()
             .ToList();
 
-        var precios = await _db.PreciosProductos
-            .Where(p => productoIds.Contains(p.FkProducto!.Value))
-            .ToDictionaryAsync(p => p.FkProducto!.Value, p => p.Precio);
-
-        var costos = await _db.CostosProductos
-            .Where(c => productoIds.Contains(c.FkProducto!.Value))
-            .ToDictionaryAsync(c => c.FkProducto!.Value, c => c.Costo);
-
-        var stocks = await _db.StockProductos
-            .Where(s => productoIds.Contains(s.FkProducto!.Value))
-            .ToDictionaryAsync(s => s.FkProducto!.Value, s => s.Cantidad);
+        // Precios, costos y stock en paralelo (3 contextos independientes de la factory).
+        var (precios, costos, stocks) = await CargarDatosProductosAsync(productoIds, incluirStock: true);
 
         foreach (var d in detalles)
         {

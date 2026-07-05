@@ -282,6 +282,23 @@ public class AppDbContext : DbContext
             .HasIndex(p => p.Descripcion)
             .HasDatabaseName("IX_Productos_descripcion");
 
+        // Catálogo: filtro por rubro + orden por descripción en una sola pasada.
+        // El índice compuesto sirve la cláusula WHERE fk_Rubro = X y el ORDER BY
+        // descripcion sin filesort. Es el índice clave de la navegación del catálogo.
+        modelBuilder.Entity<Producto>()
+            .HasIndex(p => new { p.FkRubro, p.Descripcion })
+            .HasDatabaseName("IX_Productos_fkRubro_descripcion");
+
+        // Precio 1:1 por producto — evita el full scan en el JOIN de precio.
+        modelBuilder.Entity<PrecioProducto>()
+            .HasIndex(p => p.FkProducto)
+            .HasDatabaseName("IX_precios_fkProducto");
+
+        // Costo 1:1 por producto — evita el full scan en la sincronización del carrito.
+        modelBuilder.Entity<CostoProducto>()
+            .HasIndex(c => c.FkProducto)
+            .HasDatabaseName("IX_costos_fkProducto");
+
         // Parámetros: lookup por (modulo, parametro) — clave natural de consulta
         modelBuilder.Entity<Parametro>()
             .HasIndex(p => new { p.Modulo, p.ParametroNombre })

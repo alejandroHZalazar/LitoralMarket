@@ -39,15 +39,30 @@ public class CheckoutPageModel : PageModel
 
         try
         {
-            await _carrito.ActualizarPreciosAsync(pedidoId.Value);
-            var (_, errores) = await _pedidos.ValidarStockAsync(pedidoId.Value);
-            Errores = errores;
+            // Direcciones es independiente del pedido → arranca ya, en paralelo,
+            // sobre su propio contexto (factory). Se superpone con el resto del trabajo.
+            var direccionesTask = _direcciones.ObtenerActivasAsync();
 
-            Items = await _carrito.ObtenerItemsAsync(pedidoId.Value);
+            // Mutación: refresca y persiste precios/costos (contexto scoped). Debe
+            // completar antes de leer items y validar stock (dependen de esos precios).
+            await _carrito.ActualizarPreciosAsync(pedidoId.Value);
+
+            // Lecturas independientes en paralelo. Solo ObtenerItems usa el contexto
+            // scoped (único que puede); ValidarStock y Direcciones usan contextos
+            // propios de la factory → sin colisión ni condiciones de carrera.
+            var itemsTask = _carrito.ObtenerItemsAsync(pedidoId.Value);
+            var stockTask = _pedidos.ValidarStockAsync(pedidoId.Value);
+            await Task.WhenAll(itemsTask, stockTask, direccionesTask);
+
+            Items       = itemsTask.Result;
+            Errores     = stockTask.Result.errores;
+            Direcciones = direccionesTask.Result;
+
             if (!Items.Any()) return RedirectToPage("/Carrito");
 
-            SubtotalProductos = await _carrito.ObtenerTotalAsync(pedidoId.Value);
-            Direcciones       = await _direcciones.ObtenerActivasAsync();
+            // ActualizarPreciosAsync ya refrescó y persistió los subtotales; el total
+            // se calcula en memoria desde los items ya cargados (sin round-trips extra).
+            SubtotalProductos = Items.Sum(i => i.Subtotal);
 
             // Pre-seleccionar la dirección por defecto
             var porDefecto = Direcciones.FirstOrDefault(d => d.EsDefault) ?? Direcciones.FirstOrDefault();
@@ -95,23 +110,34 @@ public class CheckoutPageModel : PageModel
 
         try
         {
-            // ── Cargar datos para re-render en caso de error ─────────
-            Direcciones       = await _direcciones.ObtenerActivasAsync();
-            Items             = await _carrito.ObtenerItemsAsync(pedidoId.Value);
-            SubtotalProductos = await _carrito.ObtenerTotalAsync(pedidoId.Value);
+            // ── Validaciones críticas en paralelo (independientes entre sí) ──
+            //  • ObtenerActivas (direcciones) y ValidarStock → contextos propios (factory)
+            //  • ActualizarPrecios (mutación de precios) → contexto scoped
+            // Solo una toca el scoped → sin condiciones de carrera. ValidarStock lee
+            // 'cantidad'/'stock' y ActualizarPrecios escribe 'precio'/'subtotal':
+            // columnas disjuntas, así que el resultado de la validación es idéntico.
+            var direccionesTask = _direcciones.ObtenerActivasAsync();
+            var stockTask       = _pedidos.ValidarStockAsync(pedidoId.Value);
+            await _carrito.ActualizarPreciosAsync(pedidoId.Value);
 
-            // ── Validar dirección libre ───────────────────────────────
+            Direcciones = await direccionesTask;
+            var (valido, errores) = await stockTask;
+            if (!valido) Errores = errores;
+
+            // ── Validar dirección libre (requiere Direcciones) ────────
             var dirSeleccionada = Direcciones.FirstOrDefault(d => d.Id == Datos.DireccionEntregaId);
             if (dirSeleccionada?.PermiteLibre == true && string.IsNullOrWhiteSpace(Datos.DireccionEntregaTexto))
                 ModelState.AddModelError("Datos.DireccionEntregaTexto", "Ingresá la dirección de entrega");
 
-            // ── Validar stock ─────────────────────────────────────────
-            await _carrito.ActualizarPreciosAsync(pedidoId.Value);
-            var (valido, errores) = await _pedidos.ValidarStockAsync(pedidoId.Value);
-            if (!valido) Errores = errores;
-
             if (!ModelState.IsValid || Errores.Any())
+            {
+                // Los items solo se necesitan para RE-RENDERIZAR la página en caso de
+                // error. En el camino feliz se redirige a /Pago sin usarlos → cargarlos
+                // acá evita 2 round-trips (ObtenerItems + ObtenerTotal) en cada confirmación.
+                Items             = await _carrito.ObtenerItemsAsync(pedidoId.Value);
+                SubtotalProductos = Items.Sum(i => i.Subtotal);
                 return Page();
+            }
 
             // ── Confirmar o preparar pago según modo de acceso ────────
             var modo = await _params.GetModoAccesoAsync();

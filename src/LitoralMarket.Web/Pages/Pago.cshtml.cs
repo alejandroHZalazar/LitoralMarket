@@ -35,19 +35,22 @@ public class PagoPageModel : PageModel
 
     public async Task<IActionResult> OnGetAsync()
     {
+        // El cobro (contexto factory) se lee en paralelo con el resumen del pedido
+        // (contexto scoped): son lecturas independientes. En los caminos de redirect
+        // se espera igual la tarea para observar el resultado y no dejarla colgada.
+        var cobroTask = _pagos.ObtenerCobroPorPedidoAsync(Id);
+
         Pedido = await _pedidos.ObtenerResumenAsync(Id);
-        if (Pedido is null) return RedirectToPage("/Index");
+        if (Pedido is null)                    { await cobroTask; return RedirectToPage("/Index"); }
 
         // Si el pedido ya está confirmado, ir a la página de confirmación
-        if (Pedido.Estado == "confirmado")
-            return RedirectToPage("/Pedido", new { id = Id });
+        if (Pedido.Estado == "confirmado")     { await cobroTask; return RedirectToPage("/Pedido", new { id = Id }); }
 
         // Si no está en pendiente_pago, redirigir
-        if (Pedido.Estado != "pendiente_pago")
-            return RedirectToPage("/Index");
+        if (Pedido.Estado != "pendiente_pago") { await cobroTask; return RedirectToPage("/Index"); }
 
-        // Ver si ya existe un cobro en proceso
-        CobroExistente = await _pagos.ObtenerCobroPorPedidoAsync(Id);
+        // Ver si ya existe un cobro en proceso (ya se estaba cargando en paralelo)
+        CobroExistente = await cobroTask;
 
         // Reembolso ya registrado → redirigir a la página del pedido
         if (CobroExistente is { Tipo: "reembolso" })
