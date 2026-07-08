@@ -546,12 +546,28 @@ async function confirmarIngreso() {
         const res  = await fetch('?handler=ConfirmarMasivo', {
             method:  'POST',
             headers: {
-                'Content-Type':              'application/json',
-                'RequestVerificationToken':  TOKEN
+                'Content-Type':  'application/json',
+                'X-XSRF-TOKEN':  TOKEN     // nombre de header configurado en Program.cs (AddAntiforgery)
             },
             body: JSON.stringify(payload)
         });
-        const data = await res.json();
+
+        // Parseo defensivo: el servidor puede responder SIN body (400 antiforgery,
+        // 302 a login por sesión expirada, 500). Leer texto y parsear con cuidado
+        // evita el críptico "Unexpected end of JSON input".
+        const raw = await res.text();
+        let data = null;
+        if (raw) { try { data = JSON.parse(raw); } catch { /* body no-JSON */ } }
+
+        if (!res.ok || data === null) {
+            const detalle = data?.error
+                ?? (res.status === 400 ? 'La sesión de seguridad expiró. Recargá la página (F5) e intentá de nuevo.'
+                :   (res.status === 401 || res.status === 403) ? 'Tu sesión expiró. Iniciá sesión nuevamente.'
+                :   `El servidor respondió ${res.status} ${res.statusText || ''}.`.trim());
+            mostrarAlerta('danger',
+                `<i class="bi bi-x-circle me-2"></i><strong>No se pudo registrar el ingreso:</strong> ${detalle}`);
+            return;
+        }
 
         if (!data.ok) {
             mostrarAlerta('danger',
