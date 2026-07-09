@@ -1450,7 +1450,7 @@ footer.footer-lm {
 /* ═══════════════════════════════════════════════════════════════════
    SISTEMA DE TEMAS — Theme System LitoralMarket
    Uso: atributo data-theme en <html>
-   Valores: "light" | "dark" | "high-contrast" | "brand"
+   Valores: "light" | "dark" | "high-contrast"
    Sistema: sin atributo → sigue prefers-color-scheme del SO
    ═══════════════════════════════════════════════════════════════════ */
 
@@ -1589,34 +1589,6 @@ footer.footer-lm {
 [data-theme="high-contrast"] a              { text-decoration: underline; }
 [data-theme="high-contrast"] .btn           { border: 2px solid currentColor !important; font-weight: 700; }
 [data-theme="high-contrast"] .text-muted    { color: #444 !important; }
-
-/* ── BRAND / DIETÉTICA THEME ────────────────────────────────────── */
-[data-theme="brand"] {
-  --verde:           #6BAE8E;
-  --verde-oscuro:    #4D8A70;
-  --verde-profundo:  #355E4D;
-  --verde-hover:     #5E9E80;
-  --celeste:         #A8C4B2;
-  --celeste-oscuro:  #7FA894;
-  --celeste-suave:   rgba(168,196,178,0.18);
-  --dorado:          #C9A87C;
-  --dorado-claro:    #DFBC98;
-  --dorado-suave:    rgba(201,168,124,0.18);
-  --blanco:          #FFFEF9;
-  --crema:           #FAF7F2;
-  --gris-texto:      #3D3325;
-  --bg-page:         #FAF7F2;
-  --bg-surface:      #FFFEF9;
-  --bg-subtle:       #F5F0E8;
-  --bg-input:        #FFFEF9;
-  --text-primary:    #3D3325;
-  --text-secondary:  #7A6855;
-  --text-placeholder:#B0A090;
-  --border-ui:       #E8DFD0;
-  --border-input:    #D4C4B0;
-  --sombra:          0 6px 24px rgba(100,80,60,0.12);
-  --sombra-suave:    0 2px 10px rgba(100,80,60,0.07);
-}
 
 /* ── SYSTEM THEME — sigue prefers-color-scheme ───────────────────
    Se activa cuando NO hay atributo data-theme en <html>           */

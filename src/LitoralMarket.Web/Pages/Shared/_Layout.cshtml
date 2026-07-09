@@ -17,7 +17,7 @@
         : 0;
 
     // Tema visual — leer cookie para evitar FOUC en el primer render
-    var _temasValidos = new[]{"light","dark","system","high-contrast","brand"};
+    var _temasValidos = new[]{"light","dark","system","high-contrast"};
     var _temaRaw      = Context.Request.Cookies["lm_theme"] ?? "light";
     var _tema         = Array.IndexOf(_temasValidos, _temaRaw) >= 0 ? _temaRaw : "light";
 
@@ -67,7 +67,7 @@
         </style>
     }
     <script>/* Anti-FOUC: sincroniza tema desde localStorage antes del primer render */
-    (function(){var t=localStorage.getItem('lm_theme'),v=['light','dark','system','high-contrast','brand'];if(t&&v.indexOf(t)!==-1){if(t==='system')document.documentElement.removeAttribute('data-theme');else document.documentElement.setAttribute('data-theme',t);}})();
+    (function(){var t=localStorage.getItem('lm_theme'),v=['light','dark','system','high-contrast'];if(t&&v.indexOf(t)!==-1){if(t==='system')document.documentElement.removeAttribute('data-theme');else document.documentElement.setAttribute('data-theme',t);}})();
     </script>
 </head>
 <body>
@@ -132,9 +132,6 @@
                             </button></li>
                             <li><button class="dropdown-item" data-lm-theme-btn="high-contrast" aria-pressed="false">
                                 <i class="bi bi-eye me-2"></i>Alto contraste
-                            </button></li>
-                            <li><button class="dropdown-item" data-lm-theme-btn="brand" aria-pressed="false">
-                                <i class="bi bi-leaf me-2"></i>Dietética
                             </button></li>
                         </ul>
                     </div>

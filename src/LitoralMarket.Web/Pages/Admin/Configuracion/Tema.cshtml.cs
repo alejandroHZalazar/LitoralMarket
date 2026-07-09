@@ -9,7 +9,7 @@ namespace LitoralMarket.Web.Pages.Admin.Configuracion;
 [Authorize(Roles = "admin")]
 public class TemaModel : PageModel
 {
-    private static readonly string[] Validos = ["light", "dark", "system", "high-contrast", "brand"];
+    private static readonly string[] Validos = ["light", "dark", "system", "high-contrast"];
 
     // Colores por defecto de la marca (paleta original)
     public const string PrimarioDefault = "#1DB062";

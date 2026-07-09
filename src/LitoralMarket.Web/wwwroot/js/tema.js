@@ -1,6 +1,6 @@
 /* ================================================================
    LitoralMarket — Theme System
-   Temas: light | dark | system | high-contrast | brand
+   Temas: light | dark | system | high-contrast
    Persistencia: cookie (leída por el servidor) + localStorage
    ================================================================ */
 (function () {
@@ -8,22 +8,20 @@
 
     var COOKIE_NAME = 'lm_theme';
     var LS_KEY      = 'lm_theme';
-    var VALID       = ['light', 'dark', 'system', 'high-contrast', 'brand'];
+    var VALID       = ['light', 'dark', 'system', 'high-contrast'];
 
     var labels = {
         light:          'Claro',
         dark:           'Oscuro',
         system:         'Sistema',
-        'high-contrast':'Alto contraste',
-        brand:          'Dietética'
+        'high-contrast':'Alto contraste'
     };
 
     var icons = {
         light:          'bi-sun',
         dark:           'bi-moon-stars',
         system:         'bi-display',
-        'high-contrast':'bi-eye',
-        brand:          'bi-leaf'
+        'high-contrast':'bi-eye'
     };
 
     // ── Aplicar tema al documento ──────────────────────────────────
