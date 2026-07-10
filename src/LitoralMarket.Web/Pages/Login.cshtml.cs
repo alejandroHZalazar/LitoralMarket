@@ -90,7 +90,10 @@ public class LoginPageModel : PageModel
         if (!ModelState.IsValid)
             return Page();
 
-        var cliente = await _auth.ValidarCredencialesAsync(Datos.Email, Datos.Password);
+        // Trim del email: [EmailAddress] no rechaza espacios al inicio/final,
+        // y una comparación exacta contra la BD (c.Email == email) fallaría en
+        // silencio si el valor viene con espacios (ej. copiado y pegado).
+        var cliente = await _auth.ValidarCredencialesAsync(Datos.Email.Trim(), Datos.Password);
         if (cliente is null)
         {
             Error = "Email o contraseña incorrectos.";
