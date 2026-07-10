@@ -8,6 +8,15 @@
      cuando ningún tema está activo (no debería ocurrir con el servidor
      configurado para emitir data-theme="light" por defecto).          */
   --blanco: #ffffff;
+
+  /* Color de texto para fondos derivados del ACENTO (dorado/celeste).
+     Por defecto es --verde-profundo (funciona con la paleta original,
+     donde el acento siempre es un dorado claro). Cuando el admin
+     personaliza el color de acento, _Layout.cshtml sobreescribe esta
+     variable con el valor de mayor contraste (negro o blanco) calculado
+     según la luminancia real del acento elegido — así el texto nunca
+     queda ilegible sin importar qué color se elija. */
+  --acento-texto: var(--verde-profundo);
 }
 
 /* =============================================
@@ -127,7 +136,7 @@ body {
   background: linear-gradient(135deg, var(--dorado) 0%, var(--dorado-claro) 100%);
   border-radius: 10px;
   font-size: 1.1rem;
-  color: var(--verde-profundo);
+  color: var(--acento-texto);
   box-shadow: 0 2px 8px rgba(201,168,76,0.38);
   flex-shrink: 0;
 }
@@ -165,7 +174,7 @@ body {
   background: linear-gradient(135deg, var(--dorado) 0%, var(--dorado-claro) 100%);
   border: 1.5px solid var(--dorado);
   border-left: none;
-  color: var(--verde-profundo);
+  color: var(--acento-texto);
   font-weight: 700;
   border-radius: 0 24px 24px 0;
   padding: 0.5rem 1.4rem;
@@ -219,7 +228,7 @@ body {
   top: -7px;
   right: -7px;
   background: linear-gradient(135deg, var(--dorado) 0%, var(--dorado-claro) 100%);
-  color: var(--verde-profundo);
+  color: var(--acento-texto);
   border-radius: 50%;
   width: 19px;
   height: 19px;
@@ -245,7 +254,7 @@ body {
 /* Botón "Mis pedidos" / "Ingresar" / Usuario */
 .btn-login {
   background: linear-gradient(135deg, var(--dorado) 0%, var(--dorado-claro) 100%);
-  color: var(--verde-profundo) !important;
+  color: var(--acento-texto) !important;
   border: none;
   border-radius: 8px;
   padding: 0.4rem 0.85rem;
@@ -263,7 +272,7 @@ body {
 .btn-login:hover {
   filter: brightness(1.08);
   box-shadow: 0 4px 14px rgba(201,168,76,0.42);
-  color: var(--verde-profundo) !important;
+  color: var(--acento-texto) !important;
 }
 
 /* Variante discreta para acceso admin en modo público */
@@ -524,7 +533,7 @@ footer.footer-lm {
 }
 .btn-acerca-de:hover {
   background: var(--dorado);
-  color: var(--verde-profundo);
+  color: var(--acento-texto);
   border-color: var(--dorado);
 }
 
@@ -705,7 +714,7 @@ footer.footer-lm {
   top: 10px;
   left: 10px;
   background: linear-gradient(135deg, var(--dorado) 0%, var(--dorado-claro) 100%);
-  color: var(--verde-profundo);
+  color: var(--acento-texto);
   font-size: 0.65rem;
   font-weight: 800;
   letter-spacing: 0.8px;
@@ -818,13 +827,13 @@ footer.footer-lm {
 .btn-success {
   background: linear-gradient(135deg, var(--celeste-oscuro) 0%, var(--celeste) 100%);
   border: none;
-  color: var(--verde-profundo);
+  color: var(--acento-texto);
   font-weight: 700;
 }
 .btn-success:hover {
   filter: brightness(1.07);
   border: none;
-  color: var(--verde-profundo);
+  color: var(--acento-texto);
 }
 .btn-outline-secondary {
   border-color: var(--verde);

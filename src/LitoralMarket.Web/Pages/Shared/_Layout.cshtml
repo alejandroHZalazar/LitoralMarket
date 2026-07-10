@@ -25,10 +25,35 @@
     // Se validan como hex #RRGGBB para evitar inyección en el <style>.
     static bool _esHex(string? c) => c is not null &&
         System.Text.RegularExpressions.Regex.IsMatch(c, "^#[0-9a-fA-F]{6}$");
+
+    // Luminancia relativa WCAG y color de texto con mejor contraste (negro o blanco)
+    // para un fondo dado. Así, sea cual sea el acento que elija el admin, el texto
+    // que se dibuja encima (botones "Mis pedidos"/"ADMIN", badges, etc.) siempre
+    // queda legible — en vez de asumir que el acento va a ser claro.
+    static double _luminancia(string hex)
+    {
+        double canal(int v) { var c = v / 255.0; return c <= 0.03928 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4); }
+        int r = Convert.ToInt32(hex.Substring(1, 2), 16);
+        int g = Convert.ToInt32(hex.Substring(3, 2), 16);
+        int b = Convert.ToInt32(hex.Substring(5, 2), 16);
+        return 0.2126 * canal(r) + 0.7152 * canal(g) + 0.0722 * canal(b);
+    }
+    static double _contraste(double l1, double l2)
+    {
+        var claro = Math.Max(l1, l2); var oscuro = Math.Min(l1, l2);
+        return (claro + 0.05) / (oscuro + 0.05);
+    }
+    static string _textoContrastante(string hexFondo)
+    {
+        var l = _luminancia(hexFondo);
+        return _contraste(l, 0) >= _contraste(l, 1) ? "#12201A" : "#FFFFFF";
+    }
+
     var _cpRaw = await Parametros.GetColorPrimarioAsync();
     var _caRaw = await Parametros.GetColorAcentoAsync();
     var _colorPrimario = _esHex(_cpRaw) ? _cpRaw : null;
     var _colorAcento   = _esHex(_caRaw) ? _caRaw : null;
+    var _acentoTexto   = _colorAcento is not null ? _textoContrastante(_colorAcento) : null;
 }
 <!DOCTYPE html>
 <html lang="es"@(_tema != "system" ? $" data-theme=\"{_tema}\"" : "")>
@@ -62,6 +87,7 @@
             @:--celeste:        @_colorAcento !important;
             @:--celeste-oscuro: color-mix(in srgb, @_colorAcento 80%, black) !important;
             @:--celeste-suave:  color-mix(in srgb, @_colorAcento 18%, transparent) !important;
+            @:--acento-texto:   @_acentoTexto !important;
         }
         }
         </style>
