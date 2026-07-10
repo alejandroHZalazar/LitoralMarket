@@ -19,7 +19,13 @@ public class LogoModel : PageModel
 
         // Detectar tipo de imagen por magic bytes
         var contentType = DetectarContentType(bytes);
-        Response.Headers.CacheControl = "public, max-age=3600";
+
+        // La URL incluye ?v=<hash-del-contenido> (ver _Layout.cshtml), así que
+        // esta respuesta es válida para siempre bajo esa URL exacta: si el logo
+        // cambia, el hash cambia y el navegador pide una URL nueva. Cache largo
+        // e "immutable" evita revalidaciones innecesarias sin arriesgar mostrar
+        // una imagen vieja.
+        Response.Headers.CacheControl = "public, max-age=31536000, immutable";
         return File(bytes, contentType);
     }
 

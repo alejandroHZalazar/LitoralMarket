@@ -8,7 +8,18 @@
     var estaLogueado = User.Identity?.IsAuthenticated ?? false;
     var modoAcceso   = await Parametros.GetModoAccesoAsync();
     var paginaActual = Context.Request.Path.Value ?? "/";
-    var tienelogo    = (await Parametros.GetLogoAsync()) is { Length: > 0 };
+
+    // Cache-busting por contenido: el <img src> incluye un hash corto de los
+    // bytes del logo. Así, cuando el admin sube una imagen nueva, la URL
+    // cambia y el navegador/CDN la trata como un recurso distinto — evita el
+    // problema clásico de "subí el logo pero sigue apareciendo el viejo"
+    // causado por el Cache-Control de larga duración de /logo.
+    var _logoBytes   = await Parametros.GetLogoAsync();
+    var tienelogo    = _logoBytes is { Length: > 0 };
+    var _logoVersion = tienelogo
+        ? Convert.ToHexString(System.Security.Cryptography.MD5.HashData(_logoBytes!))[..10]
+        : null;
+    var logoSrc = $"/logo?v={_logoVersion}";
 
     // Conteo real del carrito desde el servicio — funciona en cualquier página
     var pedidoId    = Context.Session.GetInt32("PedidoId");
@@ -113,7 +124,7 @@
                 <a class="navbar-brand" asp-page="/Index">
                     @if (tienelogo)
                     {
-                        <img src="/logo" class="brand-logo" alt="@empresa" />
+                        <img src="@logoSrc" class="brand-logo" alt="@empresa" />
                     }
                     else
                     {
@@ -309,7 +320,7 @@
                 <div class="footer-brand-mini">
                     @if (tienelogo)
                     {
-                        <img src="/logo" class="footer-logo" alt="@empresa" />
+                        <img src="@logoSrc" class="footer-logo" alt="@empresa" />
                     }
                     <div>
                         <div class="footer-empresa-nombre">@empresa</div>
