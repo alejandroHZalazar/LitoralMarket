@@ -24,6 +24,13 @@ packages/
 node_modules/
 dist/
 
+# Excepción: las librerías cliente de ASP.NET (jQuery, jquery-validation,
+# bootstrap) viven bajo wwwroot/lib/**/dist y DEBEN versionarse y desplegarse.
+# Sin esto, la regla genérica "dist/" las excluía y en producción daban 404
+# (jQuery is not defined, validación rota).
+!src/LitoralMarket.Web/wwwroot/lib/**/dist/
+!src/LitoralMarket.Web/wwwroot/lib/**/dist/**
+
 # Config locales
 appsettings.Development.json
 .env
