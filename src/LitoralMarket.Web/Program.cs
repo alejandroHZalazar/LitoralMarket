@@ -5,6 +5,7 @@ using LitoralMarket.Infrastructure.Services;
 
 using LitoralMarket.Web.Middleware;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -40,6 +41,19 @@ builder.Services.AddDbContextFactory<AppDbContext>(options =>
 // DbContextOptions que surge al combinar AddDbContext + AddDbContextFactory.
 builder.Services.AddScoped<AppDbContext>(sp =>
     sp.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext());
+
+// ── Data Protection: claves persistidas en la BD ───────────────────────
+// CRÍTICO en Railway/contenedores: sin esto, cada arranque (y cada réplica)
+// genera claves efímeras distintas, y la cookie de autenticación y el token
+// antiforgery encriptados por una instancia no los puede desencriptar otra →
+// el login "no funciona" en producción (rebota sin mostrar error) aunque
+// funcione en local. Guardar las claves en MySQL las comparte entre todas las
+// instancias y las hace sobrevivir a los redeploys.
+// SetApplicationName fija el discriminador para que todas las instancias usen
+// el mismo anillo de claves.
+builder.Services.AddDataProtection()
+    .PersistKeysToDbContext<AppDbContext>()
+    .SetApplicationName("LitoralMarket");
 
 // Autenticación por cookies
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)

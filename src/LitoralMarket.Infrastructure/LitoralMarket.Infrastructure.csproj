@@ -9,6 +9,7 @@
     <PackageReference Include="itext.bouncy-castle-adapter" Version="8.0.5" />
     <PackageReference Include="itext7" Version="8.0.5" />
     <PackageReference Include="MailKit" Version="4.16.0" />
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="8.0.10" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.10" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="8.0.1" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="8.0.1" />

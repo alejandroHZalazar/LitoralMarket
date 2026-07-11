@@ -87,6 +87,13 @@ public class LoginPageModel : PageModel
         }
 
         // ── Login de cliente ──────────────────────────────────────
+        // NombreAdmin no aplica al login de cliente. Como es un string no-nullable
+        // con <Nullable>enable</Nullable>, recibe un [Required] IMPLÍCITO: al ir
+        // vacío invalidaría el ModelState y el login fallaría en silencio (sin
+        // mostrar "contraseña incorrecta"). Se quita, igual que Datos.Email en el
+        // camino admin.
+        ModelState.Remove(nameof(NombreAdmin));
+
         if (!ModelState.IsValid)
             return Page();
 
