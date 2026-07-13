@@ -3,6 +3,8 @@
 @using System.Globalization
 @{
     ViewData["Title"] = "Confirmar Pedido";
+    // Modo credenciales: pedido directo, sin dirección de envío ni medio de pago.
+    var cred = Model.EsModoCredenciales;
     // Costos de envío para el JS (actualización dinámica del total)
     var costosJson = System.Text.Json.JsonSerializer.Serialize(
         Model.Direcciones.ToDictionary(
@@ -98,7 +100,9 @@
                 </div>
             </div>
 
-            <!-- Dirección de entrega -->
+            @if (!cred)
+            {
+            <!-- Dirección de entrega — solo en modo publico -->
             <div class="card border-0 shadow-sm">
                 <div class="card-body">
                     <h6 class="card-title checkout-section-title">
@@ -176,6 +180,7 @@
                     </div>
                 </div>
             </div>
+            }
 
             <!-- Observaciones -->
             <div class="card border-0 shadow-sm">
@@ -221,11 +226,14 @@
                         <span>$@subtotal.ToString("N2")</span>
                     </div>
 
-                    <!-- Costo de envío (dinámico) -->
-                    <div class="d-flex justify-content-between small mb-1" id="filaEnvio">
-                        <span class="text-muted">Envío</span>
-                        <span id="lblCostoEnvio" class="fw-semibold">—</span>
-                    </div>
+                    <!-- Costo de envío (dinámico) — solo en modo publico -->
+                    @if (!cred)
+                    {
+                        <div class="d-flex justify-content-between small mb-1" id="filaEnvio">
+                            <span class="text-muted">Envío</span>
+                            <span id="lblCostoEnvio" class="fw-semibold">—</span>
+                        </div>
+                    }
 
                     <hr class="my-2" />
 
@@ -255,6 +263,9 @@
 
 @section Scripts {
 <partial name="_ValidationScriptsPartial" />
+@if (!cred)
+{
+<text>
 <script>
 (function () {
     const COSTOS        = @Html.Raw(costosJson);
@@ -342,4 +353,6 @@
     });
 })();
 </script>
+</text>
+}
 }

@@ -114,11 +114,18 @@ public class EmailService : IEmailService
         var empresa        = await _params.GetValorAsync("empresa", "nombre") ?? "LitoralMarket";
         var telefonoWs     = await _params.GetValorAsync("empresa", "telefono");
 
-        // PDF adjunto si está habilitado
+        // PDF adjunto si está habilitado. Con cobro (flujo de pago) se genera el
+        // comprobante con datos de pago; sin cobro (modo credenciales, pedido
+        // directo) se genera el comprobante sin pago.
         byte[]? pdfBytes = null;
-        if (cobro is not null && await MailHabilitado("ecommerce", "generarPdfPago"))
+        if (await MailHabilitado("ecommerce", "generarPdfPago"))
         {
-            try { pdfBytes = await _pdf.GenerarComprobanteAsync(pedidoId, cobro.Id); }
+            try
+            {
+                pdfBytes = cobro is not null
+                    ? await _pdf.GenerarComprobanteAsync(pedidoId, cobro.Id)
+                    : await _pdf.GenerarComprobanteSinPagoAsync(pedidoId);
+            }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "No se pudo generar el PDF para el pedido #{Id}", pedidoId);

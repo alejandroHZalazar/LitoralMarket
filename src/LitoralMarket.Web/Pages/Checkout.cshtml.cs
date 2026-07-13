@@ -32,6 +32,14 @@ public class CheckoutPageModel : PageModel
     public List<DireccionEntregaDto> Direcciones       { get; private set; } = new();
     public List<string>              Errores           { get; private set; } = new();
 
+    /// <summary>
+    /// Bandera única que centraliza la decisión de flujo. En modo "credenciales"
+    /// el pedido se confirma de forma directa (sin dirección de envío, sin medio
+    /// de pago, sin /Pago): confirmar → comprobante/PDF + email → /Pedido.
+    /// En modo "publico" se mantiene el flujo completo (dirección → pago → /Pago).
+    /// </summary>
+    public bool EsModoCredenciales { get; private set; }
+
     public async Task<IActionResult> OnGetAsync()
     {
         var pedidoId = HttpContext.Session.GetInt32("PedidoId");
@@ -39,35 +47,39 @@ public class CheckoutPageModel : PageModel
 
         try
         {
-            // Direcciones es independiente del pedido → arranca ya, en paralelo,
-            // sobre su propio contexto (factory). Se superpone con el resto del trabajo.
-            var direccionesTask = _direcciones.ObtenerActivasAsync();
+            EsModoCredenciales = await _params.GetModoAccesoAsync() == "credenciales";
+
+            // En "publico" las direcciones se cargan en paralelo (contexto factory).
+            // En "credenciales" NO se usan direcciones ni envío → no se cargan.
+            var direccionesTask = EsModoCredenciales ? null : _direcciones.ObtenerActivasAsync();
 
             // Mutación: refresca y persiste precios/costos (contexto scoped). Debe
             // completar antes de leer items y validar stock (dependen de esos precios).
             await _carrito.ActualizarPreciosAsync(pedidoId.Value);
 
             // Lecturas independientes en paralelo. Solo ObtenerItems usa el contexto
-            // scoped (único que puede); ValidarStock y Direcciones usan contextos
-            // propios de la factory → sin colisión ni condiciones de carrera.
+            // scoped (único que puede); las demás usan contextos propios de la factory.
             var itemsTask = _carrito.ObtenerItemsAsync(pedidoId.Value);
             var stockTask = _pedidos.ValidarStockAsync(pedidoId.Value);
-            await Task.WhenAll(itemsTask, stockTask, direccionesTask);
+            await Task.WhenAll(itemsTask, stockTask);
 
-            Items       = itemsTask.Result;
-            Errores     = stockTask.Result.errores;
-            Direcciones = direccionesTask.Result;
+            Items   = itemsTask.Result;
+            Errores = stockTask.Result.errores;
+
+            if (!EsModoCredenciales)
+            {
+                Direcciones = await direccionesTask!;
+                // Pre-seleccionar la dirección por defecto (solo modo publico)
+                var porDefecto = Direcciones.FirstOrDefault(d => d.EsDefault) ?? Direcciones.FirstOrDefault();
+                if (porDefecto is not null)
+                    Datos.DireccionEntregaId = porDefecto.Id;
+            }
 
             if (!Items.Any()) return RedirectToPage("/Carrito");
 
             // ActualizarPreciosAsync ya refrescó y persistió los subtotales; el total
             // se calcula en memoria desde los items ya cargados (sin round-trips extra).
             SubtotalProductos = Items.Sum(i => i.Subtotal);
-
-            // Pre-seleccionar la dirección por defecto
-            var porDefecto = Direcciones.FirstOrDefault(d => d.EsDefault) ?? Direcciones.FirstOrDefault();
-            if (porDefecto is not null)
-                Datos.DireccionEntregaId = porDefecto.Id;
 
             // Pre-completar datos del cliente autenticado
             if (User.Identity!.IsAuthenticated)
@@ -110,42 +122,56 @@ public class CheckoutPageModel : PageModel
 
         try
         {
+            // Decisión de flujo centralizada en una sola bandera.
+            EsModoCredenciales = await _params.GetModoAccesoAsync() == "credenciales";
+
+            if (EsModoCredenciales)
+            {
+                // En credenciales no hay dirección de envío: esos campos no se envían
+                // y no deben invalidar el ModelState. DireccionEntregaId tiene
+                // [Required]/[Range(1,…)] → quedaría en 0 y fallaría. Se quitan igual
+                // que se hace con los datos de contacto del usuario autenticado.
+                ModelState.Remove(nameof(Datos) + "." + nameof(Datos.DireccionEntregaId));
+                ModelState.Remove(nameof(Datos) + "." + nameof(Datos.DireccionEntregaTexto));
+            }
+
             // ── Validaciones críticas en paralelo (independientes entre sí) ──
-            //  • ObtenerActivas (direcciones) y ValidarStock → contextos propios (factory)
-            //  • ActualizarPrecios (mutación de precios) → contexto scoped
-            // Solo una toca el scoped → sin condiciones de carrera. ValidarStock lee
-            // 'cantidad'/'stock' y ActualizarPrecios escribe 'precio'/'subtotal':
-            // columnas disjuntas, así que el resultado de la validación es idéntico.
-            var direccionesTask = _direcciones.ObtenerActivasAsync();
+            //  • ValidarStock → contexto propio (factory); ActualizarPrecios → scoped.
+            //  • En publico, direcciones también en paralelo (factory). En credenciales
+            //    no se cargan direcciones (no hay envío que validar).
+            var direccionesTask = EsModoCredenciales ? null : _direcciones.ObtenerActivasAsync();
             var stockTask       = _pedidos.ValidarStockAsync(pedidoId.Value);
             await _carrito.ActualizarPreciosAsync(pedidoId.Value);
 
-            Direcciones = await direccionesTask;
             var (valido, errores) = await stockTask;
             if (!valido) Errores = errores;
 
-            // ── Validar dirección libre (requiere Direcciones) ────────
-            var dirSeleccionada = Direcciones.FirstOrDefault(d => d.Id == Datos.DireccionEntregaId);
-            if (dirSeleccionada?.PermiteLibre == true && string.IsNullOrWhiteSpace(Datos.DireccionEntregaTexto))
-                ModelState.AddModelError("Datos.DireccionEntregaTexto", "Ingresá la dirección de entrega");
+            // ── Validar dirección de entrega SOLO en modo publico ────────
+            if (!EsModoCredenciales)
+            {
+                Direcciones = await direccionesTask!;
+                var dirSeleccionada = Direcciones.FirstOrDefault(d => d.Id == Datos.DireccionEntregaId);
+                if (dirSeleccionada?.PermiteLibre == true && string.IsNullOrWhiteSpace(Datos.DireccionEntregaTexto))
+                    ModelState.AddModelError("Datos.DireccionEntregaTexto", "Ingresá la dirección de entrega");
+            }
 
             if (!ModelState.IsValid || Errores.Any())
             {
                 // Los items solo se necesitan para RE-RENDERIZAR la página en caso de
-                // error. En el camino feliz se redirige a /Pago sin usarlos → cargarlos
-                // acá evita 2 round-trips (ObtenerItems + ObtenerTotal) en cada confirmación.
+                // error. En el camino feliz se redirige sin usarlos → cargarlos acá
+                // evita round-trips en cada confirmación.
                 Items             = await _carrito.ObtenerItemsAsync(pedidoId.Value);
                 SubtotalProductos = Items.Sum(i => i.Subtotal);
                 return Page();
             }
 
             // ── Confirmar o preparar pago según modo de acceso ────────
-            var modo = await _params.GetModoAccesoAsync();
             LimpiarSesionPedido();
 
-            if (modo == "credenciales")
+            if (EsModoCredenciales)
             {
-                // Directo: borrador → confirmado sin pasar por /Pago
+                // Directo: borrador → confirmado (comprobante/PDF + email al cliente),
+                // sin dirección de envío, sin medio de pago, sin /Pago.
                 var idConfirmado = await _pedidos.ConfirmarDirectoAsync(pedidoId.Value, Datos);
                 return RedirectToPage("/Pedido", new { id = idConfirmado });
             }

@@ -120,11 +120,27 @@ public class PedidoService : IPedidoService
     }
 
     /// <inheritdoc />
-    public async Task ConfirmarPagoAsync(int pedidoId)
+    /// <remarks>
+    /// Flujo de PAGO (webhook MercadoPago, reembolso): confirma el pedido y
+    /// descuenta stock + registra el movimiento de egreso.
+    /// </remarks>
+    public Task ConfirmarPagoAsync(int pedidoId) =>
+        ConfirmarInternoAsync(pedidoId, descontarStock: true);
+
+    /// <summary>
+    /// Transición pendiente_pago → confirmado. Con <paramref name="descontarStock"/>
+    /// en true descuenta stock y registra el movimiento (flujo de pago). En false
+    /// solo confirma el estado, sin tocar stock (modo credenciales: el pedido lo
+    /// procesa/despacha el sistema comercial, no el ecommerce).
+    /// </summary>
+    private async Task ConfirmarInternoAsync(int pedidoId, bool descontarStock)
     {
-        var pedido = await _db.Pedidos
-            .Include(p => p.Detalles).ThenInclude(d => d.Producto).ThenInclude(p => p!.Stock)
-            .FirstOrDefaultAsync(p => p.Id == pedidoId);
+        // Solo se necesita cargar detalles/producto/stock cuando se va a descontar.
+        IQueryable<Pedido> query = _db.Pedidos;
+        if (descontarStock)
+            query = query.Include(p => p.Detalles).ThenInclude(d => d.Producto).ThenInclude(p => p!.Stock);
+
+        var pedido = await query.FirstOrDefaultAsync(p => p.Id == pedidoId);
 
         if (pedido is null)
             throw new InvalidOperationException("Pedido no encontrado");
@@ -135,34 +151,37 @@ public class PedidoService : IPedidoService
         if (pedido.EstadoEcommerce != "pendiente_pago")
             throw new InvalidOperationException($"El pedido no está en estado pendiente_pago (estado: {pedido.EstadoEcommerce})");
 
-        // Descontar stock y registrar movimiento de productos
-        foreach (var d in pedido.Detalles)
+        if (descontarStock)
         {
-            if (d.FkProducto is null) continue;
-
-            var stock     = d.Producto?.Stock;
-            var stockAnt  = stock?.Cantidad ?? 0m;
-            var cantidad  = d.Cantidad      ?? 0m;
-            var costoUnit = d.Costo         ?? 0m;
-
-            // Actualizar stock
-            if (stock is not null)
-                stock.Cantidad = stockAnt - cantidad;
-
-            // Registrar movimiento (tipo 3 = egreso por venta ecommerce)
-            _db.ProductosMovimientos.Add(new Domain.Entities.ProductosMovimiento
+            // Descontar stock y registrar movimiento de productos
+            foreach (var d in pedido.Detalles)
             {
-                FkProducto     = d.FkProducto,
-                TipoMovimiento = 3,
-                Descripcion    = d.Producto?.Descripcion ?? d.Descripcion,
-                StockAnt       = stockAnt,
-                StockAct       = stockAnt - cantidad,
-                Costo          = cantidad * costoUnit,
-                Venta          = cantidad * (d.PrecioConIva ?? 0m),
-                Cantidad       = cantidad,
-                FkColor        = d.FkColor,
-                FechaMov       = DateTime.Now
-            });
+                if (d.FkProducto is null) continue;
+
+                var stock     = d.Producto?.Stock;
+                var stockAnt  = stock?.Cantidad ?? 0m;
+                var cantidad  = d.Cantidad      ?? 0m;
+                var costoUnit = d.Costo         ?? 0m;
+
+                // Actualizar stock
+                if (stock is not null)
+                    stock.Cantidad = stockAnt - cantidad;
+
+                // Registrar movimiento (tipo 3 = egreso por venta ecommerce)
+                _db.ProductosMovimientos.Add(new Domain.Entities.ProductosMovimiento
+                {
+                    FkProducto     = d.FkProducto,
+                    TipoMovimiento = 3,
+                    Descripcion    = d.Producto?.Descripcion ?? d.Descripcion,
+                    StockAnt       = stockAnt,
+                    StockAct       = stockAnt - cantidad,
+                    Costo          = cantidad * costoUnit,
+                    Venta          = cantidad * (d.PrecioConIva ?? 0m),
+                    Cantidad       = cantidad,
+                    FkColor        = d.FkColor,
+                    FechaMov       = DateTime.Now
+                });
+            }
         }
 
         pedido.EstadoEcommerce  = "confirmado";
@@ -175,17 +194,20 @@ public class PedidoService : IPedidoService
     /// <inheritdoc />
     public async Task<int> ConfirmarDirectoAsync(int pedidoId, CheckoutDto datos)
     {
-        await PrepararPagoAsync(pedidoId, datos);  // borrador → pendiente_pago
-        await ConfirmarPagoAsync(pedidoId);         // pendiente_pago → confirmado + stock
+        await PrepararPagoAsync(pedidoId, datos);                         // borrador → pendiente_pago
+        await ConfirmarInternoAsync(pedidoId, descontarStock: false);     // pendiente_pago → confirmado (SIN descontar stock)
 
-        // Notificar al administrador en background — no bloquea la respuesta HTTP.
-        // Se crea un scope propio para evitar ObjectDisposedException si el request finaliza primero.
+        // Emails en background — no bloquean la respuesta HTTP. Se crea un scope propio
+        // para evitar ObjectDisposedException si el request HTTP finaliza primero.
+        //  • Cliente: confirmación del pedido con el comprobante/PDF adjunto.
+        //  • Admin: notificación de nuevo pedido.
         var capturedId = pedidoId;
         _ = Task.Run(async () =>
         {
             using var scope = _scopeFactory.CreateScope();
             var email = scope.ServiceProvider.GetRequiredService<IEmailService>();
-            try { await email.EnviarNotificacionAdminAsync(capturedId); } catch { }
+            try { await email.EnviarConfirmacionPedidoAsync(capturedId); } catch { }
+            try { await email.EnviarNotificacionAdminAsync(capturedId);   } catch { }
         });
 
         return pedidoId;
