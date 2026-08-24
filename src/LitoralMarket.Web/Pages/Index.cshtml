@@ -12,6 +12,24 @@
     </div>
 </div>
 
+@* ── Últimos productos (solo en la primera página) ── *@
+@if (Model.UltimosProductos.Any())
+{
+    <section class="mb-5">
+        <h4 class="mb-3">
+            <i class="bi bi-stars me-2 text-success"></i>Últimos productos
+        </h4>
+        <div class="row row-cols-2 row-cols-md-3 row-cols-lg-4 g-3">
+            @foreach (var producto in Model.UltimosProductos)
+            {
+                <div class="col position-relative">
+                    <partial name="_ProductoCard" model="producto" />
+                </div>
+            }
+        </div>
+    </section>
+}
+
 @if (!Model.Productos.Any())
 {
     <div class="alert alert-info text-center">No hay productos disponibles en este momento.</div>

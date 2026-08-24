@@ -45,6 +45,20 @@ public class ProductoRepository : IProductoRepository
             .ToListAsync();
     }
 
+    public async Task<List<ProductoDto>> ObtenerUltimosAsync(int cantidad, bool incluirSinStock)
+    {
+        // Últimos creados = mayor Id (no existe columna de fecha de alta en el esquema).
+        // ORDER BY id DESC usa la PK como índice; LIMIT evita traer toda la tabla.
+        // Proyectar() no carga el blob de imagen (solo evalúa imagen IS NOT NULL).
+        var query = EntidadesActivas();
+        if (!incluirSinStock) query = ConStock(query);
+
+        return await Proyectar(query)
+            .OrderByDescending(p => p.Id)
+            .Take(cantidad)
+            .ToListAsync();
+    }
+
     public async Task<ProductoDto?> ObtenerPorIdAsync(int id) =>
         await Proyectar(EntidadesActivas()).FirstOrDefaultAsync(p => p.Id == id);
 

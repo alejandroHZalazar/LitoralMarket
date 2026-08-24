@@ -15,7 +15,11 @@ public class IndexModel : PageModel
         _parametros = parametros;
     }
 
+    /// <summary>Cantidad de "últimos productos" a mostrar en Inicio (una fila completa en lg).</summary>
+    private const int CantidadUltimos = 8;
+
     public List<ProductoDto> Productos { get; private set; } = new();
+    public List<ProductoDto> UltimosProductos { get; private set; } = new();
     public bool MostrarSinStock { get; private set; }
     public string Titulo { get; private set; } = string.Empty;
     public int PaginaActual { get; private set; } = 1;
@@ -36,5 +40,10 @@ public class IndexModel : PageModel
         PaginaActual = Math.Clamp(pagina, 1, Math.Max(1, TotalPaginas));
 
         Productos = await _productos.ObtenerPorRubroAsync(primerRubro.Id, MostrarSinStock, PaginaActual, porPagina);
+
+        // Sección "Últimos productos": solo en la primera página (es un destacado,
+        // no tiene sentido repetir la consulta al paginar el catálogo).
+        if (PaginaActual == 1)
+            UltimosProductos = await _productos.ObtenerUltimosAsync(CantidadUltimos, MostrarSinStock);
     }
 }
