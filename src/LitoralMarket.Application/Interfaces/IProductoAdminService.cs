@@ -8,12 +8,21 @@ public interface IProductoAdminService
     Task<List<ProductoAdminDto>> BuscarAsync(int tipo, string valor);
 
     Task<ProductoAdminDto?> ObtenerPorIdAsync(int id);
-    Task<byte[]?>           ObtenerImagenAsync(int id);
+
+    /// <summary>Metadatos (sin blob) de las imágenes activas de un producto, principal primero.</summary>
+    Task<List<ProductoImagenDto>> ObtenerImagenesAsync(int productoId);
+
+    /// <summary>
+    /// Reconcilia el conjunto de imágenes del producto con la lista recibida:
+    /// inserta las nuevas (DataUrl), conserva las existentes (Id), da de baja las
+    /// que no llegan, y garantiza exactamente una imagen principal. Transaccional.
+    /// </summary>
+    Task SincronizarImagenesAsync(int productoId, List<ImagenSyncItem> imagenes);
 
     /// <summary>Crea producto + stock + precio + costo. Devuelve el Id generado.</summary>
-    Task<int> CrearAsync(ProductoAdminDto dto, byte[]? imagen);
+    Task<int> CrearAsync(ProductoAdminDto dto);
 
-    Task ActualizarAsync(ProductoAdminDto dto, byte[]? imagen);
+    Task ActualizarAsync(ProductoAdminDto dto);
 
     /// <summary>Baja lógica (Baja = true).</summary>
     Task BajaLogicaAsync(int id);

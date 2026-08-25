@@ -240,7 +240,7 @@ public class CarritoService : ICarritoService
     public async Task<List<CarritoItemDto>> ObtenerItemsAsync(int pedidoId)
     {
         // Proyección directa: no carga la entidad Producto completa (evita el blob Imagen).
-        // p.Imagen != null se traduce a SQL IS NOT NULL sin leer los bytes del blob.
+        // TieneImagen se traduce a EXISTS / IS NOT NULL en SQL, sin leer los bytes del blob.
         var detalles = await _db.PedidoDetalles
             .Where(d => d.FkPedido == pedidoId)
             .Select(d => new
@@ -251,7 +251,9 @@ public class CarritoService : ICarritoService
                 d.PrecioConIva,
                 d.Subtotal,
                 d.Cantidad,
-                TieneImagen = d.Producto != null && d.Producto.Imagen != null,
+                // Imágenes en la tabla nueva o el blob legacy (transición). Ninguno carga el blob.
+                TieneImagen = d.Producto != null &&
+                              (d.Producto.Imagenes.Any(i => !i.Baja) || d.Producto.Imagen != null),
                 ProductoId  = d.Producto != null ? (int?)d.Producto.Id : null
             })
             .ToListAsync();

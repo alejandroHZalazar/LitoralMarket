@@ -213,23 +213,53 @@ app.UseMiddleware<AccessModeMiddleware>();
 app.MapRazorPages();
 app.MapControllers();
 
-// Endpoint público para servir imágenes de productos (longblob en BD)
+// Detección de MIME por magic bytes (fallback cuando no hay contentType guardado)
+static string SniffMime(byte[] b) =>
+      b.Length >= 2 && b[0] == 0xFF && b[1] == 0xD8 ? "image/jpeg"
+    : b.Length >= 4 && b[0] == 0x89 && b[1] == 0x50 ? "image/png"
+    : b.Length >= 3 && b[0] == 0x47 && b[1] == 0x49 ? "image/gif"
+    : "image/webp";
+
+// Imagen PRINCIPAL de un producto (tabla imagenesProductos; fallback al blob legacy
+// Productos.imagen durante la transición). No carga blobs en listados: se pide por URL.
 app.MapGet("/images/productos/{id:int}", async (int id, LitoralMarket.Infrastructure.Data.AppDbContext db, HttpContext ctx) =>
 {
-    var imagen = await db.Productos
-        .Where(p => p.Id == id)
-        .Select(p => p.Imagen)
+    var img = await db.ImagenesProductos
+        .Where(i => i.FkProducto == id && !i.Baja)
+        .OrderByDescending(i => i.EsPrincipal).ThenBy(i => i.Orden).ThenBy(i => i.Id)
+        .Select(i => new { i.Imagen, i.ContentType })
         .FirstOrDefaultAsync();
 
-    if (imagen is null or { Length: 0 }) return Results.NotFound();
+    if (img is { Imagen.Length: > 0 })
+    {
+        ctx.Response.Headers.CacheControl = "public, max-age=86400";
+        return Results.File(img.Imagen, string.IsNullOrEmpty(img.ContentType) ? SniffMime(img.Imagen) : img.ContentType, enableRangeProcessing: false);
+    }
 
-    string mime = imagen.Length >= 2 && imagen[0] == 0xFF && imagen[1] == 0xD8 ? "image/jpeg"
-                : imagen.Length >= 4 && imagen[0] == 0x89 && imagen[1] == 0x50 ? "image/png"
-                : imagen.Length >= 3 && imagen[0] == 0x47 && imagen[1] == 0x49 ? "image/gif"
-                : "image/webp";
+    // No hay imagen activa en la tabla nueva. Si el producto YA está gestionado por
+    // la tabla nueva (tiene filas, aunque de baja), NO se cae al blob legacy —
+    // así una imagen borrada no "revive". El fallback legacy es solo para productos
+    // nunca tocados por el sistema nuevo (transición).
+    var gestionado = await db.ImagenesProductos.AnyAsync(i => i.FkProducto == id);
+    if (gestionado) return Results.NotFound();
 
+    var legacy = await db.Productos.Where(p => p.Id == id).Select(p => p.Imagen).FirstOrDefaultAsync();
+    if (legacy is null or { Length: 0 }) return Results.NotFound();
     ctx.Response.Headers.CacheControl = "public, max-age=86400";
-    return Results.File(imagen, mime, enableRangeProcessing: false);
+    return Results.File(legacy, SniffMime(legacy), enableRangeProcessing: false);
+});
+
+// Imagen PUNTUAL por id (para galería del detalle y miniaturas del ABM).
+app.MapGet("/images/productos/img/{imagenId:int}", async (int imagenId, LitoralMarket.Infrastructure.Data.AppDbContext db, HttpContext ctx) =>
+{
+    var img = await db.ImagenesProductos
+        .Where(i => i.Id == imagenId && !i.Baja)
+        .Select(i => new { i.Imagen, i.ContentType })
+        .FirstOrDefaultAsync();
+
+    if (img is null || img.Imagen is null or { Length: 0 }) return Results.NotFound();
+    ctx.Response.Headers.CacheControl = "public, max-age=86400";
+    return Results.File(img.Imagen, string.IsNullOrEmpty(img.ContentType) ? SniffMime(img.Imagen) : img.ContentType, enableRangeProcessing: false);
 });
 
 app.Run();

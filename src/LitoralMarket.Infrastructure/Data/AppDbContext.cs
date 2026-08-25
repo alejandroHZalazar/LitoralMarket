@@ -17,6 +17,7 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<Cliente> Clientes { get; set; }
     public DbSet<Rubro> Rubros { get; set; }
     public DbSet<Producto> Productos { get; set; }
+    public DbSet<ImagenProducto> ImagenesProductos { get; set; }
     public DbSet<StockProducto> StockProductos { get; set; }
     public DbSet<PrecioProducto> PreciosProductos { get; set; }
     public DbSet<Parametro> Parametros { get; set; }
@@ -80,6 +81,22 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             e.HasOne(x => x.Stock).WithOne(s => s.Producto).HasForeignKey<StockProducto>(s => s.FkProducto);
             e.HasOne(x => x.Precio).WithOne(p => p.Producto).HasForeignKey<PrecioProducto>(p => p.FkProducto);
             e.HasOne(x => x.Costo).WithOne(c => c.Producto).HasForeignKey<CostoProducto>(c => c.FkProducto);
+        });
+
+        modelBuilder.Entity<ImagenProducto>(e =>
+        {
+            e.ToTable("imagenesProductos");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.FkProducto).HasColumnName("fk_producto");
+            e.Property(x => x.Imagen).HasColumnName("imagen").HasColumnType("longblob");
+            e.Property(x => x.ContentType).HasColumnName("contentType");
+            e.Property(x => x.EsPrincipal).HasColumnName("esPrincipal");
+            e.Property(x => x.Orden).HasColumnName("orden");
+            e.Property(x => x.Baja).HasColumnName("baja");
+            e.Property(x => x.FechaAlta).HasColumnName("fechaAlta");
+            e.HasOne(x => x.Producto).WithMany(p => p.Imagenes).HasForeignKey(x => x.FkProducto);
+            e.HasIndex(x => new { x.FkProducto, x.Baja, x.EsPrincipal, x.Orden })
+             .HasDatabaseName("IX_imagenesProductos_lookup");
         });
 
         modelBuilder.Entity<StockProducto>(e =>

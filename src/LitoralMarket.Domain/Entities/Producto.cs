@@ -20,4 +20,8 @@ public class Producto
     public StockProducto? Stock  { get; set; }
     public PrecioProducto? Precio { get; set; }
     public CostoProducto?  Costo  { get; set; }
+
+    /// <summary>Imágenes del producto (tabla imagenesProductos). La columna legacy
+    /// <see cref="Imagen"/> se mantiene durante la transición.</summary>
+    public ICollection<ImagenProducto> Imagenes { get; set; } = new List<ImagenProducto>();
 }

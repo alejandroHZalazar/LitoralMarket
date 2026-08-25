@@ -26,20 +26,21 @@ public class ProductoAdminService : IProductoAdminService
             _ => q.Where(p => p.Descripcion  != null && p.Descripcion.Contains(valor))
         };
 
-        var lista = await q
+        // Proyección directa: NO materializa la entidad Producto (evita cargar el
+        // blob 'imagen' de hasta 200 productos, que antes se traía sin usarse).
+        return await q
             .Where(p => p.Baja != true)
             .OrderBy(p => p.Descripcion)
             .Take(200)
+            .Select(p => new ProductoAdminDto
+            {
+                Id           = p.Id,
+                CodProveedor = p.CodProveedor,
+                CodBarras    = p.CodBarras,
+                Descripcion  = p.Descripcion,
+                RubroNombre  = p.Rubro != null ? p.Rubro.Descripcion : null
+            })
             .ToListAsync();
-
-        return lista.Select(p => new ProductoAdminDto
-        {
-            Id           = p.Id,
-            CodProveedor = p.CodProveedor,
-            CodBarras    = p.CodBarras,
-            Descripcion  = p.Descripcion,
-            RubroNombre  = p.Rubro?.Descripcion
-        }).ToList();
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -87,18 +88,94 @@ public class ProductoAdminService : IProductoAdminService
     }
 
     // ──────────────────────────────────────────────────────────────
-    // Imagen — lee el blob directamente de la BD
+    // Imágenes (tabla imagenesProductos)
     // ──────────────────────────────────────────────────────────────
-    public async Task<byte[]?> ObtenerImagenAsync(int id) =>
-        await _db.Productos
-            .Where(p => p.Id == id)
-            .Select(p => p.Imagen)
-            .FirstOrDefaultAsync();
+    public async Task<List<ProductoImagenDto>> ObtenerImagenesAsync(int productoId) =>
+        await _db.ImagenesProductos
+            .Where(i => i.FkProducto == productoId && !i.Baja)
+            .OrderByDescending(i => i.EsPrincipal).ThenBy(i => i.Orden).ThenBy(i => i.Id)
+            .Select(i => new ProductoImagenDto { Id = i.Id, EsPrincipal = i.EsPrincipal, Orden = i.Orden })
+            .ToListAsync();
+
+    public async Task SincronizarImagenesAsync(int productoId, List<ImagenSyncItem> imagenes)
+    {
+        imagenes ??= new List<ImagenSyncItem>();
+
+        await using var tx = await _db.Database.BeginTransactionAsync();
+        try
+        {
+            var actuales = await _db.ImagenesProductos
+                .Where(i => i.FkProducto == productoId && !i.Baja)
+                .ToListAsync();
+
+            var idsRecibidos = imagenes.Where(i => i.Id.HasValue).Select(i => i.Id!.Value).ToHashSet();
+
+            // Baja lógica de las que ya no están en la lista
+            foreach (var img in actuales.Where(a => !idsRecibidos.Contains(a.Id)))
+                img.Baja = true;
+
+            // Conservar existentes (orden/principal) e insertar nuevas
+            foreach (var item in imagenes)
+            {
+                ImagenProducto? entidad = null;
+
+                if (item.Id.HasValue)
+                {
+                    entidad = actuales.FirstOrDefault(a => a.Id == item.Id.Value);
+                    if (entidad is null) continue; // id que no pertenece → se ignora
+                }
+                else if (!string.IsNullOrWhiteSpace(item.DataUrl) && item.DataUrl.Contains(','))
+                {
+                    var coma = item.DataUrl.IndexOf(',');
+                    var meta = item.DataUrl[..coma];                 // data:image/png;base64
+                    var b64  = item.DataUrl[(coma + 1)..];
+                    var ct   = meta.StartsWith("data:") ? meta[5..].Split(';')[0] : null;
+
+                    entidad = new ImagenProducto
+                    {
+                        FkProducto  = productoId,
+                        Imagen      = Convert.FromBase64String(b64),
+                        ContentType = ct,
+                        Baja        = false,
+                        FechaAlta   = DateTime.Now
+                    };
+                    _db.ImagenesProductos.Add(entidad);
+                }
+
+                if (entidad is null) continue;
+                entidad.Orden       = item.Orden;
+                entidad.EsPrincipal = item.EsPrincipal;
+            }
+
+            await _db.SaveChangesAsync();
+
+            // Garantizar exactamente una principal entre las activas
+            var activas = await _db.ImagenesProductos
+                .Where(i => i.FkProducto == productoId && !i.Baja)
+                .OrderBy(i => i.Orden).ThenBy(i => i.Id)
+                .ToListAsync();
+
+            if (activas.Count > 0)
+            {
+                var ppal = activas.FirstOrDefault(a => a.EsPrincipal) ?? activas[0];
+                foreach (var a in activas)
+                    a.EsPrincipal = a.Id == ppal.Id;
+                await _db.SaveChangesAsync();
+            }
+
+            await tx.CommitAsync();
+        }
+        catch
+        {
+            await tx.RollbackAsync();
+            throw;
+        }
+    }
 
     // ──────────────────────────────────────────────────────────────
     // Alta
     // ──────────────────────────────────────────────────────────────
-    public async Task<int> CrearAsync(ProductoAdminDto dto, byte[]? imagen)
+    public async Task<int> CrearAsync(ProductoAdminDto dto)
     {
         var producto = new Producto
         {
@@ -112,8 +189,8 @@ public class ProductoAdminService : IProductoAdminService
             EsPromocion      = dto.EsPromocion,
             Fraccionado      = dto.Fraccionado,
             Dolarizado       = dto.Dolarizado,
-            Baja             = false,
-            Imagen           = imagen
+            Baja             = false
+            // Imagen legacy: ya NO se escribe. Las imágenes van a imagenesProductos.
         };
         _db.Productos.Add(producto);
         await _db.SaveChangesAsync();
@@ -142,8 +219,9 @@ public class ProductoAdminService : IProductoAdminService
     // ──────────────────────────────────────────────────────────────
     // Modificación
     // ──────────────────────────────────────────────────────────────
-    public async Task ActualizarAsync(ProductoAdminDto dto, byte[]? imagen)
+    public async Task ActualizarAsync(ProductoAdminDto dto)
     {
+        // No se hace Include(Producto.Imagenes) → no se cargan blobs al editar.
         var p = await _db.Productos
             .Include(x => x.Stock)
             .Include(x => x.Precio)
@@ -162,7 +240,7 @@ public class ProductoAdminService : IProductoAdminService
         p.EsPromocion      = dto.EsPromocion;
         p.Fraccionado      = dto.Fraccionado;
         p.Dolarizado       = dto.Dolarizado;
-        if (imagen is { Length: > 0 }) p.Imagen = imagen;
+        // Imagen legacy: ya NO se escribe. Las imágenes se gestionan en imagenesProductos.
 
         // Stock
         if (p.Stock is null)

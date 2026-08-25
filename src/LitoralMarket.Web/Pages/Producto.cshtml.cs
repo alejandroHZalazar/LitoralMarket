@@ -18,6 +18,7 @@ public class ProductoDetalleModel : PageModel
 
     public ProductoDto? Producto { get; private set; }
     public bool MostrarSinStock { get; private set; }
+    public List<ProductoImagenDto> Imagenes { get; private set; } = new();
 
     public async Task<IActionResult> OnGetAsync(int id)
     {
@@ -26,6 +27,9 @@ public class ProductoDetalleModel : PageModel
 
         if (Producto is null) return NotFound();
         if (!Producto.TieneStock && !MostrarSinStock) return NotFound();
+
+        // Metadatos de imágenes (sin blobs) para la galería
+        Imagenes = await _productos.ObtenerImagenesAsync(id);
 
         return Page();
     }

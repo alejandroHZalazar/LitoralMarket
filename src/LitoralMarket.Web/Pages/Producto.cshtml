@@ -23,7 +23,25 @@ else
 {
     <div class="row g-4">
         <div class="col-md-5 text-center">
-            @if (!string.IsNullOrEmpty(rutaImagen))
+            @if (Model.Imagenes.Any())
+            {
+                var principal = Model.Imagenes.First();
+                <img id="imgPrincipalDetalle" src="@principal.Url" class="img-fluid rounded shadow mb-2"
+                     alt="@Model.Producto.Descripcion" style="max-height:400px;object-fit:contain;" />
+                @if (Model.Imagenes.Count > 1)
+                {
+                    <div class="d-flex flex-wrap gap-2 justify-content-center mt-2">
+                        @foreach (var img in Model.Imagenes)
+                        {
+                            <img src="@img.Url"
+                                 class="rounded border thumb-detalle @(img.Id == principal.Id ? "border-primary" : "")"
+                                 style="width:64px;height:64px;object-fit:contain;cursor:pointer"
+                                 onclick="cambiarImagenDetalle(this, '@img.Url')" />
+                        }
+                    </div>
+                }
+            }
+            else if (!string.IsNullOrEmpty(rutaImagen))
             {
                 <img src="@rutaImagen" class="img-fluid rounded shadow"
                      alt="@Model.Producto.Descripcion" style="max-height:400px;object-fit:contain;" />
@@ -71,4 +89,15 @@ else
             </div>
         </div>
     </div>
+}
+
+@section Scripts {
+<script>
+    function cambiarImagenDetalle(thumb, url) {
+        var main = document.getElementById('imgPrincipalDetalle');
+        if (main) main.src = url;
+        document.querySelectorAll('.thumb-detalle').forEach(t => t.classList.remove('border-primary'));
+        thumb.classList.add('border-primary');
+    }
+</script>
 }

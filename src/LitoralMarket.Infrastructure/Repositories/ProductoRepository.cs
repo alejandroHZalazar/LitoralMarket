@@ -62,6 +62,14 @@ public class ProductoRepository : IProductoRepository
     public async Task<ProductoDto?> ObtenerPorIdAsync(int id) =>
         await Proyectar(EntidadesActivas()).FirstOrDefaultAsync(p => p.Id == id);
 
+    public async Task<List<ProductoImagenDto>> ObtenerImagenesAsync(int productoId) =>
+        // Solo metadatos (id/principal/orden) — nunca el blob. Principal primero.
+        await _db.ImagenesProductos
+            .Where(i => i.FkProducto == productoId && !i.Baja)
+            .OrderByDescending(i => i.EsPrincipal).ThenBy(i => i.Orden).ThenBy(i => i.Id)
+            .Select(i => new ProductoImagenDto { Id = i.Id, EsPrincipal = i.EsPrincipal, Orden = i.Orden })
+            .ToListAsync();
+
     public async Task<List<Rubro>> ObtenerRubrosAsync()
     {
         // Los rubros cambian rara vez y se consultan en cada request (página + layout).
@@ -120,7 +128,9 @@ public class ProductoRepository : IProductoRepository
             Id               = p.Id,
             Descripcion      = p.Descripcion ?? string.Empty,
             DescripcionLarga = p.DescripcionLarga,
-            TieneImagen      = p.Imagen != null,   // IS NOT NULL en SQL — no carga el blob
+            // EXISTS en la tabla nueva o el blob legacy (transición). Ninguno carga
+            // el blob: se traduce a IS NOT NULL / EXISTS en SQL.
+            TieneImagen      = p.Imagenes.Any(i => !i.Baja) || p.Imagen != null,
             RubroId          = p.FkRubro,
             RubroNombre      = p.Rubro  != null ? p.Rubro.Descripcion  : null,
             Precio           = p.Precio != null ? (p.Precio.Precio ?? 0)  : 0,

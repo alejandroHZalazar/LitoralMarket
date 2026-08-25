@@ -85,7 +85,7 @@ public class IndexModel : PageModel
             ? $"<span class=\"badge bg-success\">En stock ({p.StockActual:N0})</span>"
             : $"<span class=\"badge bg-warning text-dark\">Stock bajo ({p.StockActual:N0})</span>";
 
-        string imgTag = $"<img src=\"/Admin/Productos?handler=Imagen&id={id}&t={DateTime.Now.Ticks}\" class=\"img-fluid rounded mb-2\" style=\"max-height:180px;object-fit:contain;\" onerror=\"this.style.display='none'\" />";
+        string imgTag = $"<img src=\"/images/productos/{id}?t={DateTime.Now.Ticks}\" class=\"img-fluid rounded mb-2\" style=\"max-height:180px;object-fit:contain;\" onerror=\"this.style.display='none'\" />";
 
         var html = $@"
 <div class=""p-2"">
@@ -110,18 +110,14 @@ public class IndexModel : PageModel
         return Content(html, "text/html");
     }
 
-    // ── AJAX: imagen binaria ─────────────────────────────────────
-    public async Task<IActionResult> OnGetImagenAsync(int id)
+    // ── AJAX: metadatos de imágenes de un producto (para el modal) ─
+    public async Task<IActionResult> OnGetImagenesAsync(int id)
     {
-        var bytes = await _productos.ObtenerImagenAsync(id);
-        if (bytes is null or { Length: 0 }) return NotFound();
-
-        string mime = bytes.Length >= 4 && bytes[0] == 0xFF && bytes[1] == 0xD8 ? "image/jpeg"
-                    : bytes.Length >= 4 && bytes[0] == 0x89 && bytes[1] == 0x50 ? "image/png"
-                    : bytes.Length >= 4 && bytes[0] == 0x47 && bytes[1] == 0x49 ? "image/gif"
-                    : "image/webp";
-
-        return File(bytes, mime);
+        var imgs = await _productos.ObtenerImagenesAsync(id);
+        return new JsonResult(imgs, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
     }
 
     // ── AJAX: datos JSON para el modal de edición ────────────────
@@ -176,12 +172,18 @@ public class IndexModel : PageModel
             return 0;
         }
 
-        // Leer imagen desde campo hidden (base64 dataUrl → bytes)
-        byte[]? imgBytes = null;
-        var dataUrl = Request.Form["imagenDataUrl"].ToString();
-        if (!string.IsNullOrWhiteSpace(dataUrl) && dataUrl.Contains(","))
+        // Leer lista de imágenes desde campo hidden (JSON con existentes + nuevas)
+        List<ImagenSyncItem> imagenes = new();
+        var imagenesJson = Request.Form["imagenesJson"].ToString();
+        if (!string.IsNullOrWhiteSpace(imagenesJson))
         {
-            imgBytes = Convert.FromBase64String(dataUrl.Split(',')[1]);
+            try
+            {
+                imagenes = JsonSerializer.Deserialize<List<ImagenSyncItem>>(
+                    imagenesJson,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+            }
+            catch { imagenes = new(); }
         }
 
         // Fix decimals (form sends comma-separated in es-AR)
@@ -208,12 +210,20 @@ public class IndexModel : PageModel
             return Page();
         }
 
-        if (Producto.Id == 0)
-            await _productos.CrearAsync(Producto, imgBytes);
+        int productoId;
+        bool esAlta = Producto.Id == 0;
+        if (esAlta)
+            productoId = await _productos.CrearAsync(Producto);
         else
-            await _productos.ActualizarAsync(Producto, imgBytes);
+        {
+            await _productos.ActualizarAsync(Producto);
+            productoId = Producto.Id;
+        }
 
-        TempData["Mensaje"] = Producto.Id == 0
+        // Sincronizar imágenes (inserta nuevas, conserva existentes, da de baja las quitadas)
+        await _productos.SincronizarImagenesAsync(productoId, imagenes);
+
+        TempData["Mensaje"] = esAlta
             ? "Producto creado correctamente."
             : "Producto actualizado correctamente.";
 

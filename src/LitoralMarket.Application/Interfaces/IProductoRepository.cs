@@ -15,6 +15,10 @@ public interface IProductoRepository
     /// </summary>
     Task<List<ProductoDto>> ObtenerUltimosAsync(int cantidad, bool incluirSinStock);
     Task<ProductoDto?> ObtenerPorIdAsync(int id);
+
+    /// <summary>Metadatos (sin blob) de las imágenes activas de un producto, principal primero.</summary>
+    Task<List<ProductoImagenDto>> ObtenerImagenesAsync(int productoId);
+
     Task<List<Rubro>> ObtenerRubrosAsync();
     Task<int> ContarPorRubroAsync(int rubroId, bool incluirSinStock);
     Task<int> ContarBusquedaAsync(string termino, bool incluirSinStock);

@@ -99,7 +99,7 @@
             <form method="post" asp-page-handler="Guardar" enctype="multipart/form-data" id="formProducto">
                 @Html.AntiForgeryToken()
                 <input type="hidden" asp-for="Producto.Id" id="prodId" />
-                <input type="hidden" name="imagenDataUrl" id="imagenDataUrl" />
+                <input type="hidden" name="imagenesJson" id="imagenesJson" />
 
                 <div class="modal-body">
                     <div class="row g-3">
@@ -229,29 +229,26 @@
                                 </div>
                             </div>
 
-                            <!-- Imagen -->
-                            <div class="admin-section-title mt-3">Imagen</div>
-                            <div id="zonaImagen" class="zona-imagen-drop border rounded p-3 text-center"
+                            <!-- Imágenes (múltiples) -->
+                            <div class="admin-section-title mt-3">Imágenes</div>
+                            <div id="zonaImagen" class="zona-imagen-drop border rounded p-3 text-center mb-2"
                                  ondragover="event.preventDefault()" ondrop="onDropImagen(event)">
-                                <div id="imgPreviewWrap" class="d-none mb-2">
-                                    <img id="imgPreview" src="" class="img-fluid rounded"
-                                         style="max-height:120px;object-fit:contain;" />
-                                </div>
-                                <p id="imgPlaceholder" class="text-muted small mb-1">
-                                    <i class="bi bi-image fs-4 d-block mb-1"></i>
-                                    Arrastrá una imagen o hacé click para seleccionar
+                                <p class="text-muted small mb-1">
+                                    <i class="bi bi-images fs-4 d-block mb-1"></i>
+                                    Arrastrá imágenes o hacé click para seleccionar (podés elegir varias)
                                 </p>
-                                <input type="file" id="inpImagen" accept="image/*"
+                                <input type="file" id="inpImagen" accept="image/*" multiple
                                        class="d-none" onchange="onImagenSeleccionada(this)" />
-                                <button type="button" class="btn btn-sm btn-outline-secondary me-1"
+                                <button type="button" class="btn btn-sm btn-outline-secondary"
                                         onclick="document.getElementById('inpImagen').click()">
-                                    <i class="bi bi-folder2-open me-1"></i>Seleccionar
-                                </button>
-                                <button type="button" class="btn btn-sm btn-outline-danger"
-                                        onclick="quitarImagen()" id="btnQuitarImg" style="display:none">
-                                    <i class="bi bi-x-lg me-1"></i>Quitar
+                                    <i class="bi bi-folder2-open me-1"></i>Agregar imágenes
                                 </button>
                             </div>
+                            <div id="galeriaImagenes" class="d-flex flex-wrap gap-2"></div>
+                            <p class="text-muted small mt-1 mb-0">
+                                La marcada con <i class="bi bi-star-fill text-warning"></i> es la principal.
+                                Usá las flechas para ordenar.
+                            </p>
                         </div>
 
                         <!-- Descripción larga (ancho completo) -->
@@ -379,7 +376,7 @@ function abrirModalNuevo() {
     document.getElementById('modalTitulo').innerHTML = '<i class="bi bi-plus-circle me-2 text-success"></i>Nuevo producto';
     document.getElementById('inpStockActual').readOnly = false;
     document.getElementById('warningStock').classList.add('d-none');
-    quitarImagen();
+    resetImagenes();
     new bootstrap.Modal(document.getElementById('productoModal')).show();
 }
 
@@ -409,16 +406,8 @@ async function abrirModalEditar(id) {
     document.getElementById('inpStockActual').readOnly = true;
     document.getElementById('warningStock').classList.remove('d-none');
 
-    // Imagen existente
-    quitarImagen();
-    const imgEl = document.getElementById('imgPreview');
-    imgEl.src = `/Admin/Productos?handler=Imagen&id=${id}&t=${Date.now()}`;
-    imgEl.onerror = () => { document.getElementById('imgPreviewWrap').classList.add('d-none'); };
-    imgEl.onload  = () => {
-        document.getElementById('imgPreviewWrap').classList.remove('d-none');
-        document.getElementById('imgPlaceholder').classList.add('d-none');
-        document.getElementById('btnQuitarImg').style.display = '';
-    };
+    // Imágenes existentes (metadatos)
+    await cargarImagenesProducto(id);
 
     document.getElementById('modalTitulo').innerHTML = `<i class="bi bi-pencil me-2 text-success"></i>Editar: ${p.descripcion ?? ''}`;
     new bootstrap.Modal(document.getElementById('productoModal')).show();
@@ -444,38 +433,100 @@ function calcularPrecio() {
     document.getElementById('inpPrecioCosto').value = costo.toFixed(2);
 }
 
-// ── Imagen ────────────────────────────────────────────────────────
+// ── Imágenes (múltiples) ──────────────────────────────────────────
+// _imagenes: [{ id?, dataUrl?, src, esPrincipal, orden }]
+let _imagenes = [];
+
+function resetImagenes() {
+    _imagenes = [];
+    document.getElementById('inpImagen').value = '';
+    renderImagenes();
+}
+
+// Carga las imágenes existentes de un producto (metadatos) en modo edición
+async function cargarImagenesProducto(id) {
+    _imagenes = [];
+    try {
+        const res = await fetch(`?handler=Imagenes&id=${id}`);
+        if (res.ok) {
+            const lista = await res.json();
+            _imagenes = lista.map(i => ({
+                id: i.id,
+                src: `/images/productos/img/${i.id}?t=${Date.now()}`,
+                esPrincipal: i.esPrincipal,
+                orden: i.orden
+            }));
+        }
+    } catch { /* sin imágenes */ }
+    _normalizarPrincipal();
+    renderImagenes();
+}
+
 async function onImagenSeleccionada(input) {
-    if (!input.files.length) return;
-    await _subirImagen(input.files[0]);
+    if (input.files.length) await _agregarArchivos(input.files);
+    input.value = '';
 }
 function onDropImagen(e) {
     e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file) _subirImagen(file);
+    if (e.dataTransfer.files.length) _agregarArchivos(e.dataTransfer.files);
 }
-async function _subirImagen(file) {
-    const fd = new FormData();
-    fd.append('archivo', file);
-    fd.append('__RequestVerificationToken', TOKEN);
 
-    const res  = await fetch('?handler=SubirImagen', { method: 'POST', body: fd });
-    const data = await res.json();
-    if (!data.ok) { alert(data.error ?? 'Error al subir la imagen.'); return; }
-
-    document.getElementById('imagenDataUrl').value = data.dataUrl;
-    document.getElementById('imgPreview').src = data.dataUrl;
-    document.getElementById('imgPreviewWrap').classList.remove('d-none');
-    document.getElementById('imgPlaceholder').classList.add('d-none');
-    document.getElementById('btnQuitarImg').style.display = '';
+async function _agregarArchivos(fileList) {
+    for (const file of fileList) {
+        if (!file.type.startsWith('image/')) continue;
+        const fd = new FormData();
+        fd.append('archivo', file);
+        fd.append('__RequestVerificationToken', TOKEN);
+        const res  = await fetch('?handler=SubirImagen', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!data.ok) { alert(data.error ?? 'Error al subir la imagen.'); continue; }
+        _imagenes.push({ dataUrl: data.dataUrl, src: data.dataUrl, esPrincipal: false, orden: _imagenes.length });
+    }
+    _normalizarPrincipal();
+    renderImagenes();
 }
-function quitarImagen() {
-    document.getElementById('imagenDataUrl').value = '';
-    document.getElementById('imgPreview').src = '';
-    document.getElementById('imgPreviewWrap').classList.add('d-none');
-    document.getElementById('imgPlaceholder').classList.remove('d-none');
-    document.getElementById('btnQuitarImg').style.display = 'none';
-    document.getElementById('inpImagen').value = '';
+
+function quitarImagenIdx(idx) {
+    _imagenes.splice(idx, 1);
+    _reindexar();
+    _normalizarPrincipal();
+    renderImagenes();
+}
+function marcarPrincipalIdx(idx) {
+    _imagenes.forEach((im, i) => im.esPrincipal = (i === idx));
+    renderImagenes();
+}
+function moverImagen(idx, dir) {
+    const j = idx + dir;
+    if (j < 0 || j >= _imagenes.length) return;
+    [_imagenes[idx], _imagenes[j]] = [_imagenes[j], _imagenes[idx]];
+    _reindexar();
+    renderImagenes();
+}
+function _reindexar() { _imagenes.forEach((im, i) => im.orden = i); }
+function _normalizarPrincipal() {
+    if (_imagenes.length === 0) return;
+    if (!_imagenes.some(im => im.esPrincipal)) _imagenes[0].esPrincipal = true;
+}
+
+function renderImagenes() {
+    _reindexar();
+    const cont = document.getElementById('galeriaImagenes');
+    cont.innerHTML = _imagenes.map((im, i) => `
+      <div class="img-card border rounded p-1 text-center ${im.esPrincipal ? 'border-warning' : ''}" style="width:96px">
+        <img src="${im.src}" style="width:100%;height:64px;object-fit:contain" />
+        <div class="d-flex justify-content-between align-items-center mt-1">
+          <button type="button" class="btn btn-sm p-0 px-1" title="Anterior" onclick="moverImagen(${i},-1)"><i class="bi bi-arrow-left"></i></button>
+          <button type="button" class="btn btn-sm p-0 px-1 ${im.esPrincipal ? 'text-warning' : 'text-muted'}" title="Marcar principal" onclick="marcarPrincipalIdx(${i})"><i class="bi ${im.esPrincipal ? 'bi-star-fill' : 'bi-star'}"></i></button>
+          <button type="button" class="btn btn-sm p-0 px-1" title="Siguiente" onclick="moverImagen(${i},1)"><i class="bi bi-arrow-right"></i></button>
+          <button type="button" class="btn btn-sm p-0 px-1 text-danger" title="Quitar" onclick="quitarImagenIdx(${i})"><i class="bi bi-x-lg"></i></button>
+        </div>
+      </div>`).join('');
+
+    // Serializar al campo oculto para el submit
+    document.getElementById('imagenesJson').value = JSON.stringify(
+        _imagenes.map(im => ({ id: im.id ?? null, dataUrl: im.dataUrl ?? null, esPrincipal: im.esPrincipal, orden: im.orden }))
+    );
 }
 
 // ── Baja ──────────────────────────────────────────────────────────
