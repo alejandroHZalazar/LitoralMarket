@@ -192,6 +192,7 @@ public class IndexModel : PageModel
         Producto.PrecioLista     = Parse(Request.Form["Producto.PrecioLista"]);
         Producto.StockActual     = Parse(Request.Form["Producto.StockActual"]);
         Producto.StockMinimo     = Parse(Request.Form["Producto.StockMinimo"]);
+        Producto.CantidadMinimaVenta = Parse(Request.Form["Producto.CantidadMinimaVenta"]);
 
         // IVA siempre fijo en 1 — no se expone en la interfaz
         Producto.Iva = 1;
@@ -202,6 +203,7 @@ public class IndexModel : PageModel
         ModelState.Remove(nameof(Producto) + "." + nameof(Producto.Iva));
         ModelState.Remove(nameof(Producto) + "." + nameof(Producto.StockActual));
         ModelState.Remove(nameof(Producto) + "." + nameof(Producto.StockMinimo));
+        ModelState.Remove(nameof(Producto) + "." + nameof(Producto.CantidadMinimaVenta));
 
         // El modal se guarda por AJAX: se responde JSON siempre (éxito o error) para
         // poder mostrar el motivo sin recargar la página ni perder lo ya cargado.

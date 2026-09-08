@@ -1,4 +1,5 @@
 @page "{id:int}"
+@using System.Globalization
 @model ProductoDetalleModel
 @functions {
     static string ResolverRutaImagen(string? imagen)
@@ -73,9 +74,35 @@ else
             }
             else if (Model.Producto.TieneStock)
             {
+                // Cantidad mínima de venta: mismo criterio que _ProductoCard (min = step =
+                // cantidadMinimaVenta, input readonly) para reutilizar el clamp de site.js.
+                var minVenta     = Model.Producto.CantidadMinimaVenta > 1 ? Model.Producto.CantidadMinimaVenta : 0m;
+                // "0.##" (no "G"): cantidadMinimaVenta es decimal(10,2) y "G" arrastra los
+                // ceros de escala (ej. 4.00) — acá se muestran solo si son significativos.
+                var stepDetalle  = minVenta > 0 ? minVenta.ToString("0.##", CultureInfo.InvariantCulture) : (Model.Producto.Fraccionado ? "0.01" : "1");
+                var valorInicial = minVenta > 0 ? stepDetalle : (Model.Producto.Fraccionado ? "0.50" : "1");
+                var stockMaximo  = Model.Producto.Stock > 0 ? Model.Producto.Stock.ToString("G", CultureInfo.InvariantCulture) : "0";
+
                 <form asp-page="/Carrito" asp-page-handler="Agregar" method="post" class="d-flex align-items-center gap-2">
                     <input type="hidden" name="productoId" value="@Model.Producto.Id" />
-                    <input type="number" name="cantidad" value="1" min="1" class="form-control" style="width:80px;" />
+                    <div class="cantidad-control">
+                        <button type="button" class="btn-cantidad btn-menos" aria-label="Reducir cantidad">
+                            <i class="bi bi-dash"></i>
+                        </button>
+                        <input type="number"
+                               name="cantidad"
+                               value="@valorInicial"
+                               min="@stepDetalle"
+                               max="@stockMaximo"
+                               step="@stepDetalle"
+                               class="cantidad-input"
+                               aria-label="Cantidad"
+                               readonly="@(minVenta > 0)"
+                               title="@(minVenta > 0 ? $"Se vende en múltiplos de {stepDetalle}" : null)" />
+                        <button type="button" class="btn-cantidad btn-mas" aria-label="Aumentar cantidad">
+                            <i class="bi bi-plus"></i>
+                        </button>
+                    </div>
                     <button type="submit" class="btn btn-primary px-4">
                         <i class="bi bi-cart-plus me-1"></i> Agregar al carrito
                     </button>

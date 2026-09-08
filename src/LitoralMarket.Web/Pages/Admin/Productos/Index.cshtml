@@ -222,6 +222,12 @@
                                            class="form-control form-control-sm" type="number"
                                            step="0.001" min="0" />
                                 </div>
+                                <div class="col-6">
+                                    <label class="form-label form-label-sm">Cantidad mínima de venta</label>
+                                    <input asp-for="Producto.CantidadMinimaVenta"
+                                           class="form-control form-control-sm" type="number"
+                                           step="0.01" min="0" placeholder="1" />
+                                </div>
                             </div>
 
                             <!-- Imágenes (múltiples) -->
@@ -471,6 +477,7 @@ async function abrirModalEditar(id) {
     document.getElementById('inpPrecioLista').value                    = p.precioLista     ?? 0;
     document.getElementById('inpStockActual').value                    = p.stockActual     ?? 0;
     document.querySelector('[name="Producto.StockMinimo"]').value      = p.stockMinimo     ?? 0;
+    document.querySelector('[name="Producto.CantidadMinimaVenta"]').value = p.cantidadMinimaVenta ?? 1;
     document.querySelector('[name="Producto.EsPromocion"]').checked    = p.esPromocion;
     document.querySelector('[name="Producto.Fraccionado"]').checked    = p.fraccionado;
     document.querySelector('[name="Producto.Dolarizado"]').checked     = p.dolarizado;

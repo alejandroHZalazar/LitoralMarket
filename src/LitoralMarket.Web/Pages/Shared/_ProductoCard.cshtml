@@ -16,7 +16,15 @@
 @{
     var tieneStock   = Model.Stock > 0;
     var mostrarAgotado = ViewData["MostrarSinStock"] as bool? ?? false;
-    var step         = Model.Fraccionado ? "0.01" : "1";
+    // Cantidad mínima de venta: si es > 1, la cantidad solo se mueve en
+    // múltiplos de ese valor (min = step = cantidadMinimaVenta) y el input
+    // queda readonly — el clamp/redondeo de site.js ya opera sobre min/step,
+    // así que reutiliza esa lógica sin duplicarla.
+    var minVenta     = Model.CantidadMinimaVenta > 1 ? Model.CantidadMinimaVenta : 0m;
+    // "0.##" (no "G"): cantidadMinimaVenta es decimal(10,2) y "G" arrastra los
+    // ceros de escala (ej. 4.00) — acá se muestran solo si son significativos.
+    var step         = minVenta > 0 ? minVenta.ToString("0.##", CultureInfo.InvariantCulture) : (Model.Fraccionado ? "0.01" : "1");
+    var valorInicial = minVenta > 0 ? minVenta.ToString("0.##", CultureInfo.InvariantCulture) : (Model.Fraccionado ? "0.50" : "1");
     var stockMaximo  = Model.Stock > 0 ? Model.Stock.ToString("G", CultureInfo.InvariantCulture) : "0";
     var rutaImagen   = ResolverRutaImagen(Model.Imagen);
 }
@@ -75,12 +83,14 @@
                         </button>
                         <input type="number"
                                name="cantidad"
-                               value="@(Model.Fraccionado ? "0.50" : "1")"
+                               value="@valorInicial"
                                min="@step"
                                max="@stockMaximo"
                                step="@step"
                                class="cantidad-input"
-                               aria-label="Cantidad" />
+                               aria-label="Cantidad"
+                               readonly="@(minVenta > 0)"
+                               title="@(minVenta > 0 ? $"Se vende en múltiplos de {step}" : null)" />
                         <button type="button" class="btn-cantidad btn-mas" aria-label="Aumentar cantidad">
                             <i class="bi bi-plus"></i>
                         </button>

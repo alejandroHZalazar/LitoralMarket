@@ -1,4 +1,5 @@
 using LitoralMarket.Application.DTOs;
+using LitoralMarket.Application.Helpers;
 using LitoralMarket.Application.Interfaces;
 using LitoralMarket.Domain.Entities;
 using LitoralMarket.Infrastructure.Data;
@@ -110,6 +111,18 @@ public class CarritoService : ICarritoService
 
     public async Task AgregarItemAsync(int pedidoId, int productoId, decimal cantidad)
     {
+        // Cantidad mínima de venta: la cantidad agregada/incrementada debe ser un
+        // múltiplo positivo exacto (si el producto no la exige, cualquier positiva vale).
+        var cantidadMinimaVenta = await _db.Productos
+            .Where(p => p.Id == productoId)
+            .Select(p => p.CantidadMinimaVenta)
+            .FirstOrDefaultAsync();
+
+        if (CantidadVentaHelper.RequiereMultiplo(cantidadMinimaVenta) &&
+            !CantidadVentaHelper.EsCantidadValida(cantidad, cantidadMinimaVenta))
+            throw new InvalidOperationException(
+                $"Este producto se vende en múltiplos de {cantidadMinimaVenta}.");
+
         var existente = await _db.PedidoDetalles
             .FirstOrDefaultAsync(d => d.FkPedido == pedidoId && d.FkProducto == productoId);
 
@@ -194,6 +207,16 @@ public class CarritoService : ICarritoService
         }
         else
         {
+            // Cantidad mínima de venta: mismo múltiplo exigido al agregar.
+            var cantidadMinimaVenta = detalle.FkProducto.HasValue
+                ? await _db.Productos.Where(p => p.Id == detalle.FkProducto.Value)
+                    .Select(p => p.CantidadMinimaVenta).FirstOrDefaultAsync()
+                : null;
+
+            if (!CantidadVentaHelper.EsCantidadValida(cantidad, cantidadMinimaVenta))
+                throw new InvalidOperationException(
+                    $"Este producto se vende en múltiplos de {cantidadMinimaVenta}.");
+
             detalle.Cantidad = cantidad;
             detalle.Subtotal       = cantidad * (detalle.PrecioConIva ?? 0);
             detalle.SubtotalSinIva = detalle.Subtotal;
@@ -254,7 +277,8 @@ public class CarritoService : ICarritoService
                 // Imágenes en la tabla nueva o el blob legacy (transición). Ninguno carga el blob.
                 TieneImagen = d.Producto != null &&
                               (d.Producto.Imagenes.Any(i => !i.Baja) || d.Producto.Imagen != null),
-                ProductoId  = d.Producto != null ? (int?)d.Producto.Id : null
+                ProductoId  = d.Producto != null ? (int?)d.Producto.Id : null,
+                CantidadMinimaVenta = d.Producto != null ? d.Producto.CantidadMinimaVenta : null
             })
             .ToListAsync();
 
@@ -278,7 +302,8 @@ public class CarritoService : ICarritoService
                               : null,
                 Precio      = precio,
                 Cantidad    = cantidad,
-                Subtotal    = subtotal > 0 ? subtotal : precio * cantidad
+                Subtotal    = subtotal > 0 ? subtotal : precio * cantidad,
+                CantidadMinimaVenta = d.CantidadMinimaVenta ?? 1
             };
         }).ToList();
     }

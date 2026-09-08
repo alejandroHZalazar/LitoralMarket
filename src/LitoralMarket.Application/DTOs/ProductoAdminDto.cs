@@ -43,6 +43,9 @@ public class ProductoAdminDto
     public decimal StockActual     { get; set; }
     public decimal StockMinimo     { get; set; }
 
+    /// <summary>Cantidad mínima permitida por venta (Productos.cantidadMinimaVenta). En BD es NOT NULL DEFAULT 1.00.</summary>
+    public decimal CantidadMinimaVenta { get; set; } = 1;
+
     public bool    EsPromocion     { get; set; }
     public bool    Fraccionado     { get; set; }
     public bool    Dolarizado      { get; set; }

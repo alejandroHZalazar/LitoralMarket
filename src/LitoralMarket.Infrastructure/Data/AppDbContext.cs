@@ -77,6 +77,7 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             e.Property(x => x.Fraccionado).HasColumnName("fraccionado");
             e.Property(x => x.Dolarizado).HasColumnName("dolarizado");
             e.Property(x => x.EsPromocion).HasColumnName("esPromocion");
+            e.Property(x => x.CantidadMinimaVenta).HasColumnName("cantidadMinimaVenta").HasColumnType("decimal(10,2)");
             e.HasOne(x => x.Rubro).WithMany(r => r.Productos).HasForeignKey(x => x.FkRubro);
             e.HasOne(x => x.Stock).WithOne(s => s.Producto).HasForeignKey<StockProducto>(s => s.FkProducto);
             e.HasOne(x => x.Precio).WithOne(p => p.Producto).HasForeignKey<PrecioProducto>(p => p.FkProducto);

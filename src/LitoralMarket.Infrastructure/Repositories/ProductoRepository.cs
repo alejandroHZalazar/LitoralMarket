@@ -137,6 +137,7 @@ public class ProductoRepository : IProductoRepository
             Stock            = p.Stock  != null ? (p.Stock.Cantidad  ?? 0)  : 0,
             EsPromocion      = p.EsPromocion ?? false,
             Fraccionado      = p.Fraccionado ?? false,
+            CantidadMinimaVenta = p.CantidadMinimaVenta ?? 1,
             CodBarras        = p.CodBarras,
             CodProveedor     = p.CodProveedor,
             Iva              = p.Iva

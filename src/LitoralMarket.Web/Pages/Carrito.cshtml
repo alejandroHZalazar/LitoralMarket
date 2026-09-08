@@ -11,9 +11,11 @@
         return $"/images/productos/{img}";
     }
 
-    // Siempre punto como separador decimal para input[type=number]
+    // Siempre punto como separador decimal para input[type=number].
+    // "0.####" (no "G"): recorta ceros de escala arrastrados por el decimal
+    // (ej. 8.0000 → 8) y conserva los decimales que sí sean significativos.
     static string FormatearCantidad(decimal v) =>
-        v.ToString("G", CultureInfo.InvariantCulture);
+        v.ToString("0.####", CultureInfo.InvariantCulture);
 }
 @{
     ViewData["Title"] = "Carrito";
@@ -88,20 +90,57 @@ else
                                     </td>
                                     <td class="text-center">$@item.Precio.ToString("N2")</td>
                                     <td>
-                                        <!-- Actualizar cantidad -->
-                                        <form asp-page-handler="ActualizarCantidad" method="post"
-                                              class="d-flex align-items-center justify-content-center gap-1">
-                                            @Html.AntiForgeryToken()
-                                            <input type="hidden" name="lineaId" value="@item.LineaId" />
-                                            <input type="number"
-                                                   name="cantidad"
-                                                   value="@FormatearCantidad(item.Cantidad)"
-                                                   min="0"
-                                                   step="any"
-                                                   class="form-control form-control-sm text-center px-1"
-                                                   style="width:75px;"
-                                                   onchange="this.form.submit()" />
-                                        </form>
+                                        @{
+                                            // Cantidad mínima de venta: min = step = cantidadMinimaVenta y el
+                                            // input queda readonly — mismo criterio que catálogo/detalle, el
+                                            // clamp en múltiplos lo hace el delegate compartido de site.js.
+                                            var minVentaItem = item.CantidadMinimaVenta > 1 ? item.CantidadMinimaVenta : 0m;
+                                            var stepItem      = FormatearCantidad(minVentaItem > 0 ? minVentaItem : 1);
+                                        }
+                                        @if (minVentaItem > 0)
+                                        {
+                                            <!-- Actualizar cantidad (venta por múltiplos) -->
+                                            <form asp-page-handler="ActualizarCantidad" method="post"
+                                                  class="d-flex align-items-center justify-content-center gap-1">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="lineaId" value="@item.LineaId" />
+                                                <div class="cantidad-control">
+                                                    <button type="button" class="btn-cantidad btn-menos" aria-label="Reducir cantidad">
+                                                        <i class="bi bi-dash"></i>
+                                                    </button>
+                                                    <input type="number"
+                                                           name="cantidad"
+                                                           value="@FormatearCantidad(item.Cantidad)"
+                                                           min="@stepItem"
+                                                           step="@stepItem"
+                                                           class="cantidad-input form-control form-control-sm text-center px-1"
+                                                           style="width:55px;"
+                                                           readonly
+                                                           title="Se vende en múltiplos de @stepItem"
+                                                           onchange="this.form.submit()" />
+                                                    <button type="button" class="btn-cantidad btn-mas" aria-label="Aumentar cantidad">
+                                                        <i class="bi bi-plus"></i>
+                                                    </button>
+                                                </div>
+                                            </form>
+                                        }
+                                        else
+                                        {
+                                            <!-- Actualizar cantidad -->
+                                            <form asp-page-handler="ActualizarCantidad" method="post"
+                                                  class="d-flex align-items-center justify-content-center gap-1">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="lineaId" value="@item.LineaId" />
+                                                <input type="number"
+                                                       name="cantidad"
+                                                       value="@FormatearCantidad(item.Cantidad)"
+                                                       min="0"
+                                                       step="any"
+                                                       class="form-control form-control-sm text-center px-1"
+                                                       style="width:75px;"
+                                                       onchange="this.form.submit()" />
+                                            </form>
+                                        }
                                     </td>
                                     <td class="text-end fw-bold" style="color:var(--verde);">
                                         $@item.Subtotal.ToString("N2")

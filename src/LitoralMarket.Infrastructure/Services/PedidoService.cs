@@ -1,4 +1,5 @@
 using LitoralMarket.Application.DTOs;
+using LitoralMarket.Application.Helpers;
 using LitoralMarket.Application.Interfaces;
 using LitoralMarket.Domain.Entities;
 using LitoralMarket.Infrastructure.Data;
@@ -36,7 +37,8 @@ public class PedidoService : IPedidoService
         await using var db = await _ctxFactory.CreateDbContextAsync();
 
         // Proyección directa: no materializa la entidad Producto ni carga el blob
-        // 'imagen'. Solo trae cantidad solicitada y stock disponible por línea.
+        // 'imagen'. Solo trae cantidad solicitada, stock disponible y cantidad
+        // mínima de venta por línea.
         var detalles = await db.PedidoDetalles
             .Where(d => d.FkPedido == pedidoId)
             .Select(d => new
@@ -45,7 +47,8 @@ public class PedidoService : IPedidoService
                 d.Cantidad,
                 Stock = d.Producto != null && d.Producto.Stock != null
                         ? d.Producto.Stock.Cantidad
-                        : (decimal?)0
+                        : (decimal?)0,
+                CantidadMinimaVenta = d.Producto != null ? d.Producto.CantidadMinimaVenta : null
             })
             .ToListAsync();
 
@@ -54,6 +57,13 @@ public class PedidoService : IPedidoService
             var stock = d.Stock ?? 0;
             if (stock < (d.Cantidad ?? 0))
                 errores.Add($"'{d.Descripcion}': stock disponible {stock:N2}, solicitado {d.Cantidad:N2}");
+
+            // Re-chequeo de cantidadMinimaVenta: defensa server-side final por si el
+            // request al confirmar el pedido fue manipulado saltando la validación
+            // del carrito/frontend.
+            if (CantidadVentaHelper.RequiereMultiplo(d.CantidadMinimaVenta) &&
+                !CantidadVentaHelper.EsCantidadValida(d.Cantidad ?? 0, d.CantidadMinimaVenta))
+                errores.Add($"'{d.Descripcion}': se vende en múltiplos de {d.CantidadMinimaVenta}, cantidad solicitada {d.Cantidad:N2}");
         }
 
         return (!errores.Any(), errores);

@@ -15,6 +15,7 @@ public class Producto
     public bool? Fraccionado { get; set; }
     public bool? Dolarizado { get; set; }
     public bool? EsPromocion { get; set; }
+    public decimal? CantidadMinimaVenta { get; set; }
 
     public Rubro?        Rubro  { get; set; }
     public StockProducto? Stock  { get; set; }

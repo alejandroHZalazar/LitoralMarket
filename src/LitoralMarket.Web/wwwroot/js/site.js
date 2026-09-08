@@ -19,6 +19,11 @@ document.addEventListener('click', function (e) {
     }
 
     input.value = step < 1 ? val.toFixed(2) : val.toString();
+
+    // Dispara 'change' para que un onchange nativo (ej. auto-submit del carrito)
+    // reaccione igual que si el valor lo hubiese tipeado el usuario — la asignación
+    // programática de .value no dispara eventos por sí sola.
+    input.dispatchEvent(new Event('change', { bubbles: true }));
 });
 
 // Validar ingreso manual

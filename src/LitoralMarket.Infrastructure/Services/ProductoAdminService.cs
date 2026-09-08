@@ -80,6 +80,9 @@ public class ProductoAdminService : IProductoAdminService
             PrecioLista      = p.Precio?.Precio ?? 0,
             StockActual      = p.Stock?.Cantidad ?? 0,
             StockMinimo      = p.Stock?.CantidadMinima ?? 0,
+            // Columna NOT NULL DEFAULT 1.00 en 'ale'; se resuelve a 1 igual que la BD
+            // por si el código llega a correr contra una base donde aún sea nullable.
+            CantidadMinimaVenta = p.CantidadMinimaVenta ?? 1,
             EsPromocion      = p.EsPromocion ?? false,
             Fraccionado      = p.Fraccionado ?? false,
             Dolarizado       = p.Dolarizado  ?? false,
@@ -189,6 +192,7 @@ public class ProductoAdminService : IProductoAdminService
             EsPromocion      = dto.EsPromocion,
             Fraccionado      = dto.Fraccionado,
             Dolarizado       = dto.Dolarizado,
+            CantidadMinimaVenta = dto.CantidadMinimaVenta,
             Baja             = false
             // Imagen legacy: ya NO se escribe. Las imágenes van a imagenesProductos.
         };
@@ -240,6 +244,7 @@ public class ProductoAdminService : IProductoAdminService
         p.EsPromocion      = dto.EsPromocion;
         p.Fraccionado      = dto.Fraccionado;
         p.Dolarizado       = dto.Dolarizado;
+        p.CantidadMinimaVenta = dto.CantidadMinimaVenta;
         // Imagen legacy: ya NO se escribe. Las imágenes se gestionan en imagenesProductos.
 
         // Stock

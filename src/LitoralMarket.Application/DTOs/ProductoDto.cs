@@ -16,6 +16,8 @@ public class ProductoDto
     public bool TieneStock => Stock > 0;
     public bool EsPromocion { get; set; }
     public bool Fraccionado { get; set; }
+    /// <summary>Cantidad mínima permitida por venta (Productos.cantidadMinimaVenta). &lt;= 1 = sin restricción.</summary>
+    public decimal CantidadMinimaVenta { get; set; } = 1;
     public string? CodBarras { get; set; }
     public string? CodProveedor { get; set; }
     public int? Iva { get; set; }

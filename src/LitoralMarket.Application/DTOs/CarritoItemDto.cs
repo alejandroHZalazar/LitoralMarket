@@ -9,4 +9,6 @@ public class CarritoItemDto
     public decimal Precio { get; set; }
     public decimal Cantidad { get; set; }
     public decimal Subtotal { get; set; }   // viene calculado desde el servicio
+    /// <summary>Cantidad mínima de venta del producto (Productos.cantidadMinimaVenta). &lt;= 1 = sin restricción.</summary>
+    public decimal CantidadMinimaVenta { get; set; } = 1;
 }

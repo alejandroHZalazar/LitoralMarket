@@ -76,9 +76,17 @@ public class CarritoModel : PageModel
     public async Task<IActionResult> OnPostAgregarAsync(int productoId, decimal cantidad = 1)
     {
         var pedidoId = await ObtenerPedidoIdAsync();
-        await _carrito.AgregarItemAsync(pedidoId, productoId, cantidad);
-        TempData["Mensaje"] = "Producto agregado al carrito";
-        return RedirectToPage("/Index");
+        try
+        {
+            await _carrito.AgregarItemAsync(pedidoId, productoId, cantidad);
+            TempData["Mensaje"] = "Producto agregado al carrito";
+            return RedirectToPage("/Index");
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToPage("/Carrito");
+        }
     }
 
     // POST vía AJAX — devuelve JSON
@@ -112,7 +120,16 @@ public class CarritoModel : PageModel
     {
         var pedidoId = HttpContext.Session.GetInt32("PedidoId");
         if (pedidoId.HasValue)
-            await _carrito.ActualizarCantidadAsync(pedidoId.Value, lineaId, cantidad);
+        {
+            try
+            {
+                await _carrito.ActualizarCantidadAsync(pedidoId.Value, lineaId, cantidad);
+            }
+            catch (InvalidOperationException ex)
+            {
+                TempData["Error"] = ex.Message;
+            }
+        }
         return RedirectToPage();
     }
 }
