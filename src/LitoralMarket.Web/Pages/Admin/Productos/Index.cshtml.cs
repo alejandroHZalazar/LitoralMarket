@@ -203,31 +203,48 @@ public class IndexModel : PageModel
         ModelState.Remove(nameof(Producto) + "." + nameof(Producto.StockActual));
         ModelState.Remove(nameof(Producto) + "." + nameof(Producto.StockMinimo));
 
+        // El modal se guarda por AJAX: se responde JSON siempre (éxito o error) para
+        // poder mostrar el motivo sin recargar la página ni perder lo ya cargado.
         if (!ModelState.IsValid)
         {
-            await CargarDropdownsAsync();
-            TempData["Error"] = "Revisá los datos del formulario.";
-            return Page();
+            var errores = ModelState.Values
+                .SelectMany(v => v.Errors)
+                .Select(e => e.ErrorMessage)
+                .Where(m => !string.IsNullOrWhiteSpace(m))
+                .Distinct()
+                .ToList();
+
+            if (errores.Count == 0)
+                errores.Add("Revisá los datos del formulario.");
+
+            return new JsonResult(new { ok = false, errores });
         }
 
-        int productoId;
-        bool esAlta = Producto.Id == 0;
-        if (esAlta)
-            productoId = await _productos.CrearAsync(Producto);
-        else
+        try
         {
-            await _productos.ActualizarAsync(Producto);
-            productoId = Producto.Id;
+            int productoId;
+            bool esAlta = Producto.Id == 0;
+            if (esAlta)
+                productoId = await _productos.CrearAsync(Producto);
+            else
+            {
+                await _productos.ActualizarAsync(Producto);
+                productoId = Producto.Id;
+            }
+
+            // Sincronizar imágenes (inserta nuevas, conserva existentes, da de baja las quitadas)
+            await _productos.SincronizarImagenesAsync(productoId, imagenes);
+
+            var mensaje = esAlta
+                ? "Producto creado correctamente."
+                : "Producto actualizado correctamente.";
+
+            return new JsonResult(new { ok = true, mensaje, productoId });
         }
-
-        // Sincronizar imágenes (inserta nuevas, conserva existentes, da de baja las quitadas)
-        await _productos.SincronizarImagenesAsync(productoId, imagenes);
-
-        TempData["Mensaje"] = esAlta
-            ? "Producto creado correctamente."
-            : "Producto actualizado correctamente.";
-
-        return RedirectToPage();
+        catch (Exception ex)
+        {
+            return new JsonResult(new { ok = false, errores = new[] { $"No se pudo guardar el producto: {ex.Message}" } });
+        }
     }
 
     // ── POST: baja lógica ────────────────────────────────────────
