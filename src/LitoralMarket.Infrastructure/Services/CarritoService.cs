@@ -122,18 +122,23 @@ public class CarritoService : ICarritoService
 
     public async Task AgregarItemAsync(int pedidoId, int productoId, decimal cantidad)
     {
-        // Cantidad mínima de venta: la cantidad agregada/incrementada debe ser un
-        // múltiplo positivo exacto (si el producto no la exige, cualquier positiva vale).
+        // Cantidad mínima de venta — proyección directa (sin cargar el blob Imagen).
         var cantidadMinimaVenta = await _db.Productos
             .Where(p => p.Id == productoId)
-            .Select(p => p.CantidadMinimaVenta)
+            .Select(p => (decimal?)p.CantidadMinimaVenta)
             .FirstOrDefaultAsync();
 
+        // Cantidad mínima de venta: la cantidad agregada/incrementada debe ser un
+        // múltiplo positivo exacto (si el producto no la exige, cualquier positiva vale).
         if (CantidadVentaHelper.RequiereMultiplo(cantidadMinimaVenta) &&
             !CantidadVentaHelper.EsCantidadValida(cantidad, cantidadMinimaVenta))
             throw new InvalidOperationException(
                 $"Este producto se vende en múltiplos de {cantidadMinimaVenta}.");
 
+        // Sin restricción de cantidad vs stock cuando hay stock disponible (stock > 0):
+        // se puede pedir cualquier cantidad. La única restricción de stock es que el
+        // producto exista con stock > 0, lo cual ya filtra el catálogo (TieneStock) y
+        // SincronizarCarritoAsync (retira del carrito lo que se quedó sin stock).
         var existente = await _db.PedidoDetalles
             .FirstOrDefaultAsync(d => d.FkPedido == pedidoId && d.FkProducto == productoId);
 

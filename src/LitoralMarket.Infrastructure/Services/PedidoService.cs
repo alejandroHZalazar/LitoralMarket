@@ -55,8 +55,12 @@ public class PedidoService : IPedidoService
         foreach (var d in detalles)
         {
             var stock = d.Stock ?? 0;
-            if (stock < (d.Cantidad ?? 0))
-                errores.Add($"'{d.Descripcion}': stock disponible {stock:N2}, solicitado {d.Cantidad:N2}");
+            var cantidadPedida = d.Cantidad ?? 0;
+
+            // Restricción de stock: solo bloquea si no queda stock (stock <= 0). Si hay
+            // stock (> 0) se permite pedir cualquier cantidad, sin comparar contra el stock.
+            if (stock <= 0 && cantidadPedida > 0)
+                errores.Add($"'{d.Descripcion}': sin stock disponible");
 
             // Re-chequeo de cantidadMinimaVenta: defensa server-side final por si el
             // request al confirmar el pedido fue manipulado saltando la validación
