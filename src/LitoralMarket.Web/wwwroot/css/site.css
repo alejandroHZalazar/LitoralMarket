@@ -746,6 +746,10 @@ footer.footer-lm {
   border-radius: 9px;
   overflow: hidden;
   height: 36px;
+  width: 110px;      /* ancho propio: no depender de que el form contenedor lo estire
+                         (en catálogo/detalle el form es columna y lo estira solo;
+                         en el carrito es fila y sin esto el input colapsa a ~0) */
+  flex-shrink: 0;
 }
 .btn-cantidad {
   background: var(--crema);

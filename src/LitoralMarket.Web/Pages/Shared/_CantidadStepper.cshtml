@@ -1,0 +1,37 @@
+@using System.Globalization
+@model LitoralMarket.Web.Pages.Shared.CantidadStepperVm
+@{
+    // Cantidad mínima de venta: si es > 1, la cantidad solo se mueve en múltiplos de
+    // ese valor (min = step = cantidadMinimaVenta) y el input queda readonly. Si no
+    // aplica, el paso es 0.01 para productos fraccionados o 1 para el resto — mismo
+    // criterio en catálogo, detalle y carrito.
+    var minVenta = Model.CantidadMinimaVenta > 1 ? Model.CantidadMinimaVenta!.Value : 0m;
+
+    // "0.##"/"0.####" (no "G"): un decimal(10,2)/(18,4) arrastra ceros de escala
+    // (ej. 4.00, 8.0000) que "G" muestra tal cual — acá solo se ven si son significativos.
+    var step = minVenta > 0
+        ? minVenta.ToString("0.##", CultureInfo.InvariantCulture)
+        : (Model.Fraccionado ? "0.01" : "1");
+
+    var valor = Model.Valor > 0
+        ? Model.Valor.ToString("0.####", CultureInfo.InvariantCulture)
+        : (minVenta > 0 ? step : (Model.Fraccionado ? "0.50" : "1"));
+}
+<div class="cantidad-control">
+    <button type="button" class="btn-cantidad btn-menos" aria-label="Reducir cantidad">
+        <i class="bi bi-dash"></i>
+    </button>
+    <input type="number"
+           name="cantidad"
+           value="@valor"
+           min="@step"
+           step="@step"
+           class="cantidad-input"
+           aria-label="Cantidad"
+           readonly="@(minVenta > 0)"
+           data-autosave="@(Model.AutoGuardar ? "true" : null)"
+           title="@(minVenta > 0 ? $"Se vende en múltiplos de {step}" : null)" />
+    <button type="button" class="btn-cantidad btn-mas" aria-label="Aumentar cantidad">
+        <i class="bi bi-plus"></i>
+    </button>
+</div>

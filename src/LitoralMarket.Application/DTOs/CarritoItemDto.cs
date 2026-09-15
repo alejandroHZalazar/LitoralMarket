@@ -11,4 +11,6 @@ public class CarritoItemDto
     public decimal Subtotal { get; set; }   // viene calculado desde el servicio
     /// <summary>Cantidad mínima de venta del producto (Productos.cantidadMinimaVenta). &lt;= 1 = sin restricción.</summary>
     public decimal CantidadMinimaVenta { get; set; } = 1;
+    /// <summary>Si el producto admite cantidades no enteras (paso 0.01) cuando no hay cantidadMinimaVenta.</summary>
+    public bool Fraccionado { get; set; }
 }

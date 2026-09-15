@@ -20,13 +20,16 @@ document.addEventListener('click', function (e) {
 
     input.value = step < 1 ? val.toFixed(2) : val.toString();
 
-    // Dispara 'change' para que un onchange nativo (ej. auto-submit del carrito)
+    // Dispara 'change' para que el delegate de abajo (validación + auto-guardado)
     // reaccione igual que si el valor lo hubiese tipeado el usuario — la asignación
     // programática de .value no dispara eventos por sí sola.
     input.dispatchEvent(new Event('change', { bubbles: true }));
 });
 
-// Validar ingreso manual
+// Validar ingreso manual + auto-guardado (carrito). Único delegate para los 3
+// usos del stepper (catálogo, detalle, carrito) — la diferencia de comportamiento
+// entre "agregar" y "modificar cantidad ya en el pedido" es solo el atributo
+// data-autosave, no lógica duplicada.
 document.addEventListener('change', function (e) {
     const input = e.target.closest('.cantidad-input');
     if (!input) return;
@@ -40,6 +43,12 @@ document.addEventListener('change', function (e) {
     if (val > max) val = max;
 
     input.value = step < 1 ? val.toFixed(2) : Math.round(val / step) * step;
+
+    // Carrito: la cantidad ya está en el pedido, cada cambio se persiste solo.
+    // Catálogo/detalle: no llevan data-autosave, el envío es explícito (botón "Agregar").
+    if (input.dataset.autosave === 'true') {
+        input.form?.requestSubmit ? input.form.requestSubmit() : input.form?.submit();
+    }
 });
 
 

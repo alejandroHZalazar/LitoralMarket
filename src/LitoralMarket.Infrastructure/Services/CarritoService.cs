@@ -294,7 +294,8 @@ public class CarritoService : ICarritoService
                 TieneImagen = d.Producto != null &&
                               (d.Producto.Imagenes.Any(i => !i.Baja) || d.Producto.Imagen != null),
                 ProductoId  = d.Producto != null ? (int?)d.Producto.Id : null,
-                CantidadMinimaVenta = d.Producto != null ? d.Producto.CantidadMinimaVenta : null
+                CantidadMinimaVenta = d.Producto != null ? d.Producto.CantidadMinimaVenta : null,
+                Fraccionado = d.Producto != null && d.Producto.Fraccionado == true
             })
             .ToListAsync();
 
@@ -319,7 +320,8 @@ public class CarritoService : ICarritoService
                 Precio      = precio,
                 Cantidad    = cantidad,
                 Subtotal    = subtotal > 0 ? subtotal : precio * cantidad,
-                CantidadMinimaVenta = d.CantidadMinimaVenta ?? 1
+                CantidadMinimaVenta = d.CantidadMinimaVenta ?? 1,
+                Fraccionado = d.Fraccionado
             };
         }).ToList();
     }
