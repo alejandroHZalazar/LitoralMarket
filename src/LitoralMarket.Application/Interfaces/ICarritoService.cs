@@ -5,6 +5,13 @@ namespace LitoralMarket.Application.Interfaces;
 public interface ICarritoService
 {
     Task<int> ObtenerOCrearBorradorAsync(string guestToken, int? clienteId);
+
+    /// <summary>
+    /// Busca el pedido borrador existente del cliente/invitado sin crear uno nuevo.
+    /// Null si no tiene ninguno. Pensado para mostrar el contador del carrito (header)
+    /// en páginas que no deben generar un pedido vacío por el solo hecho de visitarlas.
+    /// </summary>
+    Task<int?> BuscarBorradorAsync(string guestToken, int? clienteId);
     Task AgregarItemAsync(int pedidoId, int productoId, decimal cantidad);
     Task QuitarItemAsync(int pedidoId, long lineaId);
     Task ActualizarCantidadAsync(int pedidoId, long lineaId, decimal cantidad);

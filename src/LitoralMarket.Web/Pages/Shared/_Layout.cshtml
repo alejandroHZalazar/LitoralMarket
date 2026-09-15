@@ -21,8 +21,24 @@
         : null;
     var logoSrc = $"/logo?v={_logoVersion}";
 
-    // Conteo real del carrito desde el servicio — funciona en cualquier página
-    var pedidoId    = Context.Session.GetInt32("PedidoId");
+    // Conteo real del carrito desde el servicio — funciona en cualquier página.
+    // No alcanza con leer Session["PedidoId"]: esa clave recién se completa cuando
+    // se llama a ObtenerPedidoIdAsync (agregar/ver el carrito), así que un cliente
+    // logueado (o invitado) con un borrador ya creado en otra sesión/navegador no
+    // veía el contador hasta la primera vez que agregaba algo en ESTA sesión. Acá
+    // se busca el borrador existente (sin crear uno nuevo) igual que hace Carrito,
+    // y se cachea en sesión para no repetir la consulta en cada página.
+    var pedidoId = Context.Session.GetInt32("PedidoId");
+    if (!pedidoId.HasValue)
+    {
+        var _clienteIdClaim = User.FindFirst("clienteId");
+        int? _clienteId = _clienteIdClaim is not null && int.TryParse(_clienteIdClaim.Value, out var _cid) ? _cid : null;
+        var _guestToken = Context.Request.Cookies["litoral_guest"] ?? string.Empty;
+
+        pedidoId = await CarritoSvc.BuscarBorradorAsync(_guestToken, _clienteId);
+        if (pedidoId.HasValue)
+            Context.Session.SetInt32("PedidoId", pedidoId.Value);
+    }
     var cantCarrito = pedidoId.HasValue
         ? await CarritoSvc.ContarItemsAsync(pedidoId.Value)
         : 0;

@@ -61,7 +61,12 @@ public class CarritoService : ICarritoService
         return (tPrecios.Result, tCostos.Result, tStocks.Result);
     }
 
-    public async Task<int> ObtenerOCrearBorradorAsync(string guestToken, int? clienteId)
+    /// <summary>
+    /// Busca el pedido borrador existente del cliente/invitado, sin crear uno nuevo
+    /// si no hay. Se usa para mostrar el contador del carrito (header) en cualquier
+    /// página sin generar pedidos vacíos por el solo hecho de navegar el sitio.
+    /// </summary>
+    public async Task<int?> BuscarBorradorAsync(string guestToken, int? clienteId)
     {
         Pedido? pedido = null;
 
@@ -81,10 +86,16 @@ public class CarritoService : ICarritoService
                 p.EstadoEcommerce == "borrador");
         }
 
-        if (pedido is not null)
-            return pedido.Id;
+        return pedido?.Id;
+    }
 
-        pedido = new Pedido
+    public async Task<int> ObtenerOCrearBorradorAsync(string guestToken, int? clienteId)
+    {
+        var existente = await BuscarBorradorAsync(guestToken, clienteId);
+        if (existente.HasValue)
+            return existente.Value;
+
+        var pedido = new Pedido
         {
             Fecha           = DateTime.Now,
             EsEcommerce     = true,
