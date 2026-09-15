@@ -5,6 +5,8 @@ public interface IParametrosService
     Task<string?> GetValorAsync(string modulo, string parametro);
     Task<string> GetModoAccesoAsync();
     Task<bool> MostrarSinStockAsync();
+    /// <summary>ecommerce/preciosSinIVA == "1" → los precios mostrados no incluyen IVA.</summary>
+    Task<bool> MostrarPreciosSinIvaAsync();
     Task<int> GetProductosPorPaginaAsync();
     Task<string> GetTituloEcommerceAsync();
     Task<string?> GetNombreEmpresaAsync();

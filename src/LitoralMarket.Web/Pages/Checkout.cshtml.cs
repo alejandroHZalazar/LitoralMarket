@@ -40,6 +40,9 @@ public class CheckoutPageModel : PageModel
     /// </summary>
     public bool EsModoCredenciales { get; private set; }
 
+    /// <summary>Solo visualización (leyenda "Los precios no incluyen IVA"): no afecta cálculos.</summary>
+    public bool PreciosSinIva { get; private set; }
+
     public async Task<IActionResult> OnGetAsync()
     {
         var pedidoId = HttpContext.Session.GetInt32("PedidoId");
@@ -48,6 +51,7 @@ public class CheckoutPageModel : PageModel
         try
         {
             EsModoCredenciales = await _params.GetModoAccesoAsync() == "credenciales";
+            PreciosSinIva      = await _params.MostrarPreciosSinIvaAsync();
 
             // En "publico" las direcciones se cargan en paralelo (contexto factory).
             // En "credenciales" NO se usan direcciones ni envío → no se cargan.
@@ -124,6 +128,7 @@ public class CheckoutPageModel : PageModel
         {
             // Decisión de flujo centralizada en una sola bandera.
             EsModoCredenciales = await _params.GetModoAccesoAsync() == "credenciales";
+            PreciosSinIva      = await _params.MostrarPreciosSinIvaAsync();
 
             if (EsModoCredenciales)
             {

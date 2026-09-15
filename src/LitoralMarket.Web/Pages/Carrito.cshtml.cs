@@ -19,6 +19,7 @@ public class CarritoModel : PageModel
     public List<CarritoItemDto> Items         { get; private set; } = new();
     public List<string>         Eliminados    { get; private set; } = new();
     public decimal              Total         { get; private set; }
+    public bool                 PreciosSinIva { get; private set; }
 
     private async Task<int> ObtenerPedidoIdAsync()
     {
@@ -70,6 +71,9 @@ public class CarritoModel : PageModel
         // suma de subtotales que el sync acaba de persistir, sin round-trips extra.
         Total = Items.Sum(i => i.Subtotal);
         ViewData["CarritoCount"] = Items.Count;
+
+        // Solo visualización: no afecta precios/cálculos, solo si se muestra el aviso.
+        PreciosSinIva = await _parametros.MostrarPreciosSinIvaAsync();
     }
 
     // POST estándar (fallback sin JS)

@@ -38,6 +38,9 @@ public class ParametrosService : IParametrosService
     public async Task<bool> MostrarSinStockAsync() =>
         (await GetValorAsync("ecommerce", "mostrarSinStock")) == "1";
 
+    public async Task<bool> MostrarPreciosSinIvaAsync() =>
+        (await GetValorAsync("ecommerce", "preciosSinIVA")) == "1";
+
     public async Task<int> GetProductosPorPaginaAsync()
     {
         var val = await GetValorAsync("ecommerce", "productosPorPagina");
