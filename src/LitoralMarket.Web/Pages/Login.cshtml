@@ -1,8 +1,19 @@
 @page
+@inject LitoralMarket.Application.Interfaces.IParametrosService Parametros
 @model LoginPageModel
 @{
     ViewData["Title"] = "Ingresar";
     var modoPublico = Model.ModoAcceso == "publico";
+
+    // Logo + nombre de la empresa: mismos datos y misma URL cacheada por hash de
+    // contenido que ya usa el navbar (_Layout.cshtml) — solo se vuelve a pedir el
+    // mismo recurso, no se duplica ninguna lógica de negocio ni de autenticación.
+    var empresaNombreLogin = await Parametros.GetNombreEmpresaAsync() ?? await Parametros.GetTituloEcommerceAsync();
+    var _logoBytesLogin    = await Parametros.GetLogoAsync();
+    var tieneLogoLogin     = _logoBytesLogin is { Length: > 0 };
+    var logoSrcLogin       = tieneLogoLogin
+        ? $"/logo?v={Convert.ToHexString(System.Security.Cryptography.MD5.HashData(_logoBytesLogin!))[..10]}"
+        : null;
 }
 
 <div class="login-wrapper">
@@ -10,16 +21,27 @@
 
         @* ══ Encabezado decorativo ══ *@
         <div class="login-header">
-            <div class="login-header-icon">
-                @if (modoPublico)
+            @if (tieneLogoLogin)
+            {
+                <img src="@logoSrcLogin" alt="@empresaNombreLogin" class="login-logo" />
+                @if (!string.IsNullOrWhiteSpace(empresaNombreLogin))
                 {
-                    <i class="bi bi-shield-lock-fill"></i>
+                    <p class="login-empresa-nombre">@empresaNombreLogin</p>
                 }
-                else
-                {
-                    <i class="bi bi-bag-fill"></i>
-                }
-            </div>
+            }
+            else
+            {
+                <div class="login-header-icon">
+                    @if (modoPublico)
+                    {
+                        <i class="bi bi-shield-lock-fill"></i>
+                    }
+                    else
+                    {
+                        <i class="bi bi-bag-fill"></i>
+                    }
+                </div>
+            }
             <h1 class="login-title">
                 @(modoPublico ? "Acceso administrador" : "Bienvenido")
             </h1>

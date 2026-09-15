@@ -8,6 +8,12 @@ public class AccessModeMiddleware
     private static readonly string[] PublicPaths =
     [
         "/login", "/logout", "/error", "/favicon.ico", "/css", "/js", "/images", "/lib",
+        // Logo de la empresa (Pages/Logo.cshtml, sirve /logo?v=<hash>): es la misma
+        // imagen que ya se ve en el navbar de cualquier página pública; sin esta
+        // excepción, en modo "credenciales" un visitante no autenticado no puede
+        // cargarla (se redirige a /login) — rompe el logo tanto en el navbar como
+        // en la propia pantalla de login.
+        "/logo",
         // APIs internas (webhook MP, polling de estado de pago, etc.):
         // tienen su propia lógica de autorización y NUNCA deben ser redirigidas a /login,
         // porque eso devolvería HTML al frontend que espera JSON y rompería el polling.

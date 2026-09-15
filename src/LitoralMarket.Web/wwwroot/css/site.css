@@ -114,16 +114,22 @@ body {
   .brand-text { display: none; }
 }
 
-/* Logo imagen desde BD */
+/* Logo imagen desde BD. height fija + width:auto + object-fit:contain: escala
+   proporcionalmente sin deformarse sea cual sea el logo que suba el admin.
+   align-items:center en .navbar-main-grid centra verticalmente el resto de la
+   fila (buscador/acciones) automáticamente al crecer la altura del logo. */
 .brand-logo {
-  height: 38px;
+  height: 50px;
   width: auto;
-  max-width: 110px;
+  max-width: 150px;
   object-fit: contain;
   border-radius: 6px;
   background: var(--blanco);
   padding: 2px 4px;
   box-shadow: 0 1px 6px rgba(0,0,0,0.18);
+}
+@media (max-width: 767.98px) {
+  .brand-logo { height: 42px; max-width: 130px; }
 }
 
 /* Ícono fallback cuando no hay logo en BD */
@@ -1124,6 +1130,38 @@ footer.footer-lm {
   color: var(--blanco);
   margin-bottom: 1rem;
   box-shadow: 0 4px 18px rgba(0,0,0,0.22);
+}
+
+/* Logo de la empresa en el login (reemplaza el ícono cuando hay logo configurado).
+   height fija + width:auto + object-fit:contain: se escala sin deformarse sea
+   cual sea la imagen que suba el admin, igual criterio que .brand-logo del navbar. */
+.login-logo {
+  position: relative;
+  z-index: 1;
+  display: block;
+  height: 64px;
+  width: auto;
+  max-width: 200px;
+  margin: 0 auto 0.85rem;
+  object-fit: contain;
+  border-radius: 12px;
+  background: var(--blanco);
+  padding: 6px 10px;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.22);
+}
+.login-empresa-nombre {
+  position: relative;
+  z-index: 1;
+  color: var(--blanco);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  margin: 0 0 1rem;
+  opacity: 0.9;
+}
+@media (max-width: 380px) {
+  .login-logo { height: 52px; max-width: 160px; }
 }
 .login-title {
   position: relative;
