@@ -256,14 +256,19 @@ public class EmailService : IEmailService
     {
         if (!await MailHabilitado("ecommerce", "enviarMailAdmin")) return;
 
-        // SMTP_ADMIN_EMAIL (env var) sobreescribe mail/emailAdmin (BD)
-        var emailAdmin = EnvOrParam("SMTP_ADMIN_EMAIL", await _params.GetValorAsync("mail", "emailAdmin"));
-        if (string.IsNullOrWhiteSpace(emailAdmin))
+        // SMTP_ADMIN_EMAIL (env var) sobreescribe mail/emailAdmin (BD). Ambas fuentes
+        // admiten uno o varios emails separados por ';' — un solo email sigue
+        // funcionando igual que antes (lista de un elemento).
+        var emailAdminCrudo = EnvOrParam("SMTP_ADMIN_EMAIL", await _params.GetValorAsync("mail", "emailAdmin"));
+        var emailsAdmin     = EmailListHelper.Parse(emailAdminCrudo);
+        if (emailsAdmin.Count == 0)
         {
             _logger.LogWarning(
-                "EnviarNotificacionAdminAsync: no hay email de admin configurado. " +
-                "Configurá la variable de entorno SMTP_ADMIN_EMAIL en Railway " +
-                "o el parámetro mail/emailAdmin en la tabla parametros.");
+                "EnviarNotificacionAdminAsync: no hay email de admin configurado (o ninguno " +
+                "válido en '{Valor}'). Configurá la variable de entorno SMTP_ADMIN_EMAIL en " +
+                "Railway o el parámetro mail/emailAdmin en la tabla parametros — uno o varios " +
+                "emails separados por ';'.",
+                emailAdminCrudo ?? "(vacío)");
             return;
         }
 
@@ -312,7 +317,7 @@ public class EmailService : IEmailService
             pedido.EstadoEcommerce ?? "", stockBajo);
 
         var asunto = $"🛒 Nuevo pedido #{pedidoId:D6} — {nombre}";
-        await EnviarAsync(emailAdmin, asunto, builder);
+        await EnviarAsync(emailsAdmin, asunto, builder);
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -335,8 +340,16 @@ public class EmailService : IEmailService
     // Gmail SSL → SMTP_HOST=smtp.gmail.com       SMTP_PORT=465  SMTP_SSL=1
     // Resend    → RESEND_API_KEY=re_xxx  SMTP_FROM=tu@dominio-verificado.com
     // ──────────────────────────────────────────────────────────────
-    private async Task<bool> EnviarAsync(string emailDestino, string asunto, BodyBuilder builder)
+    // Overload de conveniencia para los envíos a un único destinatario (cliente:
+    // confirmación de pedido, link de MercadoPago) — no cambia su comportamiento.
+    private Task<bool> EnviarAsync(string emailDestino, string asunto, BodyBuilder builder) =>
+        EnviarAsync(new[] { emailDestino }, asunto, builder);
+
+    private async Task<bool> EnviarAsync(IReadOnlyList<string> destinatarios, string asunto, BodyBuilder builder)
     {
+        // Para logging: mostrar todos los destinatarios sin repetir código en cada log.
+        var emailDestino = string.Join(", ", destinatarios);
+
         // ── 0. DIAGNÓSTICO de configuración al inicio (visible en Railway Logs) ──
         // Leemos las env vars desde DOS fuentes para detectar problemas de IConfiguration:
         //   • _config[]  → ASP.NET IConfiguration (debería incluir env vars por default)
@@ -392,7 +405,7 @@ public class EmailService : IEmailService
                 "EmailService: → USANDO RESEND (HTTP API) from='{From}' to='{To}'",
                 remitente, emailDestino);
             return await EnviarPorResendAsync(
-                emailDestino, asunto, builder, resendKey, remitente, nombreRemitente);
+                destinatarios, asunto, builder, resendKey, remitente, nombreRemitente);
         }
 
         _logger.LogWarning(
@@ -441,7 +454,8 @@ public class EmailService : IEmailService
 
         var message = new MimeMessage();
         message.From.Add(new MailboxAddress(nombreRemitente, remitente));
-        message.To.Add(MailboxAddress.Parse(emailDestino));
+        foreach (var destinatario in destinatarios)
+            message.To.Add(MailboxAddress.Parse(destinatario));
         message.Subject = asunto;
         message.Body    = builder.ToMessageBody();
 
@@ -588,13 +602,14 @@ public class EmailService : IEmailService
     //         al email registrado en tu cuenta Resend (modo test)
     // ──────────────────────────────────────────────────────────────
     private async Task<bool> EnviarPorResendAsync(
-        string emailDestino,
+        IReadOnlyList<string> destinatarios,
         string asunto,
         BodyBuilder builder,
         string resendKey,
         string remitente,
         string nombreRemitente)
     {
+        var emailDestino = string.Join(", ", destinatarios);
         _logger.LogInformation(
             "EmailService: [RESEND] enviando vía HTTP API — '{Asunto}' → {Destino} (from={From})",
             asunto, emailDestino, remitente);
@@ -624,7 +639,7 @@ public class EmailService : IEmailService
             var payload = new ResendPayload
             {
                 From        = fromHeader,
-                To          = new[] { emailDestino },
+                To          = destinatarios.ToArray(),
                 Subject     = asunto,
                 Html        = builder.HtmlBody ?? string.Empty,
                 Attachments = attachments.Count > 0 ? attachments : null
