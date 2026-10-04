@@ -28,8 +28,12 @@
     // veía el contador hasta la primera vez que agregaba algo en ESTA sesión. Acá
     // se busca el borrador existente (sin crear uno nuevo) igual que hace Carrito,
     // y se cachea en sesión para no repetir la consulta en cada página.
-    var pedidoId = Context.Session.GetInt32("PedidoId");
-    if (!pedidoId.HasValue)
+    // Modo "credenciales" sin sesión: se puede navegar el catálogo pero NO usar el
+    // carrito (ni se muestra el botón), así que no hay contador que calcular.
+    var visitanteSinCarrito = modoAcceso == "credenciales" && !estaLogueado;
+
+    var pedidoId = visitanteSinCarrito ? null : Context.Session.GetInt32("PedidoId");
+    if (!visitanteSinCarrito && !pedidoId.HasValue)
     {
         var _clienteIdClaim = User.FindFirst("clienteId");
         int? _clienteId = _clienteIdClaim is not null && int.TryParse(_clienteIdClaim.Value, out var _cid) ? _cid : null;
@@ -189,14 +193,17 @@
                         </ul>
                     </div>
 
-                    <a asp-page="/Carrito" class="btn-carrito" aria-label="Ver carrito" data-no-prefetch>
-                        <i class="bi bi-cart3"></i>
-                        <span class="action-label">Carrito</span>
-                        @if (cantCarrito > 0)
-                        {
-                            <span class="badge-carrito">@cantCarrito</span>
-                        }
-                    </a>
+                    @if (!visitanteSinCarrito)
+                    {
+                        <a asp-page="/Carrito" class="btn-carrito" aria-label="Ver carrito" data-no-prefetch>
+                            <i class="bi bi-cart3"></i>
+                            <span class="action-label">Carrito</span>
+                            @if (cantCarrito > 0)
+                            {
+                                <span class="badge-carrito">@cantCarrito</span>
+                            }
+                        </a>
+                    }
 
                     @if (modoAcceso == "credenciales")
                     {
@@ -228,14 +235,28 @@
                         }
                         else
                         {
-                            <a class="btn-login" asp-page="/MisPedidos">
-                                <i class="bi bi-bag"></i>
-                                <span class="action-label">Mis pedidos</span>
-                            </a>
-                            <a class="btn-login" asp-page="/Login">
-                                <i class="bi bi-box-arrow-in-right"></i>
-                                <span class="action-label">Ingresar</span>
-                            </a>
+                            @* Visitante sin sesión (modo credenciales): puede navegar el catálogo;
+                               el acceso a cuenta se despliega en un menú. *@
+                            <div class="dropdown">
+                                <button class="btn-login dropdown-toggle" type="button"
+                                        data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="bi bi-person-circle"></i>
+                                    <span class="action-label">Mi cuenta</span>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    <li>
+                                        <a class="dropdown-item" asp-page="/Login" data-no-prefetch>
+                                            <i class="bi bi-box-arrow-in-right me-2 text-muted"></i>Ingresar
+                                        </a>
+                                    </li>
+                                    <li>
+                                        @* Abre el modal #registroModal (definido al final del layout). *@
+                                        <button class="dropdown-item" type="button" data-registrarse>
+                                            <i class="bi bi-person-plus me-2 text-muted"></i>Registrarse
+                                        </button>
+                                    </li>
+                                </ul>
+                            </div>
                         }
                     }
                     else

@@ -20,6 +20,15 @@ public class AccessModeMiddleware
         "/api"
     ];
 
+    // Navegación de solo lectura permitida SIN sesión en modo "credenciales":
+    // inicio, catálogo, detalle de producto, búsqueda y política de privacidad.
+    // Todo lo demás (carrito, checkout, pagos, pedidos, admin...) sigue exigiendo
+    // sesión. Los controles de compra se ocultan en las vistas para estos visitantes.
+    private static readonly string[] NavegablesSinSesion =
+    [
+        "/catalogo", "/producto", "/buscar", "/privacy"
+    ];
+
     public AccessModeMiddleware(RequestDelegate next) => _next = next;
 
     public async Task InvokeAsync(HttpContext context, IParametrosService parametros)
@@ -29,11 +38,20 @@ public class AccessModeMiddleware
         if (modo == "credenciales" && !context.User.Identity!.IsAuthenticated)
         {
             var path = context.Request.Path.Value ?? string.Empty;
-            var esPublica = PublicPaths.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase));
+            var esPublica = PublicPaths.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase))
+                         || NavegablesSinSesion.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase))
+                         || path == "/"
+                         || path.Equals("/index", StringComparison.OrdinalIgnoreCase);
 
             if (!esPublica)
             {
-                context.Response.Redirect("/login");
+                // GET (navegación): llevar al login. Otros métodos (ej. un POST de
+                // agregar al carrito armado a mano): 401, para no devolver el HTML del
+                // login a un fetch/AJAX que espera JSON ni seguir redirecciones.
+                if (HttpMethods.IsGet(context.Request.Method) || HttpMethods.IsHead(context.Request.Method))
+                    context.Response.Redirect("/login");
+                else
+                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                 return;
             }
         }

@@ -1,4 +1,5 @@
 @page "{id:int}"
+@inject LitoralMarket.Application.Interfaces.IParametrosService Parametros
 @model ProductoDetalleModel
 @functions {
     static string ResolverRutaImagen(string? imagen)
@@ -13,6 +14,9 @@
 @{
     ViewData["Title"] = Model.Producto?.Descripcion ?? "Producto";
     var rutaImagen = Model.Producto is null ? string.Empty : ResolverRutaImagen(Model.Producto.Imagen);
+    // Modo "credenciales" sin sesión: se ve el producto y su precio, pero no se compra.
+    var soloLectura = await Parametros.GetModoAccesoAsync() == "credenciales"
+                      && !(User.Identity?.IsAuthenticated ?? false);
 }
 
 @if (Model.Producto is null)
@@ -70,6 +74,12 @@ else
             @if (!Model.Producto.TieneStock && Model.MostrarSinStock)
             {
                 <span class="badge bg-secondary fs-6">Agotado</span>
+            }
+            else if (Model.Producto.TieneStock && soloLectura)
+            {
+                <a asp-page="/Login" data-no-prefetch class="btn btn-outline-secondary">
+                    <i class="bi bi-box-arrow-in-right me-1"></i> Ingresá para comprar
+                </a>
             }
             else if (Model.Producto.TieneStock)
             {
