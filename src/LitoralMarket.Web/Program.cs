@@ -77,14 +77,31 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     });
 
 // Rate limiting (built-in .NET 7+)
+// Política "login" (aplicada a Login.cshtml.cs): protege contra fuerza bruta, así que
+// solo cuenta los INTENTOS de login (POST) y lleva un contador POR IP de cliente.
+// Antes era un único contador global compartido por todos los visitantes y que también
+// contaba los GET: en modo Credenciales cada link protegido del navbar redirige a
+// /login, y el prefetch por hover (prefetch.js) más los clics/recargas agotaban los 5
+// permisos por minuto → 429 en GET /login para cualquiera, y persistía al recargar.
+var loginMaxRequests  = builder.Configuration.GetValue("RateLimiting:LoginMaxRequests", 5);
+var loginWindowSegundos = builder.Configuration.GetValue("RateLimiting:LoginWindowSeconds", 60);
 builder.Services.AddRateLimiter(options =>
 {
-    options.AddFixedWindowLimiter("login", limiter =>
+    options.AddPolicy("login", httpContext =>
     {
-        limiter.PermitLimit = builder.Configuration.GetValue("RateLimiting:LoginMaxRequests", 5);
-        limiter.Window = TimeSpan.FromSeconds(builder.Configuration.GetValue("RateLimiting:LoginWindowSeconds", 60));
-        limiter.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-        limiter.QueueLimit = 0;
+        // Ver la pantalla de login (GET, redirecciones, prefetch) no es un intento de acceso.
+        if (!HttpMethods.IsPost(httpContext.Request.Method))
+            return RateLimitPartition.GetNoLimiter("login-no-post");
+
+        // ForwardedHeaders (arriba) ya resolvió la IP real detrás del proxy de Railway.
+        var ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "desconocida";
+        return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit          = loginMaxRequests,
+            Window               = TimeSpan.FromSeconds(loginWindowSegundos),
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit           = 0
+        });
     });
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 });
