@@ -22,4 +22,11 @@ public interface IEmailService
     /// Envía una notificación interna al administrador cuando llega un nuevo pedido.
     /// </summary>
     Task EnviarNotificacionAdminAsync(int pedidoId);
+
+    /// <summary>
+    /// Envía a los administradores (mismos destinatarios que la notificación de pedido
+    /// nuevo) una solicitud de registro/acceso con los datos que cargó el visitante.
+    /// Devuelve <c>true</c> si el email fue enviado exitosamente.
+    /// </summary>
+    Task<bool> EnviarSolicitudRegistroAsync(LitoralMarket.Application.DTOs.SolicitudRegistroDto datos);
 }

@@ -85,6 +85,8 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 // permisos por minuto → 429 en GET /login para cualquiera, y persistía al recargar.
 var loginMaxRequests  = builder.Configuration.GetValue("RateLimiting:LoginMaxRequests", 5);
 var loginWindowSegundos = builder.Configuration.GetValue("RateLimiting:LoginWindowSeconds", 60);
+var registroMaxRequests    = builder.Configuration.GetValue("RateLimiting:RegistroMaxRequests", 5);
+var registroWindowSegundos = builder.Configuration.GetValue("RateLimiting:RegistroWindowSeconds", 600);
 builder.Services.AddRateLimiter(options =>
 {
     options.AddPolicy("login", httpContext =>
@@ -99,6 +101,19 @@ builder.Services.AddRateLimiter(options =>
         {
             PermitLimit          = loginMaxRequests,
             Window               = TimeSpan.FromSeconds(loginWindowSegundos),
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit           = 0
+        });
+    });
+    // "registro": endpoint anónimo que dispara un email a los admins (RegistroController).
+    // Por IP, para que nadie pueda usarlo para inundar de mails a la administración.
+    options.AddPolicy("registro", httpContext =>
+    {
+        var ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "desconocida";
+        return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit          = registroMaxRequests,
+            Window               = TimeSpan.FromSeconds(registroWindowSegundos),
             QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
             QueueLimit           = 0
         });

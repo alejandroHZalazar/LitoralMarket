@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using LitoralMarket.Application.DTOs;
 using LitoralMarket.Application.Helpers;
 using LitoralMarket.Application.Interfaces;
 using LitoralMarket.Infrastructure.Data;
@@ -256,19 +257,13 @@ public class EmailService : IEmailService
     {
         if (!await MailHabilitado("ecommerce", "enviarMailAdmin")) return;
 
-        // SMTP_ADMIN_EMAIL (env var) sobreescribe mail/emailAdmin (BD). Ambas fuentes
-        // admiten uno o varios emails separados por ';' — un solo email sigue
-        // funcionando igual que antes (lista de un elemento).
-        var emailAdminCrudo = EnvOrParam("SMTP_ADMIN_EMAIL", await _params.GetValorAsync("mail", "emailAdmin"));
-        var emailsAdmin     = EmailListHelper.Parse(emailAdminCrudo);
+        var emailsAdmin = await ObtenerEmailsAdminAsync();
         if (emailsAdmin.Count == 0)
         {
             _logger.LogWarning(
-                "EnviarNotificacionAdminAsync: no hay email de admin configurado (o ninguno " +
-                "válido en '{Valor}'). Configurá la variable de entorno SMTP_ADMIN_EMAIL en " +
-                "Railway o el parámetro mail/emailAdmin en la tabla parametros — uno o varios " +
-                "emails separados por ';'.",
-                emailAdminCrudo ?? "(vacío)");
+                "EnviarNotificacionAdminAsync: no hay email de admin válido. Configurá la " +
+                "variable de entorno SMTP_ADMIN_EMAIL en Railway o el parámetro " +
+                "mail/emailAdmin en la tabla parametros — uno o varios emails separados por ';'.");
             return;
         }
 
@@ -318,6 +313,49 @@ public class EmailService : IEmailService
 
         var asunto = $"🛒 Nuevo pedido #{pedidoId:D6} — {nombre}";
         await EnviarAsync(emailsAdmin, asunto, builder);
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // Destinatarios de administración — ÚNICA fuente, compartida por la
+    // notificación de pedido nuevo y la solicitud de registro.
+    //   1° variable/configuración SMTP_ADMIN_EMAIL (Railway)
+    //   2° si no da destinatarios válidos → parametros mail/emailAdmin
+    // Ambas admiten uno o varios emails separados por ';'.
+    // ──────────────────────────────────────────────────────────────
+    private async Task<List<string>> ObtenerEmailsAdminAsync()
+    {
+        var desdeEntorno = EmailListHelper.Parse(EnvOrParam("SMTP_ADMIN_EMAIL", null));
+        if (desdeEntorno.Count > 0) return desdeEntorno;
+
+        return EmailListHelper.Parse(await _params.GetValorAsync("mail", "emailAdmin"));
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // Solicitud de registro/acceso (modo Credenciales): avisa a los admins con
+    // los datos cargados por el visitante. No crea el cliente ni las credenciales.
+    // ──────────────────────────────────────────────────────────────
+    public async Task<bool> EnviarSolicitudRegistroAsync(SolicitudRegistroDto datos)
+    {
+        var emailsAdmin = await ObtenerEmailsAdminAsync();
+        if (emailsAdmin.Count == 0)
+        {
+            _logger.LogWarning(
+                "EnviarSolicitudRegistroAsync: no hay email de admin válido (SMTP_ADMIN_EMAIL " +
+                "o parametros mail/emailAdmin) — la solicitud de '{Nombre}' no se pudo enviar.",
+                datos.NombreComercial);
+            return false;
+        }
+
+        var empresa = await _params.GetValorAsync("empresa", "nombre") ?? "LitoralMarket";
+
+        var builder = new BodyBuilder { HtmlBody = HtmlSolicitudRegistro(datos, empresa) };
+
+        // Sin saltos de línea: el nombre lo escribe el visitante y va en el asunto.
+        var nombreAsunto = (datos.NombreComercial ?? string.Empty)
+            .Replace("\r", " ").Replace("\n", " ").Trim();
+        var asunto = $"📝 Solicitud de registro / acceso — {nombreAsunto}";
+
+        return await EnviarAsync(emailsAdmin, asunto, builder);
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -1040,5 +1078,45 @@ public class EmailService : IEmailService
             """;
 
         return HtmlBase($"Nuevo pedido #{pedidoId:D6} — {nombreCliente}", empresa, cuerpo);
+    }
+
+    private static string HtmlSolicitudRegistro(SolicitudRegistroDto d, string empresa)
+    {
+        // Todo lo que escribió el visitante se HTML-encodea: va a un mail interno.
+        static string Enc(string? v) => string.IsNullOrWhiteSpace(v)
+            ? "<span style=\"color:#999;\">—</span>"
+            : System.Net.WebUtility.HtmlEncode(v.Trim());
+
+        static string Fila(string etiqueta, string valorHtml) =>
+            "<tr>" +
+            $"<td style=\"padding:8px;background:#f4f6f8;font-weight:bold;width:40%;\">{etiqueta}</td>" +
+            $"<td style=\"padding:8px;\">{valorHtml}</td>" +
+            "</tr>";
+
+        var filas =
+            Fila("Nombre comercial", Enc(d.NombreComercial)) +
+            Fila("Razón social",     Enc(d.RazonSocial)) +
+            Fila("CUIL o DNI",       Enc(d.CuilDni)) +
+            Fila("Dirección",        Enc(d.Direccion)) +
+            Fila("Localidad",        Enc(d.Localidad)) +
+            Fila("Email",            Enc(d.Email)) +
+            Fila("Teléfono",         Enc(d.Telefono)) +
+            Fila("Celular",          Enc(d.Celular));
+
+        var cuerpo = $"""
+            <h2 style="margin:0 0 8px;color:#1DB862;font-size:18px;">Solicitud de registro / acceso</h2>
+            <p style="margin:0 0 4px;font-size:14px;">
+              Un visitante solicitó credenciales de acceso al ecommerce. Estos son los datos que cargó:
+            </p>
+            <table style="width:100%;border-collapse:collapse;margin-top:16px;font-size:14px;">
+              {filas}
+            </table>
+            <p style="margin:20px 0 0;font-size:13px;color:#666;">
+              Este mensaje es solo una solicitud: el cliente todavía <strong>no fue dado de alta</strong>
+              ni se generaron credenciales. Al aprobarla, comuníquese con el solicitante a su email.
+            </p>
+            """;
+
+        return HtmlBase("Solicitud de registro / acceso", empresa, cuerpo);
     }
 }

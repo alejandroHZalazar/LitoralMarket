@@ -475,7 +475,165 @@
     </div>
 </div>
 
+@if (visitanteSinCarrito)
+{
+    <!-- Modal "Registrarse" (solo modo Credenciales, visitante sin sesión).
+         Envía la solicitud por email a los administradores (POST /api/registro). -->
+    <div class="modal fade" id="registroModal" tabindex="-1" aria-labelledby="registroModalTitulo" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+            <div class="modal-content">
+                <div class="modal-header border-bottom">
+                    <h5 class="modal-title fw-bold" id="registroModalTitulo">
+                        <i class="bi bi-person-plus me-2 text-success"></i>Registrarse
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+
+                <form id="registroForm" novalidate>
+                    @Html.AntiForgeryToken()
+                    <div class="modal-body">
+                        <p class="text-muted small mb-3">
+                            Completá tus datos y los enviaremos a la Administración para generar tus credenciales de acceso.
+                            Los campos con <span class="text-danger">*</span> son obligatorios.
+                        </p>
+
+                        <div id="registroError" class="alert alert-danger py-2 small d-none" role="alert"></div>
+
+                        <div class="row g-2">
+                            <div class="col-12">
+                                <label class="form-label form-label-sm" for="regNombreComercial">Nombre comercial <span class="text-danger">*</span></label>
+                                <input type="text" id="regNombreComercial" name="NombreComercial" class="form-control form-control-sm"
+                                       maxlength="150" required autocomplete="organization" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label form-label-sm" for="regRazonSocial">Razón social</label>
+                                <input type="text" id="regRazonSocial" name="RazonSocial" class="form-control form-control-sm" maxlength="150" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label form-label-sm" for="regCuilDni">CUIL o DNI</label>
+                                <input type="text" id="regCuilDni" name="CuilDni" class="form-control form-control-sm"
+                                       maxlength="11" inputmode="numeric" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label form-label-sm" for="regDireccion">Dirección</label>
+                                <input type="text" id="regDireccion" name="Direccion" class="form-control form-control-sm"
+                                       maxlength="150" autocomplete="street-address" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label form-label-sm" for="regLocalidad">Localidad</label>
+                                <input type="text" id="regLocalidad" name="Localidad" class="form-control form-control-sm" maxlength="150" />
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label form-label-sm" for="regEmail">Email <span class="text-danger">*</span></label>
+                                <input type="email" id="regEmail" name="Email" class="form-control form-control-sm"
+                                       maxlength="150" required autocomplete="email" placeholder="tu@email.com" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label form-label-sm" for="regTelefono">Teléfono</label>
+                                <input type="tel" id="regTelefono" name="Telefono" class="form-control form-control-sm" maxlength="150" autocomplete="tel" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label form-label-sm" for="regCelular">Celular</label>
+                                <input type="tel" id="regCelular" name="Celular" class="form-control form-control-sm" maxlength="150" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-success" id="registroAceptar">
+                            <span class="spinner-border spinner-border-sm me-1 d-none" id="registroSpinner" aria-hidden="true"></span>
+                            <i class="bi bi-check-lg me-1"></i>Aceptar
+                        </button>
+                    </div>
+                </form>
+
+                <div id="registroExito" class="d-none">
+                    <div class="modal-body text-center py-4">
+                        <i class="bi bi-check-circle-fill text-success" style="font-size:3rem;"></i>
+                        <p class="mt-3 mb-0" id="registroExitoMensaje"></p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-success" data-bs-dismiss="modal">Cerrar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+@if (visitanteSinCarrito)
+{
+    <script>
+    (function () {
+        var modalEl = document.getElementById('registroModal');
+        if (!modalEl) return;
+
+        var form    = document.getElementById('registroForm');
+        var errBox  = document.getElementById('registroError');
+        var exito   = document.getElementById('registroExito');
+        var exitoMs = document.getElementById('registroExitoMensaje');
+        var btn     = document.getElementById('registroAceptar');
+        var spinner = document.getElementById('registroSpinner');
+        var nombre  = document.getElementById('regNombreComercial');
+
+        function mostrarError(msg) {
+            errBox.textContent = msg;
+            errBox.classList.remove('d-none');
+        }
+
+        // Cada apertura: formulario limpio si venía de un envío exitoso; si no (cancelar /
+        // error), se conservan los datos ya cargados.
+        function abrir() {
+            if (!exito.classList.contains('d-none')) {
+                form.reset();
+                exito.classList.add('d-none');
+                form.classList.remove('d-none');
+            }
+            errBox.classList.add('d-none');
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
+        document.querySelectorAll('[data-registrarse]').forEach(function (b) {
+            b.addEventListener('click', abrir);
+        });
+
+        form.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            errBox.classList.add('d-none');
+
+            // Nombre comercial no puede ser solo espacios (required nativo los acepta).
+            nombre.setCustomValidity(nombre.value.trim() ? '' : 'Ingresá el nombre comercial.');
+            if (!form.checkValidity()) { form.reportValidity(); return; }
+
+            btn.disabled = true;
+            spinner.classList.remove('d-none');
+            try {
+                var res  = await fetch('/api/registro', { method: 'POST', body: new FormData(form) });
+                var data = null;
+                try { data = await res.json(); } catch (_) { /* respuesta sin JSON */ }
+
+                if (res.ok && data && data.ok) {
+                    exitoMs.textContent = data.mensaje;
+                    form.classList.add('d-none');
+                    exito.classList.remove('d-none');
+                } else if (res.status === 429) {
+                    mostrarError('Realizó demasiados intentos. Por favor, espere unos minutos y vuelva a intentar.');
+                } else if (data && data.errores && data.errores.length) {
+                    mostrarError(data.errores.join(' '));
+                } else {
+                    mostrarError((data && data.mensaje) || 'No pudimos enviar su solicitud. Por favor, intente nuevamente.');
+                }
+            } catch (_) {
+                mostrarError('No pudimos conectar con el servidor. Revise su conexión e intente nuevamente.');
+            } finally {
+                btn.disabled = false;
+                spinner.classList.add('d-none');
+            }
+        });
+    })();
+    </script>
+}
 <script src="~/js/site.js" asp-append-version="true"></script>
 <script src="~/js/tema.js" asp-append-version="true"></script>
 <script src="~/js/prefetch.js" asp-append-version="true" defer></script>
