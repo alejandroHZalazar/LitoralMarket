@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using LitoralMarket.Application.DTOs;
 using LitoralMarket.Application.Interfaces;
 using LitoralMarket.Domain.Entities;
 using LitoralMarket.Infrastructure.Data;
@@ -54,16 +55,69 @@ public class AuthService : IAuthService
 
         if (usuario is null) return null;
 
-        // Verificar contraseña
+        return VerificarPasswordAdmin(usuario, password) ? usuario : null;
+    }
+
+    // Misma verificación que usa el login de administradores (ValidarAdminAsync).
+    private static bool VerificarPasswordAdmin(Usuario usuario, string password)
+    {
         if (usuario.PasswordMigrated == true && !string.IsNullOrEmpty(usuario.PasswordHash))
         {
             // Contraseña migrada: SHA-256 en Base64
-            var hashCalculado = Sha256Base64(password);
-            return hashCalculado == usuario.PasswordHash ? usuario : null;
+            return Sha256Base64(password) == usuario.PasswordHash;
         }
 
         // Contraseña en texto plano (sistema legado)
-        return usuario.Password == password ? usuario : null;
+        return usuario.Password == password;
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // Cambio de contraseña (usuario autenticado)
+    // ──────────────────────────────────────────────────────────────
+    public async Task<ResultadoCambioPassword> CambiarPasswordClienteAsync(int clienteId, string actual, string nueva)
+    {
+        var cliente = await _db.Clientes
+            .FirstOrDefaultAsync(c => c.Id == clienteId && c.Baja != true);
+
+        if (cliente is null || cliente.PasswordHash is null)
+            return ResultadoCambioPassword.UsuarioNoEncontrado;
+
+        // Mismo hasher y misma llamada que ValidarCredencialesAsync.
+        var verificacion = _hasher.VerifyHashedPassword(cliente.Email ?? string.Empty, cliente.PasswordHash, actual);
+        if (verificacion == PasswordVerificationResult.Failed)
+            return ResultadoCambioPassword.ActualIncorrecta;
+
+        cliente.PasswordHash = HashPassword(nueva);
+        await _db.SaveChangesAsync();
+        return ResultadoCambioPassword.Ok;
+    }
+
+    public async Task<ResultadoCambioPassword> CambiarPasswordAdminAsync(int usuarioId, string actual, string nueva)
+    {
+        // Mismos filtros que el login de administradores.
+        var adminTipoStr = await _params.GetValorAsync("configuracion", "admin");
+        if (!int.TryParse(adminTipoStr, out var adminTipo))
+            return ResultadoCambioPassword.UsuarioNoEncontrado;
+
+        var usuario = await _db.Usuarios
+            .FirstOrDefaultAsync(u => u.Id == usuarioId && u.Tipo == adminTipo && u.Baja != true);
+
+        if (usuario is null)
+            return ResultadoCambioPassword.UsuarioNoEncontrado;
+
+        if (!VerificarPasswordAdmin(usuario, actual))
+            return ResultadoCambioPassword.ActualIncorrecta;
+
+        // Texto plano, según la estructura actual de la tabla usuarios.
+        usuario.Password = nueva;
+
+        // Si está migrado, el login valida contra password_hash (no contra password):
+        // se recalcula con el mismo SHA-256 para que la nueva contraseña sea la vigente.
+        if (usuario.PasswordMigrated == true)
+            usuario.PasswordHash = Sha256Base64(nueva);
+
+        await _db.SaveChangesAsync();
+        return ResultadoCambioPassword.Ok;
     }
 
     // ──────────────────────────────────────────────────────────────

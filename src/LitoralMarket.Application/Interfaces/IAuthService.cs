@@ -18,4 +18,19 @@ public interface IAuthService
 
     string HashPassword(string password);
     bool VerifyPassword(string hashedPassword, string providedPassword);
+
+    /// <summary>
+    /// Cambia la contraseña de un cliente (Clientes.passwordHash). Verifica la actual con
+    /// el mismo hasher del login y guarda la nueva con ese mismo mecanismo.
+    /// </summary>
+    Task<LitoralMarket.Application.DTOs.ResultadoCambioPassword> CambiarPasswordClienteAsync(
+        int clienteId, string actual, string nueva);
+
+    /// <summary>
+    /// Cambia la contraseña de un administrador (usuarios.password, texto plano). Verifica la
+    /// actual con la misma lógica de <see cref="ValidarAdminAsync"/>; si el usuario está migrado
+    /// (password_migrated = 1) también recalcula password_hash, que es lo que valida el login.
+    /// </summary>
+    Task<LitoralMarket.Application.DTOs.ResultadoCambioPassword> CambiarPasswordAdminAsync(
+        int usuarioId, string actual, string nueva);
 }

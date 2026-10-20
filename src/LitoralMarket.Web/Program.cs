@@ -87,6 +87,8 @@ var loginMaxRequests  = builder.Configuration.GetValue("RateLimiting:LoginMaxReq
 var loginWindowSegundos = builder.Configuration.GetValue("RateLimiting:LoginWindowSeconds", 60);
 var registroMaxRequests    = builder.Configuration.GetValue("RateLimiting:RegistroMaxRequests", 5);
 var registroWindowSegundos = builder.Configuration.GetValue("RateLimiting:RegistroWindowSeconds", 600);
+var cambioPasswordMaxRequests    = builder.Configuration.GetValue("RateLimiting:CambioPasswordMaxRequests", 10);
+var cambioPasswordWindowSegundos = builder.Configuration.GetValue("RateLimiting:CambioPasswordWindowSeconds", 600);
 builder.Services.AddRateLimiter(options =>
 {
     options.AddPolicy("login", httpContext =>
@@ -114,6 +116,20 @@ builder.Services.AddRateLimiter(options =>
         {
             PermitLimit          = registroMaxRequests,
             Window               = TimeSpan.FromSeconds(registroWindowSegundos),
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit           = 0
+        });
+    });
+    // "cambiarPassword" (CuentaController): frena la fuerza bruta de la contraseña actual.
+    // Por IP: UseRateLimiter corre antes que UseAuthentication, así que acá todavía no
+    // hay usuario identificado.
+    options.AddPolicy("cambiarPassword", httpContext =>
+    {
+        var ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "desconocida";
+        return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit          = cambioPasswordMaxRequests,
+            Window               = TimeSpan.FromSeconds(cambioPasswordWindowSegundos),
             QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
             QueueLimit           = 0
         });
