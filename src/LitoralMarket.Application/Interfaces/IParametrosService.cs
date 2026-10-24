@@ -7,6 +7,8 @@ public interface IParametrosService
     Task<bool> MostrarSinStockAsync();
     /// <summary>ecommerce/preciosSinIVA == "1" → los precios mostrados no incluyen IVA.</summary>
     Task<bool> MostrarPreciosSinIvaAsync();
+    /// <summary>ecommerce/CodProveedorEnCatalogo == "1" → se muestra Productos.codProveedor en catálogo y detalle.</summary>
+    Task<bool> MostrarCodProveedorEnCatalogoAsync();
     Task<int> GetProductosPorPaginaAsync();
     Task<string> GetTituloEcommerceAsync();
     Task<string?> GetNombreEmpresaAsync();

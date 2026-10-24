@@ -17,6 +17,9 @@
     // Modo "credenciales" sin sesión: se ve el producto y su precio, pero no se compra.
     var soloLectura = await Parametros.GetModoAccesoAsync() == "credenciales"
                       && !(User.Identity?.IsAuthenticated ?? false);
+    // Código de proveedor visible solo si ecommerce/CodProveedorEnCatalogo == "1" (cacheado).
+    var verCodProveedor = await Parametros.MostrarCodProveedorEnCatalogoAsync()
+                          && !string.IsNullOrWhiteSpace(Model.Producto?.CodProveedor);
 }
 
 @if (Model.Producto is null)
@@ -59,6 +62,10 @@ else
         </div>
         <div class="col-md-7">
             <h1 class="fs-2">@Model.Producto.Descripcion</h1>
+            @if (verCodProveedor)
+            {
+                <p class="text-muted small mb-1">Código: @Model.Producto.CodProveedor</p>
+            }
             @if (!string.IsNullOrEmpty(Model.Producto.RubroNombre))
             {
                 <p class="text-muted">

@@ -21,6 +21,9 @@
     // (GetModoAccesoAsync está cacheado en memoria: no hay consulta por cada tarjeta.)
     var soloLectura  = await Parametros.GetModoAccesoAsync() == "credenciales"
                        && !(User.Identity?.IsAuthenticated ?? false);
+    // Código de proveedor visible solo si ecommerce/CodProveedorEnCatalogo == "1" (cacheado).
+    var verCodProveedor = await Parametros.MostrarCodProveedorEnCatalogoAsync()
+                          && !string.IsNullOrWhiteSpace(Model.CodProveedor);
 }
 <div class="card h-100 producto-card">
     <a asp-page="/Producto" asp-route-id="@Model.Id" class="producto-card-img-link">
@@ -52,6 +55,11 @@
                 @Model.Descripcion
             </a>
         </h6>
+
+        @if (verCodProveedor)
+        {
+            <div class="text-muted small producto-cod-proveedor">Cód.: @Model.CodProveedor</div>
+        }
 
         <div class="producto-precio">$@Model.Precio.ToString("N2")</div>
 
