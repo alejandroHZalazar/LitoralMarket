@@ -51,13 +51,14 @@ public class IndexModel : PageModel
             var desc  = System.Net.WebUtility.HtmlEncode(p.Descripcion ?? "-");
             var codP  = System.Net.WebUtility.HtmlEncode(p.CodProveedor ?? "-");
             var codB  = System.Net.WebUtility.HtmlEncode(p.CodBarras ?? "-");
-            var rubro = System.Net.WebUtility.HtmlEncode(p.RubroNombre ?? "-");
+            // Ruta completa (Rubro > Subrubro); el tooltip la repite por si la celda la recorta.
+            var rubro = System.Net.WebUtility.HtmlEncode(p.RubroRuta ?? p.RubroNombre ?? "-");
 
             sb.Append($@"<tr class=""fila-producto"" data-id=""{p.Id}"" role=""button"">
   <td>{codP}</td>
   <td>{codB}</td>
   <td>{desc}</td>
-  <td class=""text-muted small"">{rubro}</td>
+  <td class=""text-muted small"" title=""{rubro}"">{rubro}</td>
   <td class=""text-end text-nowrap"">
     <button class=""btn btn-sm btn-outline-primary me-1"" onclick=""abrirModalEditar({p.Id});event.stopPropagation();"" title=""Editar"">
       <i class=""bi bi-pencil""></i>
@@ -91,7 +92,10 @@ public class IndexModel : PageModel
 <div class=""p-2"">
   <div class=""text-center mb-2"">{imgTag}</div>
   <h6 class=""fw-bold mb-1"">{System.Net.WebUtility.HtmlEncode(p.Descripcion)}</h6>
-  <p class=""text-muted small mb-2"">{System.Net.WebUtility.HtmlEncode(p.RubroNombre ?? "Sin rubro")} · {System.Net.WebUtility.HtmlEncode(p.ProveedorNombre ?? "Sin proveedor")}</p>
+  <div class=""text-muted small mb-2"">
+    <div><span class=""fw-semibold"">Rubro:</span> {System.Net.WebUtility.HtmlEncode(p.RubroRuta ?? p.RubroNombre ?? "Sin rubro")}</div>
+    <div><span class=""fw-semibold"">Proveedor:</span> {System.Net.WebUtility.HtmlEncode(p.ProveedorNombre ?? "Sin proveedor")}</div>
+  </div>
   <hr class=""my-2""/>
   <div class=""row g-1 small"">
     <div class=""col-6""><span class=""text-muted"">Cód. Prov.:</span> <strong>{System.Net.WebUtility.HtmlEncode(p.CodProveedor ?? "-")}</strong></div>
@@ -259,9 +263,11 @@ public class IndexModel : PageModel
     // ── Helper ───────────────────────────────────────────────────
     private async Task CargarDropdownsAsync()
     {
-        var rubros = await _rubroRepo.ObtenerRubrosAsync();
+        // Todos los niveles con su ruta completa ("Rubro > Subrubro"); se puede elegir cualquiera
+        // y se guarda igual en Productos.fk_rubro.
+        var rubros = await _rubroRepo.ObtenerArbolRubrosAsync();
         Rubros = rubros
-            .Select(r => new SelectListItem(r.Descripcion, r.Id.ToString()))
+            .Select(r => new SelectListItem(r.Ruta, r.Id.ToString()))
             .ToList();
         Rubros.Insert(0, new SelectListItem("— Seleccioná un rubro —", ""));
 

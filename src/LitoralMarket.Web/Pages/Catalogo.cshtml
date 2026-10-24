@@ -5,7 +5,33 @@
     ViewData["MostrarSinStock"] = Model.MostrarSinStock;
 }
 
-<h2 class="mb-4">@Model.RubroNombre</h2>
+@if (Model.Ruta.Count > 1)
+{
+    <nav aria-label="breadcrumb" class="mb-1">
+        <ol class="breadcrumb small mb-0">
+            @foreach (var nodo in Model.Ruta.Take(Model.Ruta.Count - 1))
+            {
+                <li class="breadcrumb-item">
+                    <a asp-page="/Catalogo" asp-route-rubroId="@nodo.Id">@nodo.Descripcion</a>
+                </li>
+            }
+            <li class="breadcrumb-item active" aria-current="page">@Model.RubroNombre</li>
+        </ol>
+    </nav>
+}
+
+<h2 class="@(Model.Subrubros.Any() ? "mb-2" : "mb-4")">@Model.RubroNombre</h2>
+
+@if (Model.Subrubros.Any())
+{
+    <div class="d-flex flex-wrap gap-2 mb-4">
+        @foreach (var sub in Model.Subrubros)
+        {
+            <a asp-page="/Catalogo" asp-route-rubroId="@sub.Id"
+               class="btn btn-sm btn-outline-secondary rounded-pill">@sub.Descripcion</a>
+        }
+    </div>
+}
 
 @if (!Model.Productos.Any())
 {

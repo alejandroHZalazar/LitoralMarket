@@ -25,6 +25,8 @@ public class ProductoAdminDto
 
     public int?    FkRubro         { get; set; }
     public string? RubroNombre     { get; set; }
+    /// <summary>Ruta completa del rubro asignado, ej. "Rubro padre &gt; Subrubro". Solo lectura (detalle/grilla).</summary>
+    public string? RubroRuta       { get; set; }
 
     public int?    FkProveedor     { get; set; }
     public string? ProveedorNombre { get; set; }

@@ -31,10 +31,10 @@ public class IndexModel : PageModel
         Titulo = await _parametros.GetTituloEcommerceAsync();
         var porPagina = await _parametros.GetProductosPorPaginaAsync();
 
-        var rubros = await _productos.ObtenerRubrosAsync();
-        if (!rubros.Any()) return;
-
-        var primerRubro = rubros.First();
+        // Primer rubro PRINCIPAL: el filtro incluye a sus subrubros (donde están los productos).
+        var rubros = await _productos.ObtenerArbolRubrosAsync();
+        var primerRubro = rubros.FirstOrDefault(r => r.PadreId == null);
+        if (primerRubro is null) return;
         var total = await _productos.ContarPorRubroAsync(primerRubro.Id, MostrarSinStock);
         TotalPaginas = (int)Math.Ceiling((double)total / porPagina);
         PaginaActual = Math.Clamp(pagina, 1, Math.Max(1, TotalPaginas));

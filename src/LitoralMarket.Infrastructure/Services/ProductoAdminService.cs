@@ -10,7 +10,20 @@ namespace LitoralMarket.Infrastructure.Services;
 public class ProductoAdminService : IProductoAdminService
 {
     private readonly AppDbContext _db;
-    public ProductoAdminService(AppDbContext db) => _db = db;
+    private readonly IProductoRepository _repo;
+
+    public ProductoAdminService(AppDbContext db, IProductoRepository repo)
+    {
+        _db   = db;
+        _repo = repo;
+    }
+
+    // Ruta completa del rubro ("Padre > Subrubro") tomada del árbol cacheado: sin consultas extra.
+    private static string? RutaDe(IReadOnlyDictionary<int, string> rutas, int? fkRubro) =>
+        fkRubro.HasValue && rutas.TryGetValue(fkRubro.Value, out var ruta) ? ruta : null;
+
+    private async Task<Dictionary<int, string>> RutasRubrosAsync() =>
+        (await _repo.ObtenerArbolRubrosAsync()).ToDictionary(n => n.Id, n => n.Ruta);
 
     // ──────────────────────────────────────────────────────────────
     // Búsqueda
@@ -28,7 +41,7 @@ public class ProductoAdminService : IProductoAdminService
 
         // Proyección directa: NO materializa la entidad Producto (evita cargar el
         // blob 'imagen' de hasta 200 productos, que antes se traía sin usarse).
-        return await q
+        var lista = await q
             .Where(p => p.Baja != true)
             .OrderBy(p => p.Descripcion)
             .Take(200)
@@ -38,9 +51,16 @@ public class ProductoAdminService : IProductoAdminService
                 CodProveedor = p.CodProveedor,
                 CodBarras    = p.CodBarras,
                 Descripcion  = p.Descripcion,
+                FkRubro      = p.FkRubro,
                 RubroNombre  = p.Rubro != null ? p.Rubro.Descripcion : null
             })
             .ToListAsync();
+
+        var rutas = await RutasRubrosAsync();
+        foreach (var dto in lista)
+            dto.RubroRuta = RutaDe(rutas, dto.FkRubro);
+
+        return lista;
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -73,6 +93,7 @@ public class ProductoAdminService : IProductoAdminService
             DescripcionLarga = p.DescripcionLarga,
             FkRubro          = p.FkRubro,
             RubroNombre      = p.Rubro?.Descripcion,
+            RubroRuta        = RutaDe(await RutasRubrosAsync(), p.FkRubro),
             FkProveedor      = p.FkProveedor,
             ProveedorNombre  = proveedorNombre,
             Iva              = p.Iva ?? 0,

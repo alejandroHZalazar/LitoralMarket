@@ -66,7 +66,17 @@ else
             {
                 <p class="text-muted small mb-1">Código: @Model.Producto.CodProveedor</p>
             }
-            @if (!string.IsNullOrEmpty(Model.Producto.RubroNombre))
+            @if (Model.RutaRubro.Any())
+            {
+                <p class="text-muted">
+                    @for (var i = 0; i < Model.RutaRubro.Count; i++)
+                    {
+                        if (i > 0) { <span class="mx-1">&gt;</span> }
+                        <a asp-page="/Catalogo" asp-route-rubroId="@Model.RutaRubro[i].Id">@Model.RutaRubro[i].Descripcion</a>
+                    }
+                </p>
+            }
+            else if (!string.IsNullOrEmpty(Model.Producto.RubroNombre))
             {
                 <p class="text-muted">
                     <a asp-page="/Catalogo" asp-route-rubroId="@Model.Producto.RubroId">@Model.Producto.RubroNombre</a>

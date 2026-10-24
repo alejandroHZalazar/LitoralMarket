@@ -365,6 +365,43 @@ body {
   border-radius: 2px;
 }
 
+/* Rubro con subrubros: enlace al rubro + flecha que despliega sus subrubros */
+.rubro-item {
+  display: flex;
+  align-items: stretch;
+  position: relative;
+}
+.rubro-item > .rubro-link { padding-right: 0.15rem; }
+.rubro-caret {
+  background: transparent;
+  border: 0;
+  color: rgba(255,255,255,0.7);
+  padding: 0 0.55rem 0 0.15rem;
+  font-size: 0.65rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s;
+}
+.rubro-caret:hover,
+.rubro-caret[aria-expanded="true"] { color: var(--blanco); background: rgba(255,255,255,0.07); }
+.rubro-item.active > .rubro-caret { color: var(--dorado-claro); }
+.rubro-item.active > .rubro-link::after { right: 0; }   /* el subrayado del activo abarca enlace + flecha */
+
+/* Lista de subrubros (todos los niveles, con sangría). Se posiciona "fixed" desde JS para
+   no quedar recortada por el overflow de la franja. */
+.navbar-lm .rubro-submenu {
+  min-width: 230px;
+  max-height: 65vh;
+  overflow-y: auto;
+  margin-top: 0;
+}
+.rubro-submenu .dropdown-item { font-size: 0.85rem; white-space: normal; }
+.rubro-submenu .dropdown-item.active,
+.rubro-submenu .dropdown-item:active {
+  background: rgba(201,168,76,0.22);
+  color: inherit;
+}
+
 /* Toggler categorías (mobile) */
 .rubros-toggler {
   background: transparent;
@@ -400,6 +437,27 @@ body {
     border-left: 3px solid var(--dorado);
     padding-left: calc(0.5rem - 3px);
   }
+
+  /* Móvil: el submenú se despliega en línea, dentro de la lista de categorías */
+  .rubro-item { flex-wrap: wrap; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .rubro-item > .rubro-link { flex: 1; border-bottom: 0; }
+  .rubro-caret { padding: 0 1rem; font-size: 0.8rem; }
+  .navbar-lm .rubro-submenu {
+    position: static !important;
+    transform: none !important;
+    inset: auto !important;
+    width: 100%;
+    max-height: none;
+    margin: 0 !important;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background: rgba(0,0,0,0.18);
+  }
+  .rubro-submenu .dropdown-item { color: rgba(255,255,255,0.85); padding-top: 0.5rem; padding-bottom: 0.5rem; }
+  .rubro-submenu .dropdown-item:hover { background: rgba(255,255,255,0.07); color: var(--blanco); }
+  .rubro-submenu .dropdown-item.active { color: var(--dorado-claro); }
+  .rubro-submenu .dropdown-divider { border-color: rgba(255,255,255,0.08); }
 }
 
 /* =============================================

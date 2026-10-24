@@ -59,6 +59,7 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             e.ToTable("Rubros");
             e.HasKey(x => x.Id);
             e.Property(x => x.Descripcion).HasColumnName("descripcion");
+            e.Property(x => x.FkRubroPadre).HasColumnName("fk_rubroPadre");
         });
 
         modelBuilder.Entity<Producto>(e =>

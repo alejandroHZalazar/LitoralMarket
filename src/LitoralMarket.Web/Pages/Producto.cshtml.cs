@@ -1,4 +1,5 @@
 using LitoralMarket.Application.DTOs;
+using LitoralMarket.Application.Helpers;
 using LitoralMarket.Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -19,6 +20,8 @@ public class ProductoDetalleModel : PageModel
     public ProductoDto? Producto { get; private set; }
     public bool MostrarSinStock { get; private set; }
     public List<ProductoImagenDto> Imagenes { get; private set; } = new();
+    /// <summary>Cadena rubro principal → subrubro del producto (cada tramo enlaza a su catálogo).</summary>
+    public List<RubroNodoDto> RutaRubro { get; private set; } = new();
 
     public async Task<IActionResult> OnGetAsync(int id)
     {
@@ -30,6 +33,9 @@ public class ProductoDetalleModel : PageModel
 
         // Metadatos de imágenes (sin blobs) para la galería
         Imagenes = await _productos.ObtenerImagenesAsync(id);
+
+        if (Producto.RubroId.HasValue)
+            RutaRubro = RubroArbolHelper.Cadena(await _productos.ObtenerArbolRubrosAsync(), Producto.RubroId.Value);
 
         return Page();
     }

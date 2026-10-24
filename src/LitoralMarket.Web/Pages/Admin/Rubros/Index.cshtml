@@ -26,7 +26,7 @@
             <table class="table table-hover table-sm mb-0 align-middle">
                 <thead class="table-dark sticky-top">
                     <tr>
-                        <th>Descripción</th>
+                        <th>Rubro / subrubro</th>
                         <th class="text-center" style="width:120px">Productos activos</th>
                         <th class="text-end" style="width:110px">Acciones</th>
                     </tr>
@@ -58,7 +58,14 @@
                 <div class="mb-2">
                     <label class="form-label form-label-sm fw-semibold">Descripción *</label>
                     <input id="inpDescripcion" type="text" class="form-control"
-                           placeholder="Nombre del rubro" maxlength="200" />
+                           placeholder="Nombre del rubro" maxlength="150" />
+                </div>
+                <div class="mb-2">
+                    <label class="form-label form-label-sm fw-semibold">Rubro padre</label>
+                    <select id="selPadre" class="form-select">
+                        <option value="0">(Rubro principal)</option>
+                    </select>
+                    <div class="form-text">Elegí un rubro para crearlo como subrubro suyo.</div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -117,24 +124,55 @@ function buscar() {
     }, 300);
 }
 
+// ── Combo "Rubro padre" ───────────────────────────────────────────
+// Carga el árbol vigente; al editar no ofrece el propio rubro ni sus descendientes
+// (el servidor también lo valida).
+async function cargarPadres(idEditando, padreSel) {
+    const sel  = document.getElementById('selPadre');
+    const res  = await fetch('?handler=Arbol');
+    const arbol = await res.json();
+
+    const excluidos = new Set();
+    if (idEditando) {
+        excluidos.add(idEditando);
+        let crecio = true;
+        while (crecio) {
+            crecio = false;
+            for (const n of arbol)
+                if (n.padreId && excluidos.has(n.padreId) && !excluidos.has(n.id)) { excluidos.add(n.id); crecio = true; }
+        }
+    }
+
+    sel.innerHTML = '<option value="0">(Rubro principal)</option>';
+    for (const n of arbol) {
+        if (excluidos.has(n.id)) continue;
+        const opt = document.createElement('option');
+        opt.value = n.id;
+        opt.textContent = n.ruta;
+        sel.appendChild(opt);
+    }
+    sel.value = String(padreSel || 0);
+}
+
 // ── Modal Nuevo ───────────────────────────────────────────────────
-function abrirModalNuevo() {
+async function abrirModalNuevo() {
     _idActual = 0;
     document.getElementById('inpDescripcion').value = '';
     document.getElementById('alertaModal').classList.add('d-none');
     document.getElementById('modalTitulo').innerHTML =
         '<i class="bi bi-plus-circle me-2 text-success"></i>Nuevo rubro';
+    await cargarPadres(0, 0);
     new bootstrap.Modal(document.getElementById('rubroModal')).show();
     setTimeout(() => document.getElementById('inpDescripcion').focus(), 300);
 }
 
 // ── Modal Editar ──────────────────────────────────────────────────
-function abrirModalEditar(id, descripcion) {
+async function abrirModalEditar(id, descripcion, padreId) {
     _idActual = id;
     document.getElementById('inpDescripcion').value = descripcion;
     document.getElementById('alertaModal').classList.add('d-none');
-    document.getElementById('modalTitulo').innerHTML =
-        `<i class="bi bi-pencil me-2 text-success"></i>Editar: ${descripcion}`;
+    document.getElementById('modalTitulo').textContent = 'Editar: ' + descripcion;
+    await cargarPadres(id, padreId);
     new bootstrap.Modal(document.getElementById('rubroModal')).show();
     setTimeout(() => document.getElementById('inpDescripcion').focus(), 300);
 }
@@ -154,6 +192,7 @@ document.getElementById('btnGuardar').addEventListener('click', async () => {
     const fd = new FormData();
     fd.append('Rubro.Id',          _idActual);
     fd.append('Rubro.Descripcion', desc);
+    fd.append('Rubro.PadreId',     document.getElementById('selPadre').value);
     fd.append('__RequestVerificationToken', TOKEN);
 
     const res  = await fetch('?handler=Guardar', { method: 'POST', body: fd });
@@ -174,8 +213,7 @@ document.getElementById('inpDescripcion').addEventListener('keydown', e => {
 });
 
 // ── Eliminar ──────────────────────────────────────────────────────
-function confirmarEliminar(id, nombre, cant) {
-    if (cant > 0) return; // el botón ya está disabled, doble seguridad
+function confirmarEliminar(id, nombre) {
     _idEliminar = id;
     document.getElementById('nomRubroBaja').textContent = nombre;
     new bootstrap.Modal(document.getElementById('modalConfirmarElim')).show();

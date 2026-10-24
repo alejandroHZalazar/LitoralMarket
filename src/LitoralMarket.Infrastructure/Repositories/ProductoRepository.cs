@@ -1,4 +1,5 @@
 using LitoralMarket.Application.DTOs;
+using LitoralMarket.Application.Helpers;
 using LitoralMarket.Application.Interfaces;
 using LitoralMarket.Domain.Entities;
 using LitoralMarket.Infrastructure.Data;
@@ -13,6 +14,9 @@ public class ProductoRepository : IProductoRepository
     private readonly IMemoryCache _cache;
     private const string RubrosCacheKey = "rubros_activos";
     private static readonly TimeSpan RubrosCacheDuration = TimeSpan.FromMinutes(5);
+    private const string MenuRubrosCacheKeyConStock  = "rubros_menu_con_stock";
+    private const string MenuRubrosCacheKeySoloStock = "rubros_menu_solo_stock";
+    private static readonly TimeSpan MenuRubrosCacheDuration = TimeSpan.FromMinutes(2);
 
     public ProductoRepository(AppDbContext db, IMemoryCache cache)
     {
@@ -22,7 +26,8 @@ public class ProductoRepository : IProductoRepository
 
     public async Task<List<ProductoDto>> ObtenerPorRubroAsync(int rubroId, bool incluirSinStock, int pagina, int porPagina)
     {
-        var query = EntidadesActivas().Where(p => p.FkRubro == rubroId);
+        var ids = await IdsConDescendientesAsync(rubroId);
+        var query = EntidadesActivas().Where(p => p.FkRubro != null && ids.Contains(p.FkRubro.Value));
         if (!incluirSinStock) query = ConStock(query);
 
         return await Proyectar(query)
@@ -70,27 +75,65 @@ public class ProductoRepository : IProductoRepository
             .Select(i => new ProductoImagenDto { Id = i.Id, EsPrincipal = i.EsPrincipal, Orden = i.Orden })
             .ToListAsync();
 
-    public async Task<List<Rubro>> ObtenerRubrosAsync()
+    public async Task<List<RubroNodoDto>> ObtenerArbolRubrosAsync()
     {
         // Los rubros cambian rara vez y se consultan en cada request (página + layout).
         // Se cachean unos minutos para evitar la consulta redundante. AsNoTracking:
         // solo se leen para mostrar, no se modifican por este contexto.
-        if (_cache.TryGetValue(RubrosCacheKey, out List<Rubro>? rubros) && rubros is not null)
-            return rubros;
+        if (_cache.TryGetValue(RubrosCacheKey, out List<RubroNodoDto>? arbol) && arbol is not null)
+            return arbol;
 
-        rubros = await _db.Rubros
+        var filas = await _db.Rubros
             .AsNoTracking()
             .Where(r => r.Descripcion != null)
-            .OrderBy(r => r.Descripcion)
+            .Select(r => new { r.Id, Descripcion = r.Descripcion!, r.FkRubroPadre })
             .ToListAsync();
 
-        _cache.Set(RubrosCacheKey, rubros, RubrosCacheDuration);
-        return rubros;
+        arbol = RubroArbolHelper.Construir(filas.Select(f => (f.Id, f.Descripcion, f.FkRubroPadre)));
+
+        _cache.Set(RubrosCacheKey, arbol, RubrosCacheDuration);
+        return arbol;
     }
+
+    public async Task<List<RubroNodoDto>> ObtenerMenuRubrosAsync(bool incluirSinStock)
+    {
+        var clave = incluirSinStock ? MenuRubrosCacheKeyConStock : MenuRubrosCacheKeySoloStock;
+        if (_cache.TryGetValue(clave, out List<RubroNodoDto>? menu) && menu is not null)
+            return menu;
+
+        var arbol = await ObtenerArbolRubrosAsync();
+
+        // UNA consulta: ids de rubro con al menos un producto válido. Usa exactamente los
+        // mismos filtros que el catálogo (EntidadesActivas = no dado de baja, ConStock).
+        var query = EntidadesActivas().Where(p => p.FkRubro != null);
+        if (!incluirSinStock) query = ConStock(query);
+        var idsConProductos = await query.Select(p => p.FkRubro!.Value).Distinct().ToListAsync();
+
+        menu = RubroArbolHelper.ConProductos(arbol, idsConProductos.ToHashSet());
+
+        // Vida corta: el stock cambia con las ventas y no debe dejar un subrubro "vacío" visible mucho rato.
+        _cache.Set(clave, menu, MenuRubrosCacheDuration);
+        return menu;
+    }
+
+    public void InvalidarCacheRubros()
+    {
+        _cache.Remove(RubrosCacheKey);
+        _cache.Remove(MenuRubrosCacheKeyConStock);
+        _cache.Remove(MenuRubrosCacheKeySoloStock);
+    }
+
+    /// <summary>
+    /// Ids del rubro y de todos sus subrubros: un producto asignado a un subrubro
+    /// (ej. el del proveedor) debe aparecer también al filtrar por su rubro padre.
+    /// </summary>
+    private async Task<List<int>> IdsConDescendientesAsync(int rubroId) =>
+        RubroArbolHelper.IdsConDescendientes(await ObtenerArbolRubrosAsync(), rubroId);
 
     public async Task<int> ContarPorRubroAsync(int rubroId, bool incluirSinStock)
     {
-        var query = EntidadesActivas().Where(p => p.FkRubro == rubroId);
+        var ids = await IdsConDescendientesAsync(rubroId);
+        var query = EntidadesActivas().Where(p => p.FkRubro != null && ids.Contains(p.FkRubro.Value));
         if (!incluirSinStock) query = ConStock(query);
         return await query.CountAsync();
     }

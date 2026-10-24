@@ -4,7 +4,27 @@
 @{
     var titulo       = await Parametros.GetTituloEcommerceAsync();
     var empresa      = await Parametros.GetNombreEmpresaAsync() ?? titulo;
-    var rubros       = await ProductoRepo.ObtenerRubrosAsync();
+    // Menú: solo rubros/subrubros con productos disponibles para el catálogo (mismos filtros
+    // de baja y stock). Un rubro principal sin productos propios se mantiene si algún
+    // subrubro los tiene. Cacheado, sin consultas extra por página.
+    var arbolRubros  = await ProductoRepo.ObtenerArbolRubrosAsync();
+    var menuRubros   = await ProductoRepo.ObtenerMenuRubrosAsync(await Parametros.MostrarSinStockAsync());
+    var rubros       = menuRubros.Where(r => r.PadreId == null).ToList();
+    // Descendientes visibles de cada rubro principal (la lista viene en orden de árbol).
+    var subrubrosDe  = new Dictionary<int, List<LitoralMarket.Application.DTOs.RubroNodoDto>>();
+    {
+        List<LitoralMarket.Application.DTOs.RubroNodoDto>? _actual = null;
+        foreach (var _n in menuRubros)
+        {
+            if (_n.PadreId == null) { _actual = new(); subrubrosDe[_n.Id] = _actual; }
+            else _actual?.Add(_n);
+        }
+    }
+    int? rubroActualId = Context.Request.RouteValues["rubroId"] is { } _rv0 && int.TryParse(_rv0.ToString(), out var _rid0) ? _rid0 : null;
+    // Rubro principal al que pertenece el rubro que se está viendo (para resaltarlo).
+    int? rubroRaizActual = null;
+    if (Context.Request.RouteValues["rubroId"] is { } _rv && int.TryParse(_rv.ToString(), out var _rid))
+        rubroRaizActual = LitoralMarket.Application.Helpers.RubroArbolHelper.RaizDe(arbolRubros, _rid);
     var estaLogueado = User.Identity?.IsAuthenticated ?? false;
     var modoAcceso   = await Parametros.GetModoAccesoAsync();
     var paginaActual = Context.Request.Path.Value ?? "/";
@@ -92,6 +112,21 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@(ViewData["Title"] != null ? $"{ViewData["Title"]} — {titulo}" : titulo)</title>
+    @* Ícono de la pestaña: logo de la empresa (misma URL versionada por hash que el navbar,
+       así cambia solo cuando el admin sube un logo nuevo). Sin logo → favicon.ico por defecto. *@
+    @if (tienelogo)
+    {
+        var _faviconMime = _logoBytes![0] == 0x89 ? "image/png"
+                         : _logoBytes[0] == 0xFF  ? "image/jpeg"
+                         : _logoBytes[0] == 0x47  ? "image/gif"
+                         : "image/png";
+        <link rel="icon" type="@_faviconMime" href="@logoSrc" />
+        <link rel="apple-touch-icon" href="@logoSrc" />
+    }
+    else
+    {
+        <link rel="icon" href="~/favicon.ico" />
+    }
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
     <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
@@ -328,14 +363,47 @@
                     </li>
                     @foreach (var rubro in rubros)
                     {
-                        var rubroActivo = paginaActual.StartsWith("/catalogo", StringComparison.OrdinalIgnoreCase)
-                                          && Context.Request.RouteValues["rubroId"]?.ToString() == rubro.Id.ToString();
-                        <li>
-                            <a class="rubro-link @(rubroActivo ? "active" : "")"
-                               asp-page="/Catalogo" asp-route-rubroId="@rubro.Id">
-                                @rubro.Descripcion
-                            </a>
-                        </li>
+                        var enCatalogo  = paginaActual.StartsWith("/catalogo", StringComparison.OrdinalIgnoreCase);
+                        var rubroActivo = enCatalogo && rubroRaizActual == rubro.Id;
+                        var hijos       = subrubrosDe[rubro.Id];
+                        if (hijos.Count == 0)
+                        {
+                            <li>
+                                <a class="rubro-link @(rubroActivo ? "active" : "")"
+                                   asp-page="/Catalogo" asp-route-rubroId="@rubro.Id">
+                                    @rubro.Descripcion
+                                </a>
+                            </li>
+                        }
+                        else
+                        {
+                            @* Rubro con subrubros: el nombre sigue siendo un enlace al catálogo del rubro
+                               (acceso existente) y la flecha despliega sus subrubros. *@
+                            <li class="rubro-item dropdown @(rubroActivo ? "active" : "")">
+                                <a class="rubro-link @(rubroActivo ? "active" : "")"
+                                   asp-page="/Catalogo" asp-route-rubroId="@rubro.Id">@rubro.Descripcion</a>
+                                <button class="rubro-caret" type="button" data-rubro-toggle
+                                        data-bs-toggle="dropdown" aria-expanded="false"
+                                        aria-label="Ver subrubros de @rubro.Descripcion">
+                                    <i class="bi bi-chevron-down"></i>
+                                </button>
+                                <ul class="dropdown-menu rubro-submenu">
+                                    <li>
+                                        <a class="dropdown-item fw-semibold @(enCatalogo && rubroActualId == rubro.Id ? "active" : "")"
+                                           asp-page="/Catalogo" asp-route-rubroId="@rubro.Id">Ver todo @rubro.Descripcion</a>
+                                    </li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    @foreach (var sub in hijos)
+                                    {
+                                        <li>
+                                            <a class="dropdown-item @(enCatalogo && rubroActualId == sub.Id ? "active" : "")"
+                                               style="padding-left:@(((sub.Nivel - 1) * 0.9 + 0.6).ToString(System.Globalization.CultureInfo.InvariantCulture))rem"
+                                               asp-page="/Catalogo" asp-route-rubroId="@sub.Id">@sub.Descripcion</a>
+                                        </li>
+                                    }
+                                </ul>
+                            </li>
+                        }
                     }
                 </ul>
             </div>
@@ -651,6 +719,15 @@
 }
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// Submenús de rubros: la franja de rubros tiene overflow-x:auto (recortaría un desplegable
+// común), así que se posicionan con estrategia "fixed" y flotan por encima de la franja.
+document.querySelectorAll('[data-rubro-toggle]').forEach(function (el) {
+    bootstrap.Dropdown.getOrCreateInstance(el, {
+        popperConfig: function (cfg) { return Object.assign({}, cfg, { strategy: 'fixed' }); }
+    });
+});
+</script>
 @if (estaLogueado)
 {
     <script>
