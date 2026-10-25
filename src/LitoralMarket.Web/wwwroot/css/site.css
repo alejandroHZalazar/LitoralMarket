@@ -55,19 +55,35 @@ body {
    ============================================= */
 .navbar-lm {
   background: linear-gradient(160deg, var(--verde-profundo) 0%, var(--verde-oscuro) 100%);
-  box-shadow: var(--sombra);
-  border-bottom: 2.5px solid var(--dorado);
+  border-bottom: 1px solid rgba(255,255,255,0.10);
   padding: 0;
-  /* Stacking context propio + capa por encima de Bootstrap .sticky-top (1020).
-     Sin esto, los <thead class="sticky-top"> de las grillas (ej. IngresoStock)
-     quedan por encima del menú admin y lo tapan al abrir el dropdown. */
-  position: relative;
+  /* Barra fija arriba: el menú lateral de rubros se pega debajo (top: --lm-nav-h).
+     z-index por encima de Bootstrap .sticky-top (1020): sin esto, los <thead class="sticky-top">
+     de las grillas (ej. IngresoStock) tapan el menú admin al abrir el dropdown. */
+  position: sticky;
+  top: 0;
   z-index: 1030;
 }
 
-/* ------- FILA 1: brand + buscador + acciones ------- */
+/* ------- Barra única: menú (móvil) + brand + buscador + acciones ------- */
 .navbar-main {
-  padding: 0.65rem 0;
+  padding: 0.5rem 0;
+}
+.navbar-main-inner {
+  padding: 0 1.25rem;
+}
+@media (min-width: 992px) {
+  .navbar-main { padding: 0; }
+  .navbar-main-inner { padding: 0 1.5rem 0 1.25rem; }
+  /* La columna de la marca mide lo mismo que el menú lateral: el buscador arranca alineado
+     con el contenido y barra + menú forman una sola pieza en "L". */
+  .navbar-main-grid {
+    min-height: calc(var(--lm-nav-h) - 1px);   /* + 1px del borde inferior = --lm-nav-h */
+    grid-template-columns: calc(var(--lm-aside-w) - 1.25rem) minmax(0, 1fr) auto;
+    column-gap: 1.75rem;
+  }
+  .navbar-left .navbar-brand { min-width: 0; }
+  .navbar-left .brand-text { overflow: hidden; text-overflow: ellipsis; }
 }
 .navbar-main-grid {
   display: grid;
@@ -75,7 +91,14 @@ body {
   gap: 1.5rem;
   align-items: center;
 }
-@media (max-width: 767.98px) {
+.navbar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+/* Móvil y tablet: buscador en una segunda fila a todo el ancho */
+@media (max-width: 991.98px) {
   .navbar-main-grid {
     grid-template-columns: auto 1fr;
     grid-template-areas:
@@ -84,7 +107,7 @@ body {
     row-gap: 0.6rem;
     column-gap: 0.75rem;
   }
-  .navbar-brand   { grid-area: brand; }
+  .navbar-left    { grid-area: brand; }
   .navbar-actions { grid-area: actions; justify-self: end; }
   .search-form    { grid-area: search; max-width: 100%; }
 }
@@ -119,7 +142,7 @@ body {
    align-items:center en .navbar-main-grid centra verticalmente el resto de la
    fila (buscador/acciones) automáticamente al crecer la altura del logo. */
 .brand-logo {
-  height: 50px;
+  height: 44px;
   width: auto;
   max-width: 150px;
   object-fit: contain;
@@ -301,163 +324,134 @@ body {
 }
 
 /* =============================================
-   FILA 2: MENÚ DE RUBROS (franja oscura)
+   MENÚ VERTICAL DE RUBROS
+   Barra única + menú lateral (estilo panel): el lateral comparte el fondo del navbar y
+   arranca pegado debajo de él, así ambos se leen como una sola pieza. Ítems de texto
+   chico en negrita, sin cajas; el activo solo cambia de color y lleva un filete dorado.
+   Escritorio: columna fija a la izquierda. Móvil/tablet: panel deslizante (offcanvas-lg)
+   que se abre con el ícono de menú de la barra.
    ============================================= */
-.navbar-rubros {
-  background: rgba(0, 0, 0, 0.20);
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
-}
-.navbar-rubros > .container {
-  flex-wrap: wrap;
-}
-.rubros-collapse {
-  flex-basis: 100%;
-  width: 100%;
-}
-.rubros-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  gap: 0.15rem;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,0.25) transparent;
-}
-.rubros-list::-webkit-scrollbar { height: 3px; }
-.rubros-list::-webkit-scrollbar-track { background: transparent; }
-.rubros-list::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.18);
-  border-radius: 2px;
-}
+:root { --lm-nav-h: 64px; --lm-aside-w: 280px; }
 
-.rubro-link {
-  display: inline-block;
-  color: rgba(255,255,255,0.85);
-  text-decoration: none;
-  font-size: 0.76rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  padding: 0.6rem 0.85rem;
-  border-radius: 0;
-  white-space: nowrap;
-  position: relative;
-  transition: background 0.18s, color 0.18s;
-}
-.rubro-link:hover {
-  color: var(--blanco);
-  background: rgba(255,255,255,0.07);
-}
-.rubro-link.active {
-  color: var(--dorado-claro);
-  background: rgba(255,255,255,0.06);
-}
-.rubro-link.active::after {
-  content: '';
-  position: absolute;
-  left: 0.6rem;
-  right: 0.6rem;
-  bottom: 0;
-  height: 2.5px;
-  background: var(--dorado);
-  border-radius: 2px;
-}
-
-/* Rubro con subrubros: enlace al rubro + flecha que despliega sus subrubros */
-.rubro-item {
-  display: flex;
-  align-items: stretch;
-  position: relative;
-}
-.rubro-item > .rubro-link { padding-right: 0.15rem; }
-.rubro-caret {
+.rubros-toggler {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
   background: transparent;
-  border: 0;
-  color: rgba(255,255,255,0.7);
-  padding: 0 0.55rem 0 0.15rem;
-  font-size: 0.65rem;
+  border: 1px solid rgba(255,255,255,0.22);
+  color: var(--blanco);
+  border-radius: 8px;
+  font-size: 1.35rem;
   line-height: 1;
   cursor: pointer;
-  transition: background 0.18s, color 0.18s;
+  transition: border-color 0.15s, background 0.15s;
 }
-.rubro-caret:hover,
-.rubro-caret[aria-expanded="true"] { color: var(--blanco); background: rgba(255,255,255,0.07); }
-.rubro-item.active > .rubro-caret { color: var(--dorado-claro); }
-.rubro-item.active > .rubro-link::after { right: 0; }   /* el subrayado del activo abarca enlace + flecha */
+.rubros-toggler:hover { border-color: var(--dorado); background: rgba(255,255,255,0.08); }
 
-/* Lista de subrubros (todos los niveles, con sangría). Se posiciona "fixed" desde JS para
-   no quedar recortada por el overflow de la franja. */
-.navbar-lm .rubro-submenu {
-  min-width: 230px;
-  max-height: 65vh;
-  overflow-y: auto;
-  margin-top: 0;
+.rubros-nav { padding: 0.75rem 0 1.25rem; }
+.rubros-nav-titulo {
+  color: rgba(255,255,255,0.45);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.5rem 1.25rem 0.6rem;
 }
-.rubro-submenu .dropdown-item { font-size: 0.85rem; white-space: normal; }
-.rubro-submenu .dropdown-item.active,
-.rubro-submenu .dropdown-item:active {
-  background: rgba(201,168,76,0.22);
-  color: inherit;
-}
-
-/* Toggler categorías (mobile) */
-.rubros-toggler {
-  background: transparent;
-  border: 1.5px solid rgba(255,255,255,0.3);
-  color: var(--blanco);
-  border-radius: 6px;
-  padding: 0.35rem 0.85rem;
-  margin: 0.4rem 0;
-  font-size: 0.82rem;
+.rv-list, .rv-sub { list-style: none; margin: 0; padding: 0; }
+.rv-row { display: flex; align-items: stretch; }
+.rv-link {
+  flex: 1;
+  min-width: 0;
+  display: block;
+  color: rgba(255,255,255,0.78);
+  text-decoration: none;
+  font-size: 0.8125rem;
   font-weight: 600;
+  padding: 0.5rem 0.5rem 0.5rem 1.25rem;
+  border-left: 3px solid transparent;
+  overflow-wrap: anywhere;
+  transition: color 0.15s, background 0.15s;
+}
+.rv-link:hover { color: var(--blanco); background: rgba(255,255,255,0.06); }
+.rv-item.active > .rv-row > .rv-link { color: var(--blanco); }
+.rv-link.active {
+  color: var(--dorado-claro) !important;
+  border-left-color: var(--dorado);
+  background: rgba(255,255,255,0.07);
+}
+.rv-caret {
+  flex: 0 0 auto;
+  width: 2.5rem;
+  background: transparent;
+  border: 0;
+  color: rgba(255,255,255,0.55);
+  font-size: 0.72rem;
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
+  transition: color 0.15s, background 0.15s;
 }
-.rubros-toggler:hover {
-  border-color: var(--dorado);
-  background: rgba(201,168,76,0.12);
+.rv-caret:hover { color: var(--blanco); background: rgba(255,255,255,0.06); }
+.rv-caret i { display: inline-block; transition: transform 0.2s; }
+.rv-caret:not(.collapsed) i { transform: rotate(180deg); }
+
+.rv-sub { padding: 0.15rem 0 0.4rem; background: rgba(0,0,0,0.12); }
+.rv-sublink {
+  display: block;
+  color: rgba(255,255,255,0.62);
+  text-decoration: none;
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding: 0.32rem 0.75rem 0.32rem 1.25rem;
+  border-left: 3px solid transparent;
+  overflow-wrap: anywhere;
+  transition: color 0.15s, background 0.15s;
+}
+.rv-sub li:first-child .rv-sublink { padding-top: 0.45rem; }
+.rv-sublink:hover { color: var(--blanco); background: rgba(255,255,255,0.05); }
+.rv-sublink.active {
+  color: var(--dorado-claro);
+  font-weight: 700;
+  border-left-color: var(--dorado);
 }
 
+/* El panel comparte el fondo del navbar en todos los tamaños */
+.rubros-sidebar,
+.layout-rubros-aside {
+  background: linear-gradient(180deg, var(--verde-oscuro) 0%, var(--verde-profundo) 100%);
+}
+
+@media (min-width: 992px) {
+  .layout-rubros-aside {
+    flex: 0 0 var(--lm-aside-w);
+    width: var(--lm-aside-w);
+    border-right: 1px solid rgba(255,255,255,0.08);
+  }
+  .rubros-sidebar {
+    position: sticky;
+    top: var(--lm-nav-h);
+    height: calc(100vh - var(--lm-nav-h));
+    overflow-y: auto;
+    background: transparent;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.25) transparent;
+  }
+}
+@media (min-width: 1400px) {
+  :root { --lm-aside-w: 300px; }
+}
 @media (max-width: 991.98px) {
-  .rubros-collapse { padding-bottom: 0.5rem; }
-  .rubros-list {
-    flex-direction: column;
-    gap: 0;
-    overflow-x: visible;
+  .layout-rubros-aside { background: none; }
+  .offcanvas-lg.rubros-sidebar { --bs-offcanvas-width: min(310px, 86vw); --bs-offcanvas-color: var(--blanco); }
+  .rubros-sidebar .offcanvas-header {
+    min-height: var(--lm-nav-h);
+    border-bottom: 1px solid rgba(255,255,255,0.1);
   }
-  .rubro-link {
-    display: block;
-    padding: 0.6rem 0.5rem;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-  }
-  .rubro-link.active::after { display: none; }
-  .rubro-link.active {
-    border-left: 3px solid var(--dorado);
-    padding-left: calc(0.5rem - 3px);
-  }
-
-  /* Móvil: el submenú se despliega en línea, dentro de la lista de categorías */
-  .rubro-item { flex-wrap: wrap; border-bottom: 1px solid rgba(255,255,255,0.05); }
-  .rubro-item > .rubro-link { flex: 1; border-bottom: 0; }
-  .rubro-caret { padding: 0 1rem; font-size: 0.8rem; }
-  .navbar-lm .rubro-submenu {
-    position: static !important;
-    transform: none !important;
-    inset: auto !important;
-    width: 100%;
-    max-height: none;
-    margin: 0 !important;
-    border: 0;
-    border-radius: 0;
-    box-shadow: none;
-    background: rgba(0,0,0,0.18);
-  }
-  .rubro-submenu .dropdown-item { color: rgba(255,255,255,0.85); padding-top: 0.5rem; padding-bottom: 0.5rem; }
-  .rubro-submenu .dropdown-item:hover { background: rgba(255,255,255,0.07); color: var(--blanco); }
-  .rubro-submenu .dropdown-item.active { color: var(--dorado-claro); }
-  .rubro-submenu .dropdown-divider { border-color: rgba(255,255,255,0.08); }
+  .rubros-sidebar .offcanvas-title { font-size: 0.95rem; font-weight: 700; }
+  .rubros-sidebar .btn-close { filter: invert(1) grayscale(1) brightness(2); }
+  .rv-link { padding-top: 0.7rem; padding-bottom: 0.7rem; }
+  .rv-sublink { padding-top: 0.55rem; padding-bottom: 0.55rem; }
+  .rv-caret { width: 3rem; }
 }
 
 /* =============================================
@@ -1791,4 +1785,13 @@ footer.footer-lm {
   height: 7px;
   border-radius: 50%;
   background: var(--verde);
+}
+
+/* Distribución barra + menú lateral + contenido: todo a ancho completo; el menú queda pegado
+   al borde izquierdo y el contenido ocupa el resto con su propio padding. */
+.layout-rubros { width: 100%; }
+.layout-rubros-main { min-width: 0; padding: 1.5rem 1rem; }
+@media (min-width: 992px) {
+  .layout-rubros-fila { display: flex; align-items: stretch; min-height: calc(100vh - var(--lm-nav-h)); }
+  .layout-rubros-main { flex: 1 1 auto; padding: 1.5rem 1.75rem; }
 }

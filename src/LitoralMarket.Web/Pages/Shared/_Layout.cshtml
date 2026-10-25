@@ -170,10 +170,19 @@
 <!-- ===== NAVBAR estilo Amazon / Mercado Libre ===== -->
 <nav class="navbar-lm">
 
-    <!-- =========== FILA 1: BRAND + BUSCADOR + ACCIONES =========== -->
+    <!-- =========== BARRA ÚNICA: MENÚ (móvil) + BRAND + BUSCADOR + ACCIONES ===========
+         Ancho completo (sin .container): se une visualmente con el menú lateral de rubros. -->
     <div class="navbar-main">
-        <div class="container">
+        <div class="navbar-main-inner">
             <div class="navbar-main-grid">
+
+                <div class="navbar-left">
+                <!-- Abre el menú de rubros (panel deslizante) en móvil y tablet -->
+                <button class="rubros-toggler d-lg-none" type="button"
+                        data-bs-toggle="offcanvas" data-bs-target="#rubrosMenu"
+                        aria-controls="rubrosMenu" aria-label="Abrir categorías">
+                    <i class="bi bi-list"></i>
+                </button>
 
                 <!-- Brand -->
                 <a class="navbar-brand" asp-page="/Index">
@@ -187,6 +196,7 @@
                     }
                     <span class="brand-text">@empresa</span>
                 </a>
+                </div>
 
                 <!-- Buscador -->
                 <form class="search-form" asp-page="/Buscar" method="get" role="search">
@@ -344,84 +354,83 @@
         </div>
     </div>
 
-    <!-- =========== FILA 2: MENÚ DE RUBROS =========== -->
-    <div class="navbar-rubros">
-        <div class="container d-flex align-items-center">
-
-            <button class="rubros-toggler d-lg-none" type="button"
-                    data-bs-toggle="collapse" data-bs-target="#rubrosCollapse"
-                    aria-controls="rubrosCollapse" aria-expanded="false">
-                <i class="bi bi-list me-1"></i>Categorías
-            </button>
-
-            <div class="collapse d-lg-block rubros-collapse" id="rubrosCollapse">
-                <ul class="rubros-list">
-                    <li>
-                        <a class="rubro-link @(paginaActual == "/" ? "active" : "")" asp-page="/Index">
-                            <i class="bi bi-house-fill me-1"></i>Inicio
-                        </a>
-                    </li>
-                    @foreach (var rubro in rubros)
-                    {
-                        var enCatalogo  = paginaActual.StartsWith("/catalogo", StringComparison.OrdinalIgnoreCase);
-                        var rubroActivo = enCatalogo && rubroRaizActual == rubro.Id;
-                        var hijos       = subrubrosDe[rubro.Id];
-                        if (hijos.Count == 0)
-                        {
-                            <li>
-                                <a class="rubro-link @(rubroActivo ? "active" : "")"
-                                   asp-page="/Catalogo" asp-route-rubroId="@rubro.Id">
-                                    @rubro.Descripcion
-                                </a>
-                            </li>
-                        }
-                        else
-                        {
-                            @* Rubro con subrubros: el nombre sigue siendo un enlace al catálogo del rubro
-                               (acceso existente) y la flecha despliega sus subrubros. *@
-                            <li class="rubro-item dropdown @(rubroActivo ? "active" : "")">
-                                <a class="rubro-link @(rubroActivo ? "active" : "")"
-                                   asp-page="/Catalogo" asp-route-rubroId="@rubro.Id">@rubro.Descripcion</a>
-                                <button class="rubro-caret" type="button" data-rubro-toggle
-                                        data-bs-toggle="dropdown" aria-expanded="false"
-                                        aria-label="Ver subrubros de @rubro.Descripcion">
-                                    <i class="bi bi-chevron-down"></i>
-                                </button>
-                                <ul class="dropdown-menu rubro-submenu">
-                                    <li>
-                                        <a class="dropdown-item fw-semibold @(enCatalogo && rubroActualId == rubro.Id ? "active" : "")"
-                                           asp-page="/Catalogo" asp-route-rubroId="@rubro.Id">Ver todo @rubro.Descripcion</a>
-                                    </li>
-                                    <li><hr class="dropdown-divider"></li>
-                                    @foreach (var sub in hijos)
-                                    {
-                                        <li>
-                                            <a class="dropdown-item @(enCatalogo && rubroActualId == sub.Id ? "active" : "")"
-                                               style="padding-left:@(((sub.Nivel - 1) * 0.9 + 0.6).ToString(System.Globalization.CultureInfo.InvariantCulture))rem"
-                                               asp-page="/Catalogo" asp-route-rubroId="@sub.Id">@sub.Descripcion</a>
-                                        </li>
-                                    }
-                                </ul>
-                            </li>
-                        }
-                    }
-                </ul>
-            </div>
-        </div>
-    </div>
 </nav>
 
-<!-- ===== CONTENIDO ===== -->
-<main class="container py-4">
-    @if (TempData["Mensaje"] is string msg)
-    {
-        <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
-            <i class="bi bi-check-circle-fill me-2"></i>@msg
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-    }
-    @RenderBody()
-</main>
+<!-- ===== MENÚ VERTICAL DE RUBROS + CONTENIDO =====
+     En escritorio el menú es una columna lateral fija; en móvil el mismo bloque se convierte
+     en un panel deslizante (offcanvas-lg) que se abre desde el ícono de menú de la barra. -->
+<div class="layout-rubros">
+    <div class="layout-rubros-fila">
+        <aside class="layout-rubros-aside">
+            <div class="offcanvas-lg offcanvas-start rubros-sidebar" tabindex="-1" id="rubrosMenu"
+                 aria-labelledby="rubrosMenuTitulo">
+                <div class="offcanvas-header d-lg-none">
+                    <h5 class="offcanvas-title" id="rubrosMenuTitulo"><i class="bi bi-grid me-2"></i>Categorías</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#rubrosMenu" aria-label="Cerrar"></button>
+                </div>
+                <div class="offcanvas-body p-0 d-lg-block">
+                    <nav class="rubros-nav" aria-label="Rubros">
+                        <div class="rubros-nav-titulo d-none d-lg-block"><i class="bi bi-grid me-2"></i>Categorías</div>
+                        <ul class="rv-list">
+                            <li class="rv-item">
+                                <div class="rv-row">
+                                    <a class="rv-link @(paginaActual == "/" ? "active" : "")" asp-page="/Index">
+                                        <i class="bi bi-house-fill me-2"></i>Inicio
+                                    </a>
+                                </div>
+                            </li>
+                            @{ var enCatalogo = paginaActual.StartsWith("/catalogo", StringComparison.OrdinalIgnoreCase); }
+                            @foreach (var rubro in rubros)
+                            {
+                                var rubroActivo = enCatalogo && rubroRaizActual == rubro.Id;
+                                var hijos       = subrubrosDe[rubro.Id];
+                                <li class="rv-item @(rubroActivo ? "active" : "")">
+                                    <div class="rv-row">
+                                        <a class="rv-link @(enCatalogo && rubroActualId == rubro.Id ? "active" : "")"
+                                           asp-page="/Catalogo" asp-route-rubroId="@rubro.Id">@rubro.Descripcion</a>
+                                        @if (hijos.Count > 0)
+                                        {
+                                            @* El nombre sigue siendo un enlace al catálogo del rubro; la flecha despliega sus subrubros. *@
+                                            <button class="rv-caret @(rubroActivo ? "" : "collapsed")" type="button"
+                                                    data-bs-toggle="collapse" data-bs-target="#rv-sub-@rubro.Id"
+                                                    aria-expanded="@(rubroActivo ? "true" : "false")" aria-controls="rv-sub-@rubro.Id"
+                                                    aria-label="Subrubros de @rubro.Descripcion">
+                                                <i class="bi bi-chevron-down"></i>
+                                            </button>
+                                        }
+                                    </div>
+                                    @if (hijos.Count > 0)
+                                    {
+                                        <ul class="rv-sub collapse @(rubroActivo ? "show" : "")" id="rv-sub-@rubro.Id">
+                                            @foreach (var sub in hijos)
+                                            {
+                                                <li>
+                                                    <a class="rv-sublink @(enCatalogo && rubroActualId == sub.Id ? "active" : "")"
+                                                       style="padding-left:@(((sub.Nivel - 1) * 0.9 + 0.6).ToString(System.Globalization.CultureInfo.InvariantCulture))rem"
+                                                       asp-page="/Catalogo" asp-route-rubroId="@sub.Id">@sub.Descripcion</a>
+                                                </li>
+                                            }
+                                        </ul>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        </aside>
+        <main class="layout-rubros-main">
+            @if (TempData["Mensaje"] is string msg)
+            {
+                <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
+                    <i class="bi bi-check-circle-fill me-2"></i>@msg
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            }
+            @RenderBody()
+        </main>
+    </div>
+</div>
 
 <!-- ===== FOOTER estilo compacto ===== -->
 <footer class="footer-lm">
@@ -719,15 +728,6 @@
 }
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script>
-// Submenús de rubros: la franja de rubros tiene overflow-x:auto (recortaría un desplegable
-// común), así que se posicionan con estrategia "fixed" y flotan por encima de la franja.
-document.querySelectorAll('[data-rubro-toggle]').forEach(function (el) {
-    bootstrap.Dropdown.getOrCreateInstance(el, {
-        popperConfig: function (cfg) { return Object.assign({}, cfg, { strategy: 'fixed' }); }
-    });
-});
-</script>
 @if (estaLogueado)
 {
     <script>
