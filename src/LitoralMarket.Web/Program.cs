@@ -177,6 +177,7 @@ builder.Services.AddControllers();
 // DI — Repositorios y Servicios
 builder.Services.AddScoped<IProductoRepository, ProductoRepository>();
 builder.Services.AddScoped<IProductoAdminService, ProductoAdminService>();
+builder.Services.AddScoped<IAjusteStockService, AjusteStockService>();
 builder.Services.AddScoped<IPedidoAdminService, PedidoAdminService>();
 builder.Services.AddScoped<IProveedorAdminService, ProveedorAdminService>();
 builder.Services.AddScoped<IRubroAdminService, RubroAdminService>();

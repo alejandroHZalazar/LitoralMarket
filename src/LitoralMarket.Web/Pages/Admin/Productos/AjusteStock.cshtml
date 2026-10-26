@@ -1,0 +1,370 @@
+@page
+@model LitoralMarket.Web.Pages.Admin.Productos.AjusteStockModel
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery AntiforgeryService
+@{
+    ViewData["Title"] = "Ajuste de Stock";
+    var csrfToken = AntiforgeryService.GetAndStoreTokens(HttpContext).RequestToken!;
+    var paso = Model.Decimales == 0 ? "1" : "0." + new string('0', Model.Decimales - 1) + "1";
+}
+
+<input type="hidden" id="csrfToken" value="@csrfToken" />
+<input type="hidden" id="decimales" value="@Model.Decimales" />
+
+<style>
+    #tablaAjuste tbody tr.fila-cambiada { background: rgba(201,168,76,.14); }
+    #tablaAjuste tbody tr.fila-baja td { opacity: .55; }
+    #tablaAjuste .inp-ajuste { width: 110px; text-align: right; }
+    .dif-pos { color: var(--verde-oscuro, #157847); font-weight: 600; }
+    .dif-neg { color: #dc3545; font-weight: 600; }
+</style>
+
+<div class="d-flex align-items-center gap-2 mb-3">
+    <h2 class="mb-0 fw-bold">
+        <i class="bi bi-sliders me-2 text-success"></i>Ajuste de Stock
+    </h2>
+    <a asp-page="/Admin/Productos/Index" class="btn btn-sm btn-outline-secondary ms-auto">
+        <i class="bi bi-arrow-left me-1"></i>Productos
+    </a>
+</div>
+
+<div id="alertaGlobal" class="d-none mb-3"></div>
+
+<div class="row g-3 mb-3">
+    <!-- Por proveedor / rubro -->
+    <div class="col-12 col-lg-7">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <div class="small fw-semibold text-uppercase text-muted mb-2">Por proveedor / rubro</div>
+                <div class="row g-2 align-items-center mb-2">
+                    <div class="col-12 col-md-auto">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="cbProveedor" />
+                            <label class="form-check-label" for="cbProveedor">Proveedor</label>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <select id="cboProveedor" class="form-select form-select-sm" disabled>
+                            @foreach (var p in Model.Proveedores)
+                            {
+                                <option value="@p.Id">@p.Nombre</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="row g-2 align-items-center mb-2">
+                    <div class="col-12 col-md-auto">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="cbRubro" />
+                            <label class="form-check-label" for="cbRubro">Rubro</label>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <select id="cboRubro" class="form-select form-select-sm" disabled>
+                            @foreach (var r in Model.Rubros)
+                            {
+                                <option value="@r.Value">@r.Text</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <button type="button" id="btnBuscarCat" class="btn btn-sm btn-success">
+                    <i class="bi bi-search me-1"></i>Buscar
+                </button>
+                <span class="text-muted small ms-2">El rubro incluye sus subrubros.</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Por texto -->
+    <div class="col-12 col-lg-5">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <div class="small fw-semibold text-uppercase text-muted mb-2">Por texto</div>
+                <div class="input-group input-group-sm mb-2">
+                    <select id="tipoTexto" class="form-select" style="max-width:150px">
+                        <option value="0">Cód. Proveedor</option>
+                        <option value="1">Cód. Barras</option>
+                        <option value="2" selected>Descripción</option>
+                    </select>
+                    <input id="txtBuscar" type="text" class="form-control" placeholder="Escribí o escaneá…" autocomplete="off" />
+                    <button type="button" id="btnBuscarTxt" class="btn btn-success"><i class="bi bi-search"></i></button>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="cbOcultarBajas" checked />
+                    <label class="form-check-label small" for="cbOcultarBajas">No listar bajas</label>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white d-flex flex-wrap align-items-center gap-2">
+        <span id="resumen" class="small text-muted">Buscá productos para ajustar su stock.</span>
+        <div class="ms-auto d-flex gap-2">
+            <button type="button" id="btnDescartar" class="btn btn-sm btn-outline-secondary" disabled>
+                <i class="bi bi-x-circle me-1"></i>Descartar cambios
+            </button>
+            <button type="button" id="btnGuardar" class="btn btn-sm btn-success" disabled>
+                <i class="bi bi-check2-circle me-1"></i>Guardar ajustes
+            </button>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div style="max-height:65vh;overflow-y:auto;">
+            <table id="tablaAjuste" class="table table-hover table-sm mb-0 align-middle">
+                <thead class="table-dark sticky-top">
+                    <tr>
+                        <th>Cód. Prov.</th>
+                        <th>Cód. Barras</th>
+                        <th>Descripción</th>
+                        <th class="text-end">Stock</th>
+                        <th class="text-end">Ajuste</th>
+                        <th class="text-end">Dif.</th>
+                        <th class="text-center">Baja</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody">
+                    <tr><td colspan="7" class="text-center text-muted py-4">
+                        <i class="bi bi-search me-1"></i>Sin resultados
+                    </td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var TOKEN = document.getElementById('csrfToken').value;
+    var DEC   = parseInt(document.getElementById('decimales').value, 10) || 0;
+    var STEP  = '@paso';
+
+    var items = [];            // { id, codProveedor, codBarras, descripcion, stock, baja, ajuste, ajusteAnt }
+    var tbody = document.getElementById('tbody');
+    var btnGuardar   = document.getElementById('btnGuardar');
+    var btnDescartar = document.getElementById('btnDescartar');
+    var resumen      = document.getElementById('resumen');
+
+    function el(id) { return document.getElementById(id); }
+    function fmt(n)  { return Number(n).toLocaleString('es-AR', { minimumFractionDigits: DEC, maximumFractionDigits: DEC }); }
+    function redondear(n) { var f = Math.pow(10, DEC); return Math.round(n * f) / f; }
+    function dif(it) { return redondear(it.ajuste - it.stock); }
+    function cambiados() { return items.filter(function (i) { return dif(i) !== 0; }); }
+
+    function alerta(msg, tipo) {
+        var a = el('alertaGlobal');
+        a.className = 'alert alert-' + (tipo || 'danger') + ' mb-3';
+        a.textContent = msg;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    function limpiarAlerta() { el('alertaGlobal').className = 'd-none mb-3'; }
+
+    function headers() {
+        return { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': TOKEN };
+    }
+
+    // ── filtros ──────────────────────────────────────────────
+    el('cbProveedor').addEventListener('change', function () { el('cboProveedor').disabled = !this.checked; });
+    el('cbRubro').addEventListener('change', function () { el('cboRubro').disabled = !this.checked; });
+
+    function confirmarDescarte() {
+        return cambiados().length === 0 || confirm('Hay ajustes sin guardar que se perderán. ¿Continuar?');
+    }
+
+    async function buscar(params) {
+        if (!confirmarDescarte()) return;
+        limpiarAlerta();
+        params.ocultarBajas = el('cbOcultarBajas').checked;
+        var res = await fetch('?handler=Buscar&' + new URLSearchParams(params).toString());
+        var data;
+        try { data = await res.json(); } catch (e) { alerta('No se pudo leer la respuesta del servidor.'); return; }
+        if (!data.ok) { alerta(data.error || 'No se pudo buscar.', 'warning'); return; }
+
+        items = data.items.map(function (i) {
+            return { id: i.id, codProveedor: i.codProveedor, codBarras: i.codBarras, descripcion: i.descripcion,
+                     stock: i.stock, baja: i.baja, ajuste: i.stock };
+        });
+        render();
+        if (data.truncado) alerta('Se muestran solo los primeros ' + data.limite + ' productos. Afiná el filtro para ver el resto.', 'warning');
+    }
+
+    el('btnBuscarCat').addEventListener('click', function () {
+        var p = { modo: 'cat' };
+        if (el('cbProveedor').checked) p.proveedorId = el('cboProveedor').value;
+        if (el('cbRubro').checked)     p.rubroId     = el('cboRubro').value;
+        buscar(p);
+    });
+    function buscarTexto() { buscar({ modo: 'txt', tipo: el('tipoTexto').value, texto: el('txtBuscar').value }); }
+    el('btnBuscarTxt').addEventListener('click', buscarTexto);
+    el('txtBuscar').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); buscarTexto(); } });
+
+    // ── grilla ───────────────────────────────────────────────
+    function td(txt, cls) {
+        var c = document.createElement('td');
+        if (cls) c.className = cls;
+        if (txt === null || txt === undefined || txt === '') { c.innerHTML = '<span class="text-muted">—</span>'; }
+        else { c.textContent = txt; }
+        return c;
+    }
+
+    function pintarFila(tr, it) {
+        var d = dif(it);
+        tr.classList.toggle('fila-cambiada', d !== 0);
+        tr.classList.toggle('fila-baja', it.baja);
+        var celda = tr.querySelector('.celda-dif');
+        celda.textContent = d === 0 ? fmt(0) : (d > 0 ? '+' : '') + fmt(d);
+        celda.className = 'text-end celda-dif ' + (d > 0 ? 'dif-pos' : d < 0 ? 'dif-neg' : 'text-muted');
+    }
+
+    function actualizarResumen() {
+        var c = cambiados();
+        var altas = c.filter(function (i) { return dif(i) > 0; }).length;
+        btnGuardar.disabled = btnDescartar.disabled = c.length === 0;
+        if (items.length === 0) { resumen.textContent = 'Buscá productos para ajustar su stock.'; return; }
+        resumen.textContent = items.length + ' productos · ' + c.length + ' modificados (' + altas + ' altas / ' + (c.length - altas) + ' bajas)';
+    }
+
+    function render() {
+        tbody.innerHTML = '';
+        if (items.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4"><i class="bi bi-inbox me-1"></i>No se encontraron productos</td></tr>';
+            actualizarResumen();
+            return;
+        }
+        var frag = document.createDocumentFragment();
+        items.forEach(function (it, idx) {
+            var tr = document.createElement('tr');
+            tr.appendChild(td(it.codProveedor, 'small font-monospace'));
+            tr.appendChild(td(it.codBarras, 'small font-monospace'));
+            tr.appendChild(td(it.descripcion, 'small'));
+            tr.appendChild(td(fmt(it.stock), 'text-end stock-celda'));
+
+            var tdAj = document.createElement('td');
+            tdAj.className = 'text-end';
+            var inp = document.createElement('input');
+            inp.type = 'number'; inp.min = '0'; inp.step = STEP; inp.value = it.ajuste;
+            inp.className = 'form-control form-control-sm d-inline-block inp-ajuste';
+            inp.setAttribute('inputmode', DEC === 0 ? 'numeric' : 'decimal');
+            inp.dataset.idx = idx;
+            tdAj.appendChild(inp);
+            tr.appendChild(tdAj);
+
+            var tdDif = document.createElement('td');
+            tdDif.className = 'text-end celda-dif';
+            tr.appendChild(tdDif);
+
+            var tdBaja = document.createElement('td');
+            tdBaja.className = 'text-center';
+            var sw = document.createElement('div');
+            sw.className = 'form-check form-switch d-inline-block m-0';
+            var chk = document.createElement('input');
+            chk.type = 'checkbox'; chk.className = 'form-check-input'; chk.checked = it.baja;
+            chk.dataset.idx = idx; chk.title = 'Dar de baja / reactivar';
+            sw.appendChild(chk); tdBaja.appendChild(sw); tr.appendChild(tdBaja);
+
+            pintarFila(tr, it);
+            frag.appendChild(tr);
+        });
+        tbody.appendChild(frag);
+        actualizarResumen();
+    }
+
+    // Edición del ajuste: vacío o inválido vuelve al valor anterior (como el original).
+    tbody.addEventListener('input', function (e) {
+        var inp = e.target;
+        if (!inp.classList.contains('inp-ajuste')) return;
+        var it = items[inp.dataset.idx];
+        var v = parseFloat(inp.value);
+        if (isNaN(v) || v < 0) return;           // se corrige al salir del campo
+        it.ajuste = redondear(v);
+        pintarFila(inp.closest('tr'), it);
+        actualizarResumen();
+    });
+    tbody.addEventListener('focusout', function (e) {
+        var inp = e.target;
+        if (!inp.classList.contains('inp-ajuste')) return;
+        var it = items[inp.dataset.idx];
+        var v = parseFloat(inp.value);
+        if (isNaN(v) || v < 0 || redondear(v) !== v) {
+            inp.value = it.ajuste;
+            if (!isNaN(v) && v >= 0) alerta('El stock admite ' + (DEC === 0 ? 'solo números enteros.' : 'hasta ' + DEC + ' decimales.'), 'warning');
+        }
+    });
+    tbody.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' || !e.target.classList.contains('inp-ajuste')) return;
+        e.preventDefault();
+        var sig = tbody.querySelector('.inp-ajuste[data-idx="' + (parseInt(e.target.dataset.idx, 10) + 1) + '"]');
+        if (sig) { sig.focus(); sig.select(); }
+    });
+    tbody.addEventListener('focusin', function (e) {
+        if (e.target.classList.contains('inp-ajuste')) e.target.select();
+    });
+
+    // Baja: se guarda al instante (igual que el formulario original).
+    tbody.addEventListener('change', async function (e) {
+        var chk = e.target;
+        if (chk.type !== 'checkbox' || chk.dataset.idx === undefined) return;
+        var it = items[chk.dataset.idx];
+        var nueva = chk.checked;
+        chk.disabled = true;
+        try {
+            var res = await fetch('?handler=Baja', { method: 'POST', headers: headers(), body: JSON.stringify({ id: it.id, baja: nueva }) });
+            var data = await res.json();
+            if (!data.ok) throw new Error(data.error || 'No se pudo actualizar.');
+            it.baja = nueva;
+            pintarFila(chk.closest('tr'), it);
+            limpiarAlerta();
+        } catch (err) {
+            chk.checked = !nueva;
+            alerta('No se pudo cambiar el estado de baja: ' + err.message);
+        } finally { chk.disabled = false; }
+    });
+
+    btnDescartar.addEventListener('click', function () {
+        items.forEach(function (i) { i.ajuste = i.stock; });
+        render();
+    });
+
+    // ── guardar ──────────────────────────────────────────────
+    btnGuardar.addEventListener('click', async function () {
+        var c = cambiados();
+        if (c.length === 0) return;
+        var altas = c.filter(function (i) { return dif(i) > 0; }).length;
+        if (!confirm('Se ajustará el stock de ' + c.length + ' productos (' + altas + ' altas, ' + (c.length - altas) + ' bajas). ¿Confirmar?')) return;
+
+        btnGuardar.disabled = true;
+        limpiarAlerta();
+        try {
+            var res = await fetch('?handler=Ajustar', {
+                method: 'POST', headers: headers(),
+                body: JSON.stringify({ lineas: c.map(function (i) { return { id: i.id, stockLeido: i.stock, stockNuevo: i.ajuste }; }) })
+            });
+            var data;
+            try { data = await res.json(); } catch (e) { throw new Error('Respuesta inesperada del servidor (' + res.status + ').'); }
+
+            if (data.ok) {
+                items.forEach(function (i) { if (dif(i) !== 0) i.stock = i.ajuste; });
+                render();
+                alerta(data.ajustados + ' productos ajustaron su stock.', 'success');
+                return;
+            }
+            if (data.conflictos && data.conflictos.length) {
+                // El stock cambió por otra vía: se actualiza esa fila y se conserva lo que escribió el usuario.
+                data.conflictos.forEach(function (k) {
+                    var it = items.find(function (i) { return i.id === k.id; });
+                    if (it) it.stock = k.stockActual;
+                });
+                render();
+            }
+            alerta(data.error || 'No se pudo guardar el ajuste.');
+        } catch (err) {
+            alerta(err.message || 'No se pudo guardar el ajuste.');
+        } finally { actualizarResumen(); }
+    });
+
+    window.addEventListener('beforeunload', function (e) {
+        if (cambiados().length > 0) { e.preventDefault(); e.returnValue = ''; }
+    });
+})();
+</script>
