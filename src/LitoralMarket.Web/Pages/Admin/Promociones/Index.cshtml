@@ -1,0 +1,282 @@
+@page
+@model LitoralMarket.Web.Pages.Admin.Promociones.IndexModel
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery AntiforgeryService
+@{
+    ViewData["Title"] = "Promociones del carrusel";
+    var csrfToken = AntiforgeryService.GetAndStoreTokens(HttpContext).RequestToken!;
+}
+
+<input type="hidden" id="csrfToken" value="@csrfToken" />
+<input type="hidden" id="maxMb" value="@Model.MaxMb" />
+
+<style>
+    /* Misma presentación que la imagen de una tarjeta de producto: contain + relleno + fondo suave. */
+    .promo-marco   { position: relative; overflow: hidden; border-radius: 10px; background: var(--bg-subtle); border: 1px solid var(--border-ui); height: 150px; }
+    .promo-marco img { width: 100%; height: 100%; object-fit: contain; padding: 8px; display: block; }
+    .promo-fila    { border: 1px solid var(--border-ui); border-radius: 10px; background: var(--bg-surface); }
+    .promo-pos     { min-width: 2rem; height: 2rem; border-radius: 50%; background: var(--dorado-suave); color: var(--acento-texto); font-weight: 700; }
+</style>
+
+<div class="d-flex align-items-center gap-2 mb-3">
+    <h2 class="mb-0 fw-bold"><i class="bi bi-images me-2 text-success"></i>Promociones del carrusel</h2>
+</div>
+
+<div id="alertaGlobal" class="d-none mb-3"></div>
+
+@if (Model.CarruselActivo)
+{
+    <div class="alert alert-success py-2 small">
+        <i class="bi bi-check-circle-fill me-1"></i>El carrusel está <strong>activo</strong> en la página de inicio
+        (parámetro <code>ecommerce / CarruselPromociones</code> = 1).
+    </div>
+}
+else
+{
+    <div class="alert alert-warning py-2 small">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i>El carrusel está <strong>desactivado</strong>: la portada lo muestra solo cuando el
+        parámetro <code>ecommerce / CarruselPromociones</code> vale exactamente <code>1</code> (no existe, NULL, 0 u otro valor = oculto).
+        Podés cargar las promociones igual y activarlo cuando estén listas.
+    </div>
+}
+
+<!-- ── AGREGAR ─────────────────────────────────────────────────────── -->
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body">
+        <div class="small fw-semibold text-uppercase text-muted mb-2">Agregar promoción</div>
+        <div class="row g-3">
+            <div class="col-12 col-lg-5">
+                <label class="form-label small mb-1">Imagen <span class="text-muted">(JPG, PNG, WEBP o GIF · hasta @Model.MaxMb MB · se ajusta sin recortar; con ~900 px de ancho alcanza)</span></label>
+                <input id="nuevaImagen" type="file" class="form-control form-control-sm" accept="image/jpeg,image/png,image/webp,image/gif" />
+                <label class="form-label small mb-1 mt-2">Texto alternativo <span class="text-muted">(opcional, accesibilidad)</span></label>
+                <input id="nuevoTitulo" type="text" maxlength="150" class="form-control form-control-sm" placeholder="Ej.: Ofertas de la semana" />
+                <button id="btnAgregar" type="button" class="btn btn-success btn-sm mt-3" disabled>
+                    <i class="bi bi-plus-lg me-1"></i>Agregar al final del carrusel
+                </button>
+            </div>
+            <div class="col-12 col-lg-7">
+                <div class="small text-muted mb-1">Vista previa de la tarjeta (la imagen entra completa, sin deformarse)</div>
+                <div style="max-width:340px">
+                    <div class="promo-marco" style="height:200px"><img id="prevTarjeta" alt="" hidden /></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── LISTADO Y ORDEN ─────────────────────────────────────────────── -->
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body">
+        <div class="small fw-semibold text-uppercase text-muted mb-2">
+            Promociones cargadas
+            <span class="text-muted fw-normal text-lowercase">· se muestran en este orden, de a 3 en escritorio; usá las flechas para cambiarlo</span>
+        </div>
+
+        <div id="listaPromos" class="d-flex flex-column gap-2">
+            @if (Model.Promociones.Count == 0)
+            {
+                <div id="sinPromos" class="text-center text-muted py-4">
+                    <i class="bi bi-images me-1"></i>Todavía no hay promociones. Agregá la primera arriba.
+                </div>
+            }
+            @foreach (var p in Model.Promociones)
+            {
+                <div class="promo-fila p-2" data-id="@p.Id">
+                    <div class="row g-2 align-items-center">
+                        <div class="col-auto d-flex flex-column align-items-center gap-1">
+                            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" data-accion="subir" title="Subir"><i class="bi bi-chevron-up"></i></button>
+                            <span class="promo-pos d-inline-flex align-items-center justify-content-center small" data-pos>@p.Orden</span>
+                            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" data-accion="bajar" title="Bajar"><i class="bi bi-chevron-down"></i></button>
+                        </div>
+                        <div class="col-12 col-sm" style="min-width:200px;max-width:340px">
+                            <div class="promo-marco"><img src="/images/promociones/@p.Id?v=@p.Version" alt="@p.Titulo" loading="lazy" /></div>
+                        </div>
+                        <div class="col-12 col-md">
+                            <input type="text" maxlength="150" class="form-control form-control-sm mb-2" data-titulo
+                                   value="@p.Titulo" placeholder="Texto alternativo (opcional)" />
+                            <div class="d-flex flex-wrap gap-2">
+                                <label class="btn btn-sm btn-outline-primary mb-0">
+                                    <i class="bi bi-arrow-repeat me-1"></i>Reemplazar imagen
+                                    <input type="file" hidden data-reemplazar accept="image/jpeg,image/png,image/webp,image/gif" />
+                                </label>
+                                <button type="button" class="btn btn-sm btn-outline-danger" data-accion="eliminar">
+                                    <i class="bi bi-trash me-1"></i>Eliminar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- ── VISTA PREVIA DEL CARRUSEL ───────────────────────────────────── -->
+@if (Model.Promociones.Count > 0)
+{
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body">
+            <div class="small fw-semibold text-uppercase text-muted mb-2">Vista previa del carrusel</div>
+            @{ ViewData["IntervaloSeg"] = Model.IntervaloSegundos; }
+            <partial name="_CarruselPromociones" model="Model.Promociones" view-data="ViewData" />
+            <div class="small text-muted">
+                Así se ve en la portada: 3 promociones en escritorio, 2 en tablet y 1 en móvil. Avanza sola cada
+                @Model.IntervaloSegundos s (parámetro <code>ecommerce / IntervaloCarruselPromociones</code>) y se pausa cuando alguien la mueve.
+            </div>
+        </div>
+    </div>
+}
+
+<script>
+(function () {
+    var TOKEN = document.getElementById('csrfToken').value;
+    var MAX_MB = parseInt(document.getElementById('maxMb').value, 10) || 5;
+    var ANCHO_MAX = 960;       // la tarjeta se ve a ~330 px: 960 cubre pantallas de alta densidad sin cargar de más
+    var PESO_OK = 300 * 1024;  // por debajo de este peso (y de ANCHO_MAX) se sube tal cual
+    var lista = document.getElementById('listaPromos');
+
+    function alerta(msg, tipo) {
+        var a = document.getElementById('alertaGlobal');
+        a.className = 'alert alert-' + (tipo || 'danger') + ' mb-3';
+        a.textContent = msg;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    async function post(handler, body, esJson) {
+        var headers = { 'X-XSRF-TOKEN': TOKEN };
+        if (esJson) headers['Content-Type'] = 'application/json';
+        var res = await fetch('?handler=' + handler, { method: 'POST', headers: headers, body: esJson ? JSON.stringify(body) : body });
+        try { return await res.json(); }
+        catch (e) { return { ok: false, error: 'Respuesta inesperada del servidor (' + res.status + ').' }; }
+    }
+
+    // Lee el archivo como data URL (la CSP del sitio no permite blob: en img-src).
+    function leerDataUrl(file) {
+        return new Promise(function (resolve) {
+            var fr = new FileReader();
+            fr.onload = function () { resolve(fr.result); };
+            fr.onerror = function () { resolve(null); };
+            fr.readAsDataURL(file);
+        });
+    }
+
+    // Reduce a ANCHO_MAX de ancho antes de subir, para no cargar imágenes más grandes de lo necesario.
+    // GIF queda como está (para no perder la animación).
+    function prepararImagen(file) {
+        return new Promise(function (resolve) {
+            if (file.type === 'image/gif') { resolve(file); return; }
+            var img = new Image();
+            img.onload = function () {
+                if (img.naturalWidth <= ANCHO_MAX && file.size <= PESO_OK) { resolve(file); return; }
+                var escala = Math.min(1, ANCHO_MAX / img.naturalWidth);
+                var c = document.createElement('canvas');
+                c.width = Math.round(img.naturalWidth * escala);
+                c.height = Math.round(img.naturalHeight * escala);
+                var ctx = c.getContext('2d');
+                ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+                ctx.drawImage(img, 0, 0, c.width, c.height);
+                c.toBlob(function (b) { resolve(b || file); }, 'image/jpeg', 0.85);
+            };
+            img.onerror = function () { resolve(file); };   // el servidor valida el tipo real
+            leerDataUrl(file).then(function (u) { if (u) img.src = u; else resolve(file); });
+        });
+    }
+
+    function validarArchivo(file) {
+        if (!file) return 'Elegí una imagen.';
+        if (!/^image\/(jpeg|png|webp|gif)$/.test(file.type)) return 'El archivo debe ser JPG, PNG, WEBP o GIF.';
+        return null;
+    }
+
+    // ── agregar ──────────────────────────────────────────────
+    var inpNueva = document.getElementById('nuevaImagen');
+    var btnAgregar = document.getElementById('btnAgregar');
+    var prev = document.getElementById('prevTarjeta');
+
+    inpNueva.addEventListener('change', async function () {
+        var f = inpNueva.files[0];
+        var err = f ? validarArchivo(f) : null;
+        if (!f || err) {
+            prev.hidden = true;
+            btnAgregar.disabled = true;
+            if (err) alerta(err, 'warning');
+            return;
+        }
+        var u = await leerDataUrl(f);
+        if (u) { prev.src = u; prev.hidden = false; }
+        btnAgregar.disabled = false;
+    });
+
+    btnAgregar.addEventListener('click', async function () {
+        var f = inpNueva.files[0];
+        var err = validarArchivo(f);
+        if (err) { alerta(err, 'warning'); return; }
+        btnAgregar.disabled = true;
+        var blob = await prepararImagen(f);
+        var fd = new FormData();
+        fd.append('imagen', blob, f.name);
+        fd.append('titulo', document.getElementById('nuevoTitulo').value);
+        var r = await post('Crear', fd, false);
+        if (r.ok) { location.reload(); return; }
+        alerta(r.error || 'No se pudo agregar la promoción.');
+        btnAgregar.disabled = false;
+    });
+
+    // ── título (se guarda al salir del campo) ───────────────
+    lista.addEventListener('change', async function (e) {
+        var t = e.target;
+        var fila = t.closest('.promo-fila');
+        if (!fila) return;
+
+        if (t.matches('[data-titulo]')) {
+            var r = await post('Titulo', { id: +fila.dataset.id, titulo: t.value }, true);
+            if (!r.ok) alerta(r.error || 'No se pudo guardar el texto.');
+            return;
+        }
+
+        if (t.matches('[data-reemplazar]')) {
+            var f = t.files[0];
+            var err = validarArchivo(f);
+            if (err) { alerta(err, 'warning'); t.value = ''; return; }
+            var blob = await prepararImagen(f);
+            var fd = new FormData();
+            fd.append('id', fila.dataset.id);
+            fd.append('imagen', blob, f.name);
+            var res = await post('Reemplazar', fd, false);
+            if (res.ok) { location.reload(); return; }
+            alerta(res.error || 'No se pudo reemplazar la imagen.');
+            t.value = '';
+        }
+    });
+
+    // ── subir / bajar / eliminar ────────────────────────────
+    function renumerar() {
+        lista.querySelectorAll('.promo-fila').forEach(function (f, i) { f.querySelector('[data-pos]').textContent = i + 1; });
+    }
+
+    lista.addEventListener('click', async function (e) {
+        var btn = e.target.closest('[data-accion]');
+        if (!btn) return;
+        var fila = btn.closest('.promo-fila');
+        var accion = btn.dataset.accion;
+
+        if (accion === 'eliminar') {
+            if (!confirm('¿Eliminar esta promoción? No se puede deshacer.')) return;
+            var r = await post('Eliminar', { id: +fila.dataset.id }, true);
+            if (r.ok) { location.reload(); return; }
+            alerta(r.error || 'No se pudo eliminar.');
+            return;
+        }
+
+        var otra = accion === 'subir' ? fila.previousElementSibling : fila.nextElementSibling;
+        if (!otra || !otra.classList.contains('promo-fila')) return;
+        if (accion === 'subir') lista.insertBefore(fila, otra); else lista.insertBefore(otra, fila);
+        renumerar();
+
+        var ids = Array.prototype.map.call(lista.querySelectorAll('.promo-fila'), function (f) { return +f.dataset.id; });
+        var res = await post('Reordenar', { ids: ids }, true);
+        if (res.ok) { alerta('Orden guardado.', 'success'); return; }
+        alerta(res.error || 'No se pudo guardar el orden.');
+        setTimeout(function () { location.reload(); }, 1500);
+    });
+})();
+</script>

@@ -18,6 +18,8 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<Rubro> Rubros { get; set; }
     public DbSet<Producto> Productos { get; set; }
     public DbSet<ImagenProducto> ImagenesProductos { get; set; }
+    public DbSet<PromocionCarrusel> PromocionesCarrusel { get; set; }
+    public DbSet<ProductoInicio> ProductosInicio { get; set; }
     public DbSet<StockProducto> StockProductos { get; set; }
     public DbSet<PrecioProducto> PreciosProductos { get; set; }
     public DbSet<Parametro> Parametros { get; set; }
@@ -99,6 +101,27 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             e.HasOne(x => x.Producto).WithMany(p => p.Imagenes).HasForeignKey(x => x.FkProducto);
             e.HasIndex(x => new { x.FkProducto, x.Baja, x.EsPrincipal, x.Orden })
              .HasDatabaseName("IX_imagenesProductos_lookup");
+        });
+
+        modelBuilder.Entity<ProductoInicio>(e =>
+        {
+            e.ToTable("productosInicio");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.FkProducto).HasColumnName("fk_producto");
+            e.Property(x => x.Orden).HasColumnName("orden");
+            e.Property(x => x.FechaAlta).HasColumnName("fechaAlta");
+        });
+
+        modelBuilder.Entity<PromocionCarrusel>(e =>
+        {
+            e.ToTable("promocionesCarrusel");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Imagen).HasColumnName("imagen").HasColumnType("longblob");
+            e.Property(x => x.ContentType).HasColumnName("contentType");
+            e.Property(x => x.Titulo).HasColumnName("titulo");
+            e.Property(x => x.Orden).HasColumnName("orden");
+            e.Property(x => x.FechaAlta).HasColumnName("fechaAlta");
+            e.Property(x => x.FechaModificacion).HasColumnName("fechaModificacion");
         });
 
         modelBuilder.Entity<StockProducto>(e =>

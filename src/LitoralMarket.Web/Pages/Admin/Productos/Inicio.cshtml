@@ -1,0 +1,328 @@
+@page
+@model LitoralMarket.Web.Pages.Admin.Productos.InicioModel
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery AntiforgeryService
+@{
+    ViewData["Title"] = "Productos del Inicio";
+    var csrfToken = AntiforgeryService.GetAndStoreTokens(HttpContext).RequestToken!;
+}
+
+<div class="d-flex align-items-center gap-2 mb-3">
+    <h2 class="mb-0 fw-bold"><i class="bi bi-stars me-2 text-success"></i>Productos del Inicio</h2>
+    <a asp-page="/Admin/Productos/Index" class="btn btn-sm btn-outline-secondary ms-auto">
+        <i class="bi bi-arrow-left me-1"></i>Productos
+    </a>
+</div>
+
+@if (!Model.Habilitado)
+{
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+        La selección manual está <strong>desactivada</strong>: la página de inicio muestra automáticamente los
+        <strong>últimos @Model.Maximo productos</strong> (por id descendente). Para elegirlos vos, el parámetro
+        <code>ecommerce / ProductosInicioConfigurables</code> debe valer exactamente <code>1</code>.
+    </div>
+    return;
+}
+
+<input type="hidden" id="csrfToken" value="@csrfToken" />
+<input type="hidden" id="maximo" value="@Model.Maximo" />
+<script id="datosSeleccion" type="application/json">@Html.Raw(Model.SeleccionJson)</script>
+
+<style>
+    .sel-fila   { border: 1px solid var(--border-ui); border-radius: 10px; background: var(--bg-surface); }
+    .sel-fila.nueva { border-color: var(--dorado); background: var(--dorado-suave); }
+    .sel-fila.oculta { opacity: .75; }
+    .sel-pos    { min-width: 2rem; height: 2rem; border-radius: 50%; background: var(--dorado-suave); color: var(--acento-texto); font-weight: 700; }
+    .sel-fila.reemplazando { outline: 2px solid var(--dorado); }
+</style>
+
+<div id="alertaGlobal" class="d-none mb-3"></div>
+
+<div class="alert alert-info py-2 small">
+    <i class="bi bi-info-circle me-1"></i>El Inicio muestra, en este orden, los productos elegidos que estén visibles en el catálogo
+    (no dados de baja y con stock, según el parámetro de stock). Máximo @Model.Maximo. Los cambios se aplican al guardar.
+</div>
+
+<div class="row g-3">
+    <!-- ── SELECCIÓN ACTUAL ─────────────────────────────────────── -->
+    <div class="col-12 col-lg-7">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white">
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span id="contador" class="fw-semibold"></span>
+                    <span id="avisoOcultos" class="badge text-bg-warning d-none"></span>
+                    <div class="ms-auto d-flex gap-2">
+                        <button type="button" id="btnDescartar" class="btn btn-sm btn-outline-secondary" disabled>
+                            <i class="bi bi-x-circle me-1"></i>Descartar cambios
+                        </button>
+                        <button type="button" id="btnGuardar" class="btn btn-sm btn-success" disabled>
+                            <i class="bi bi-check2-circle me-1"></i>Guardar selección
+                        </button>
+                    </div>
+                </div>
+                <div class="progress mt-2" style="height:8px">
+                    <div id="barra" class="progress-bar bg-success" role="progressbar" style="width:0%"></div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="listaSel" class="d-flex flex-column gap-2"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── BUSCAR Y AGREGAR ─────────────────────────────────────── -->
+    <div class="col-12 col-lg-5">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="small fw-semibold text-uppercase text-muted mb-2">Buscar y agregar</div>
+
+                <div id="modoReemplazo" class="alert alert-warning py-2 small d-none">
+                    <i class="bi bi-arrow-left-right me-1"></i>Reemplazando <strong id="reemplazoNombre"></strong>:
+                    elegí el producto nuevo en los resultados.
+                    <button type="button" id="btnCancelarReemplazo" class="btn btn-sm btn-outline-secondary ms-1 py-0">Cancelar</button>
+                </div>
+
+                <div class="input-group input-group-sm mb-2">
+                    <select id="tipoBusqueda" class="form-select" style="max-width:150px">
+                        <option value="0">Cód. Proveedor</option>
+                        <option value="1">Cód. Barras</option>
+                        <option value="2" selected>Descripción</option>
+                    </select>
+                    <input id="valorBusqueda" type="text" class="form-control" placeholder="Escribí o escaneá…" autocomplete="off" />
+                    <button type="button" id="btnBuscar" class="btn btn-success"><i class="bi bi-search"></i></button>
+                </div>
+
+                <div style="max-height:60vh;overflow-y:auto;">
+                    <table class="table table-hover table-sm mb-0 align-middle">
+                        <thead class="table-dark sticky-top">
+                            <tr><th>Producto</th><th class="text-end" style="width:1%"></th></tr>
+                        </thead>
+                        <tbody id="tbodyResultados">
+                            <tr><td colspan="2" class="text-center text-muted py-3 small">
+                                <i class="bi bi-search me-1"></i>Buscá un producto para agregarlo
+                            </td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var TOKEN  = document.getElementById('csrfToken').value;
+    var MAX    = parseInt(document.getElementById('maximo').value, 10) || 20;
+    var guardada = JSON.parse(document.getElementById('datosSeleccion').textContent || '[]');
+    var lista  = guardada.map(function (x) { return Object.assign({}, x); });   // selección en edición
+    var reemplazandoId = null;
+
+    var contenedor = document.getElementById('listaSel');
+    var tbody = document.getElementById('tbodyResultados');
+    var btnGuardar = document.getElementById('btnGuardar'), btnDescartar = document.getElementById('btnDescartar');
+
+    function alerta(msg, tipo) {
+        var a = document.getElementById('alertaGlobal');
+        a.className = 'alert alert-' + (tipo || 'danger') + ' mb-3';
+        a.textContent = msg;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    function limpiarAlerta() { document.getElementById('alertaGlobal').className = 'd-none mb-3'; }
+
+    function ids(arr) { return arr.map(function (x) { return x.id; }); }
+    function hayCambios() { return JSON.stringify(ids(lista)) !== JSON.stringify(ids(guardada)); }
+    function estaElegido(id) { return lista.some(function (x) { return x.id === id; }); }
+
+    function el(tag, cls, txt) {
+        var e = document.createElement(tag);
+        if (cls) e.className = cls;
+        if (txt !== undefined) e.textContent = txt;
+        return e;
+    }
+    function btn(icono, titulo, clase, accion, idx) {
+        var b = el('button', 'btn btn-sm ' + clase + ' py-0 px-2');
+        b.type = 'button'; b.title = titulo; b.dataset.accion = accion; b.dataset.idx = idx;
+        b.innerHTML = '<i class="bi ' + icono + '"></i>';
+        return b;
+    }
+
+    // ── render de la selección ─────────────────────────────
+    function render() {
+        var n = lista.length, libres = MAX - n;
+        var ocultos = lista.filter(function (x) { return x.visible === false; }).length;
+
+        document.getElementById('contador').textContent =
+            n + ' de ' + MAX + ' seleccionados · ' + (libres === 0 ? 'sin lugares libres' : (libres === 1 ? 'queda 1 lugar' : 'quedan ' + libres + ' lugares'));
+        var barra = document.getElementById('barra');
+        barra.style.width = (n / MAX * 100) + '%';
+        barra.className = 'progress-bar ' + (libres === 0 ? 'bg-warning' : 'bg-success');
+
+        var av = document.getElementById('avisoOcultos');
+        av.classList.toggle('d-none', ocultos === 0);
+        av.textContent = ocultos + (ocultos === 1 ? ' no se muestra hoy' : ' no se muestran hoy');
+
+        btnGuardar.disabled = btnDescartar.disabled = !hayCambios();
+
+        contenedor.innerHTML = '';
+        if (n === 0) {
+            contenedor.appendChild(el('div', 'text-center text-muted py-4', 'No hay productos seleccionados: el Inicio quedará sin productos destacados.'));
+        }
+        lista.forEach(function (it, i) {
+            var fila = el('div', 'sel-fila p-2' + (it.nuevo ? ' nueva' : '') + (it.visible === false ? ' oculta' : '') + (it.id === reemplazandoId ? ' reemplazando' : ''));
+            var row = el('div', 'd-flex align-items-center gap-2');
+
+            row.appendChild(el('span', 'sel-pos d-inline-flex align-items-center justify-content-center small flex-shrink-0', String(i + 1)));
+
+            var info = el('div', 'flex-fill min-w-0');
+            info.appendChild(el('div', 'small fw-semibold text-truncate', it.descripcion || '—'));
+            var sub = el('div', 'text-muted', '');
+            sub.style.fontSize = '.75rem';
+            sub.textContent = 'Cód. prov.: ' + (it.codProveedor || '—') + ' · Barras: ' + (it.codBarras || '—');
+            info.appendChild(sub);
+            if (it.nuevo) info.appendChild(el('span', 'badge text-bg-warning me-1', 'Nuevo · sin guardar'));
+            if (it.visible === false) info.appendChild(el('span', 'badge text-bg-secondary', 'No se muestra: ' + (it.motivo || 'no disponible')));
+            row.appendChild(info);
+
+            var acc = el('div', 'd-flex gap-1 flex-shrink-0');
+            var sube = btn('bi-chevron-up', 'Subir', 'btn-outline-secondary', 'subir', i); sube.disabled = i === 0;
+            var baja = btn('bi-chevron-down', 'Bajar', 'btn-outline-secondary', 'bajar', i); baja.disabled = i === n - 1;
+            acc.appendChild(sube); acc.appendChild(baja);
+            acc.appendChild(btn('bi-arrow-left-right', 'Reemplazar por otro producto', 'btn-outline-primary', 'reemplazar', i));
+            acc.appendChild(btn('bi-x-lg', 'Quitar de la selección', 'btn-outline-danger', 'quitar', i));
+            row.appendChild(acc);
+
+            fila.appendChild(row);
+            contenedor.appendChild(fila);
+        });
+        pintarBotonesResultado();
+    }
+
+    contenedor.addEventListener('click', function (e) {
+        var b = e.target.closest('button[data-accion]');
+        if (!b) return;
+        var i = parseInt(b.dataset.idx, 10), a = b.dataset.accion;
+        limpiarAlerta();
+        if (a === 'subir' && i > 0)                 { var t = lista[i - 1]; lista[i - 1] = lista[i]; lista[i] = t; }
+        else if (a === 'bajar' && i < lista.length - 1) { var u = lista[i + 1]; lista[i + 1] = lista[i]; lista[i] = u; }
+        else if (a === 'quitar') {
+            if (lista[i].id === reemplazandoId) cancelarReemplazo();
+            lista.splice(i, 1);
+        }
+        else if (a === 'reemplazar') {
+            reemplazandoId = lista[i].id;
+            document.getElementById('reemplazoNombre').textContent = lista[i].descripcion;
+            document.getElementById('modoReemplazo').classList.remove('d-none');
+            document.getElementById('valorBusqueda').focus();
+        }
+        render();
+    });
+
+    function cancelarReemplazo() {
+        reemplazandoId = null;
+        document.getElementById('modoReemplazo').classList.add('d-none');
+    }
+    document.getElementById('btnCancelarReemplazo').addEventListener('click', function () { cancelarReemplazo(); render(); });
+
+    // ── búsqueda ───────────────────────────────────────────
+    var resultados = [];
+
+    function pintarBotonesResultado() {
+        tbody.querySelectorAll('button[data-agregar]').forEach(function (b) {
+            var id = parseInt(b.dataset.agregar, 10);
+            var elegido = estaElegido(id);
+            var lleno = lista.length >= MAX;
+            if (reemplazandoId !== null) {
+                b.disabled = elegido; b.textContent = elegido ? 'Elegido' : 'Usar aquí';
+                b.className = 'btn btn-sm ' + (elegido ? 'btn-outline-secondary' : 'btn-primary');
+            } else {
+                b.disabled = elegido || lleno;
+                b.textContent = elegido ? 'Elegido' : (lleno ? 'Sin lugar' : 'Agregar');
+                b.className = 'btn btn-sm ' + (elegido || lleno ? 'btn-outline-secondary' : 'btn-success');
+                b.title = lleno && !elegido ? 'Ya hay ' + MAX + ' productos: quitá o reemplazá uno' : '';
+            }
+        });
+    }
+
+    function renderResultados() {
+        tbody.innerHTML = '';
+        if (resultados.length === 0) {
+            var tr0 = el('tr'); var td0 = el('td', 'text-center text-muted py-3 small', 'No se encontraron productos.');
+            td0.colSpan = 2; tr0.appendChild(td0); tbody.appendChild(tr0); return;
+        }
+        resultados.forEach(function (p) {
+            var tr = el('tr');
+            var td = el('td', 'small');
+            td.appendChild(el('div', 'fw-semibold', p.descripcion || '—'));
+            var s = el('div', 'text-muted', ''); s.style.fontSize = '.75rem';
+            s.textContent = (p.codProveedor || '—') + ' · ' + (p.codBarras || '—') + (p.rubro ? ' · ' + p.rubro : '');
+            td.appendChild(s); tr.appendChild(td);
+            var tdb = el('td', 'text-end');
+            var b = el('button'); b.type = 'button'; b.dataset.agregar = p.id;
+            tdb.appendChild(b); tr.appendChild(tdb); tbody.appendChild(tr);
+        });
+        pintarBotonesResultado();
+    }
+
+    async function buscar() {
+        var valor = document.getElementById('valorBusqueda').value.trim();
+        if (!valor) { alerta('Escribí al menos un carácter para buscar.', 'warning'); return; }
+        limpiarAlerta();
+        var res = await fetch('?handler=Buscar&tipo=' + document.getElementById('tipoBusqueda').value + '&valor=' + encodeURIComponent(valor));
+        var data;
+        try { data = await res.json(); } catch (e) { alerta('No se pudo leer la respuesta del servidor.'); return; }
+        if (!data.ok) { alerta(data.error || 'No se pudo buscar.', 'warning'); return; }
+        resultados = data.items;
+        renderResultados();
+    }
+    document.getElementById('btnBuscar').addEventListener('click', buscar);
+    document.getElementById('valorBusqueda').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); buscar(); } });
+
+    tbody.addEventListener('click', function (e) {
+        var b = e.target.closest('button[data-agregar]');
+        if (!b || b.disabled) return;
+        var id = parseInt(b.dataset.agregar, 10);
+        var p = resultados.find(function (x) { return x.id === id; });
+        if (!p || estaElegido(id)) return;
+        var nuevo = { id: p.id, codProveedor: p.codProveedor, codBarras: p.codBarras, descripcion: p.descripcion, nuevo: true };
+        if (reemplazandoId !== null) {
+            var idx = lista.findIndex(function (x) { return x.id === reemplazandoId; });
+            if (idx >= 0) lista[idx] = nuevo;           // conserva la posición del producto reemplazado
+            cancelarReemplazo();
+        } else if (lista.length < MAX) {
+            lista.push(nuevo);
+        } else { alerta('Ya hay ' + MAX + ' productos seleccionados: quitá o reemplazá uno.', 'warning'); return; }
+        limpiarAlerta();
+        render();
+    });
+
+    // ── guardar / descartar ────────────────────────────────
+    btnDescartar.addEventListener('click', function () {
+        lista = guardada.map(function (x) { return Object.assign({}, x); });
+        cancelarReemplazo(); limpiarAlerta(); render();
+    });
+
+    btnGuardar.addEventListener('click', async function () {
+        if (lista.length > MAX) { alerta('Se pueden seleccionar como máximo ' + MAX + ' productos.'); return; }
+        btnGuardar.disabled = true;
+        try {
+            var res = await fetch('?handler=Guardar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': TOKEN },
+                body: JSON.stringify({ ids: ids(lista) })
+            });
+            var data;
+            try { data = await res.json(); } catch (e) { throw new Error('Respuesta inesperada del servidor (' + res.status + ').'); }
+            if (data.ok) { location.reload(); return; }       // recarga: trae el estado real de cada producto
+            alerta(data.error || 'No se pudo guardar la selección.');
+        } catch (err) {
+            alerta(err.message || 'No se pudo guardar la selección.');
+        } finally { btnGuardar.disabled = !hayCambios(); }
+    });
+
+    window.addEventListener('beforeunload', function (e) {
+        if (hayCambios()) { e.preventDefault(); e.returnValue = ''; }
+    });
+
+    render();
+})();
+</script>

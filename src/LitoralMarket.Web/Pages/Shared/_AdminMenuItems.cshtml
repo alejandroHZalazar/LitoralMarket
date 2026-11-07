@@ -1,3 +1,4 @@
+@inject LitoralMarket.Application.Interfaces.IParametrosService Parametros
 @* Ítems del menú de administración — se incluye en ambas ramas del layout.
    Agregar aquí cualquier nueva sección admin: se refleja automáticamente. *@
 <li><span class="dropdown-item-text small text-muted fw-semibold">
@@ -5,8 +6,14 @@
 </span></li>
 <li><a class="dropdown-item" asp-page="/Admin/Pedidos/Index"><i class="bi bi-bag-check me-2 text-muted"></i>Pedidos</a></li>
 <li><a class="dropdown-item" asp-page="/Admin/Productos/Index"><i class="bi bi-box-seam me-2 text-muted"></i>Productos</a></li>
+@* Solo con ecommerce/ProductosInicioConfigurables = 1 (valor cacheado: sin consulta por página). *@
+@if (await Parametros.SeleccionManualInicioHabilitadaAsync())
+{
+    <li><a class="dropdown-item" asp-page="/Admin/Productos/Inicio"><i class="bi bi-stars me-2 text-muted"></i>Productos del Inicio</a></li>
+}
 <li><a class="dropdown-item" asp-page="/Admin/Productos/IngresoStock"><i class="bi bi-box-arrow-in-down me-2 text-muted"></i>Ingreso de stock</a></li>
 <li><a class="dropdown-item" asp-page="/Admin/Productos/AjusteStock"><i class="bi bi-sliders me-2 text-muted"></i>Ajuste de stock</a></li>
+<li><a class="dropdown-item" asp-page="/Admin/Promociones/Index"><i class="bi bi-images me-2 text-muted"></i>Promociones (carrusel)</a></li>
 <li><a class="dropdown-item" asp-page="/Admin/Proveedores/Index"><i class="bi bi-truck me-2 text-muted"></i>Proveedores</a></li>
 <li><a class="dropdown-item" asp-page="/Admin/Rubros/Index"><i class="bi bi-tag me-2 text-muted"></i>Rubros</a></li>
 <li><a class="dropdown-item" asp-page="/Admin/DireccionesEntrega/Index"><i class="bi bi-geo-alt me-2 text-muted"></i>Direcciones de entrega</a></li>

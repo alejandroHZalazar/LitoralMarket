@@ -13,6 +13,11 @@ public interface IProductoRepository
     /// stock. Trae solo <paramref name="cantidad"/> filas y sin cargar el blob de imagen.
     /// </summary>
     Task<List<ProductoDto>> ObtenerUltimosAsync(int cantidad, bool incluirSinStock);
+    /// <summary>
+    /// Productos que eligió el administrador para el Inicio (tabla productosInicio), en su orden y hasta
+    /// <paramref name="maximo"/>. Solo los visibles en el catálogo: sin dados de baja y, según el parámetro, con stock.
+    /// </summary>
+    Task<List<ProductoDto>> ObtenerSeleccionInicioAsync(bool incluirSinStock, int maximo);
     Task<ProductoDto?> ObtenerPorIdAsync(int id);
 
     /// <summary>Metadatos (sin blob) de las imágenes activas de un producto, principal primero.</summary>

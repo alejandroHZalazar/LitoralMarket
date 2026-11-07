@@ -1795,3 +1795,70 @@ footer.footer-lm {
   .layout-rubros-fila { display: flex; align-items: stretch; min-height: calc(100vh - var(--lm-nav-h)); }
   .layout-rubros-main { flex: 1 1 auto; padding: 1.5rem 1.75rem; }
 }
+
+/* =============================================
+   CARRUSEL DE PROMOCIONES (Inicio y vista previa del admin)
+   Pista horizontal con scroll-snap: 3 tarjetas visibles en escritorio, 2 en tablet y 1 en móvil.
+   Cada promoción usa la tarjeta de producto (.producto-card / .producto-img): misma altura,
+   object-fit: contain, relleno y fondo, así la imagen entra completa sin deformarse ni recortarse.
+   ============================================= */
+.carrusel-promos { --promo-gap: 1rem; --promo-visibles: 3; position: relative; }
+.carrusel-viewport { position: relative; }
+.carrusel-track {
+  display: flex;
+  gap: var(--promo-gap);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;                       /* se navega con flechas, rueda o deslizando */
+  padding: 0.4rem 0.25rem 0.7rem;              /* espacio para la sombra y el "levante" del hover */
+  -webkit-overflow-scrolling: touch;
+}
+.carrusel-track::-webkit-scrollbar { display: none; }
+.carrusel-track:focus-visible { outline: 2px solid var(--dorado); outline-offset: 2px; border-radius: 12px; }
+.carrusel-slide {
+  flex: 0 0 calc((100% - (var(--promo-visibles) - 1) * var(--promo-gap)) / var(--promo-visibles));
+  scroll-snap-align: start;
+  min-width: 0;
+}
+/* Pocas promociones (no llenan la fila): quedan centradas en lugar de pegadas a la izquierda */
+.carrusel-slide:first-child { margin-left: auto; }
+.carrusel-slide:last-child  { margin-right: auto; }
+.carrusel-promos .producto-card { height: 100%; }
+.carrusel-promos .producto-img { height: 220px; }
+@media (max-width: 991.98px) { .carrusel-promos { --promo-visibles: 2; } }
+@media (max-width: 575.98px) {
+  .carrusel-promos { --promo-visibles: 1.15; --promo-gap: 0.75rem; }   /* 1 completa + asomo de la siguiente */
+  .carrusel-promos .producto-img { height: 200px; }
+}
+@media (prefers-reduced-motion: reduce) { .carrusel-track { scroll-behavior: auto; } }
+
+.carrusel-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  width: 2.4rem;
+  height: 2.4rem;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.5);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+  transition: background 0.15s;
+}
+.carrusel-nav:hover, .carrusel-nav:focus-visible { background: rgba(0,0,0,0.75); }
+.carrusel-nav.prev { left: -0.5rem; }
+.carrusel-nav.next { right: -0.5rem; }
+.carrusel-nav[hidden] { display: none; }
+@media (max-width: 575.98px) {
+  .carrusel-nav { width: 2rem; height: 2rem; }
+  .carrusel-nav.prev { left: 0.25rem; }
+  .carrusel-nav.next { right: 0.25rem; }
+}

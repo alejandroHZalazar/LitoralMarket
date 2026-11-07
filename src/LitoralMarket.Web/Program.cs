@@ -178,6 +178,8 @@ builder.Services.AddControllers();
 builder.Services.AddScoped<IProductoRepository, ProductoRepository>();
 builder.Services.AddScoped<IProductoAdminService, ProductoAdminService>();
 builder.Services.AddScoped<IAjusteStockService, AjusteStockService>();
+builder.Services.AddScoped<IPromocionCarruselService, PromocionCarruselService>();
+builder.Services.AddScoped<IProductosInicioService, ProductosInicioService>();
 builder.Services.AddScoped<IPedidoAdminService, PedidoAdminService>();
 builder.Services.AddScoped<IProveedorAdminService, ProveedorAdminService>();
 builder.Services.AddScoped<IRubroAdminService, RubroAdminService>();
@@ -309,6 +311,16 @@ app.MapGet("/images/productos/img/{imagenId:int}", async (int imagenId, LitoralM
     if (img is null || img.Imagen is null or { Length: 0 }) return Results.NotFound();
     ctx.Response.Headers.CacheControl = "public, max-age=86400";
     return Results.File(img.Imagen, string.IsNullOrEmpty(img.ContentType) ? SniffMime(img.Imagen) : img.ContentType, enableRangeProcessing: false);
+});
+
+// Imagen de una promoción del carrusel. La URL lleva ?v=<versión> (cambia al reemplazar la imagen),
+// así que la respuesta es válida "para siempre" bajo esa URL exacta (mismo criterio que /logo).
+app.MapGet("/images/promociones/{id:int}", async (int id, IPromocionCarruselService promociones, HttpContext ctx) =>
+{
+    var img = await promociones.ObtenerImagenAsync(id);
+    if (img is null) return Results.NotFound();
+    ctx.Response.Headers.CacheControl = "public, max-age=31536000, immutable";
+    return Results.File(img.Bytes, img.ContentType, enableRangeProcessing: false);
 });
 
 app.Run();

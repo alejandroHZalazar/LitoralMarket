@@ -64,6 +64,27 @@ public class ProductoRepository : IProductoRepository
             .ToListAsync();
     }
 
+    public async Task<List<ProductoDto>> ObtenerSeleccionInicioAsync(bool incluirSinStock, int maximo)
+    {
+        // Mismos filtros de visibilidad que el catálogo (EntidadesActivas = no dado de baja, ConStock).
+        var visibles = EntidadesActivas();
+        if (!incluirSinStock) visibles = ConStock(visibles);
+
+        // 1) Ids seleccionados que siguen siendo visibles, en el orden del administrador (consulta liviana).
+        var ids = await (from s in _db.ProductosInicio
+                         join p in visibles on s.FkProducto equals p.Id
+                         orderby s.Orden
+                         select p.Id)
+                  .Take(maximo)
+                  .ToListAsync();
+        if (ids.Count == 0) return new List<ProductoDto>();
+
+        // 2) Datos de esos productos (sin blobs) y se reordena en memoria según la selección.
+        var dtos = (await Proyectar(visibles.Where(p => ids.Contains(p.Id))).ToListAsync())
+                   .ToDictionary(d => d.Id);
+        return ids.Where(dtos.ContainsKey).Select(i => dtos[i]).ToList();
+    }
+
     public async Task<ProductoDto?> ObtenerPorIdAsync(int id) =>
         await Proyectar(EntidadesActivas()).FirstOrDefaultAsync(p => p.Id == id);
 

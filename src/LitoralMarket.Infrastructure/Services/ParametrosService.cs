@@ -44,6 +44,24 @@ public class ParametrosService : IParametrosService
     public async Task<bool> MostrarCodProveedorEnCatalogoAsync() =>
         (await GetValorAsync("ecommerce", "CodProveedorEnCatalogo")) == "1";
 
+    // Comparación explícita: solo "1" activa el carrusel (no existe / NULL / 0 / otro valor = desactivado).
+    public async Task<bool> MostrarCarruselPromocionesAsync() =>
+        (await GetValorAsync("ecommerce", "CarruselPromociones")) == "1";
+
+    // Comparación explícita: solo "1" habilita la selección manual.
+    public async Task<bool> SeleccionManualInicioHabilitadaAsync() =>
+        (await GetValorAsync("ecommerce", "ProductosInicioConfigurables")) == "1";
+
+    public async Task<int> GetIntervaloCarruselPromocionesAsync()
+    {
+        const int predeterminado = 5;
+        var val = await GetValorAsync("ecommerce", "IntervaloCarruselPromociones");
+        return int.TryParse(val?.Trim(), System.Globalization.NumberStyles.None,
+                            System.Globalization.CultureInfo.InvariantCulture, out var seg) && seg is >= 2 and <= 60
+            ? seg
+            : predeterminado;
+    }
+
     public async Task<int> GetProductosPorPaginaAsync()
     {
         var val = await GetValorAsync("ecommerce", "productosPorPagina");
