@@ -16,6 +16,13 @@
     var valor = Model.Valor > 0
         ? Model.Valor.ToString("0.####", CultureInfo.InvariantCulture)
         : (minVenta > 0 ? step : (Model.Fraccionado ? "0.50" : "1"));
+
+    // Tope por stock (solo con ecommerce/LimitarCantidadPorStock = 1): el atributo max ya lo respetan
+    // los botones +/- y el valor tipeado (site.js). Sin Maximo no se emite max: comportamiento actual.
+    var max = Model.Maximo is > 0 ? Model.Maximo.Value.ToString("0.####", CultureInfo.InvariantCulture) : null;
+    var titulo = minVenta > 0
+        ? $"Se vende en múltiplos de {step}" + (max is null ? "" : $" · máximo {max}")
+        : (max is null ? null : $"Máximo disponible: {max}");
 }
 <div class="cantidad-control">
     <button type="button" class="btn-cantidad btn-menos" aria-label="Reducir cantidad">
@@ -26,11 +33,12 @@
            value="@valor"
            min="@step"
            step="@step"
+           max="@max"
            class="cantidad-input"
            aria-label="Cantidad"
            readonly="@(minVenta > 0)"
            data-autosave="@(Model.AutoGuardar ? "true" : null)"
-           title="@(minVenta > 0 ? $"Se vende en múltiplos de {step}" : null)" />
+           title="@titulo" />
     <button type="button" class="btn-cantidad btn-mas" aria-label="Aumentar cantidad">
         <i class="bi bi-plus"></i>
     </button>

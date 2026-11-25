@@ -44,6 +44,18 @@ public class ParametrosService : IParametrosService
     public async Task<bool> MostrarCodProveedorEnCatalogoAsync() =>
         (await GetValorAsync("ecommerce", "CodProveedorEnCatalogo")) == "1";
 
+    // Comparación explícita: solo "1" muestra el stock en las tarjetas (no existe / NULL / 0 / otro valor = oculto).
+    public async Task<bool> MostrarStockEnCatalogoAsync() =>
+        (await GetValorAsync("ecommerce", "MostrarStockEnCatalogo")) == "1";
+
+    // Comparación explícita: solo "1" limita la cantidad al stock (no existe / NULL / 0 / otro valor = sin límite).
+    public async Task<bool> LimitarCantidadPorStockAsync() =>
+        (await GetValorAsync("ecommerce", "LimitarCantidadPorStock")) == "1";
+
+    // Comparación explícita: solo "1" habilita las variantes (no existe / NULL / 0 / otro valor = productos simples).
+    public async Task<bool> HabilitarVariantesProductoAsync() =>
+        (await GetValorAsync("ecommerce", "HabilitarVariantesProducto")) == "1";
+
     // Comparación explícita: solo "1" activa el carrusel (no existe / NULL / 0 / otro valor = desactivado).
     public async Task<bool> MostrarCarruselPromocionesAsync() =>
         (await GetValorAsync("ecommerce", "CarruselPromociones")) == "1";

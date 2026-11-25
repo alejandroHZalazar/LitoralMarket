@@ -71,6 +71,29 @@ public class PagoEstadoController : ControllerBase
         if (estadoPedido == "confirmado")
             return Json("confirmado");
 
+        // ── Transferencia: el estado lo define solo la BD (la detecta el proceso de fondo) ──
+        // No se consulta Mercado Pago por cada cliente que espera: sería una llamada por visita.
+        var ultimoCobro = await _db.CobrosEcommerce
+            .Where(c => c.FkPedido == pedidoId)
+            .OrderByDescending(c => c.FechaCreacion)
+            .Select(c => new { c.Id, c.Tipo, c.Estado })
+            .FirstOrDefaultAsync(ct);
+
+        if (ultimoCobro?.Tipo == "transferencia")
+        {
+            if (ultimoCobro.Estado == "aprobado") return Json("confirmado");
+            if (ultimoCobro.Estado == "cancelado") return Json("cancelado");
+
+            // Pendiente pero ya vencida (el proceso de fondo todavía no la canceló): el cliente no debe seguir esperando.
+            // El plazo está en la tabla propia de transferencias (solo se consulta para este tipo de cobro).
+            var vence = await _db.CobrosTransferencia
+                .Where(t => t.FkCobro == ultimoCobro.Id)
+                .Select(t => (DateTime?)t.Vencimiento)
+                .FirstOrDefaultAsync(ct);
+            if (vence is { } venc && venc < DateTime.Now) return Json("cancelado");
+            return Json("pendiente");
+        }
+
         // Cobro MercadoPago más reciente para este pedido
         var cobro = await _db.CobrosEcommerce
             .Where(c => c.FkPedido == pedidoId && c.Tipo == "mercadopago")

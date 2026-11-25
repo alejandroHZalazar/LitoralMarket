@@ -19,6 +19,7 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<Producto> Productos { get; set; }
     public DbSet<ImagenProducto> ImagenesProductos { get; set; }
     public DbSet<PromocionCarrusel> PromocionesCarrusel { get; set; }
+    public DbSet<PromocionCarruselDestino> PromocionesCarruselDestinos { get; set; }
     public DbSet<ProductoInicio> ProductosInicio { get; set; }
     public DbSet<StockProducto> StockProductos { get; set; }
     public DbSet<PrecioProducto> PreciosProductos { get; set; }
@@ -27,6 +28,22 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<PedidoDetalle> PedidoDetalles { get; set; }
     public DbSet<DireccionEntrega> DireccionesEntrega { get; set; }
     public DbSet<CobroEcommerce>        CobrosEcommerce       { get; set; }
+    public DbSet<CobroTransferencia>    CobrosTransferencia   { get; set; }
+    public DbSet<TransferenciaMp>       TransferenciasMp      { get; set; }
+    // Tablas de ventas del sistema comercial (las escribe también Comercial Web)
+    public DbSet<Venta>                 Ventas                { get; set; }
+    public DbSet<VentaDetalle>          VentasDetalle         { get; set; }
+    public DbSet<PedidoVenta>           PedidosVentas         { get; set; }
+    // Variantes de producto (medidas/colores). Solo se consultan con ecommerce/HabilitarVariantesProducto = 1.
+    public DbSet<PromocionRegla>          PromocionesReglas          { get; set; }
+    public DbSet<PromocionReglaProducto>  PromocionesReglasProductos { get; set; }
+    public DbSet<PedidoPromoDetalle>      PedidosPromoDetalle        { get; set; }
+    public DbSet<VentaPromoDetalle>       VentasPromoDetalle         { get; set; }
+    public DbSet<VarianteMedida>        VariantesMedidas      { get; set; }
+    public DbSet<VarianteColor>         VariantesColores      { get; set; }
+    public DbSet<ProductoPrincipal>     ProductosPrincipales  { get; set; }
+    public DbSet<ProductoVariante>      ProductosVariantes    { get; set; }
+    public DbSet<PrecioProveedor>       PreciosProveedores    { get; set; }
     public DbSet<ProductosMovimiento>   ProductosMovimientos  { get; set; }
     public DbSet<CostoProducto>         CostosProductos       { get; set; }
     public DbSet<Usuario>               Usuarios              { get; set; }
@@ -110,6 +127,14 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             e.Property(x => x.FkProducto).HasColumnName("fk_producto");
             e.Property(x => x.Orden).HasColumnName("orden");
             e.Property(x => x.FechaAlta).HasColumnName("fechaAlta");
+        });
+
+        modelBuilder.Entity<PromocionCarruselDestino>(e =>
+        {
+            e.ToTable("promocionesCarruselDestinos");
+            e.HasKey(x => x.FkPromocionCarrusel);
+            e.Property(x => x.FkPromocionCarrusel).HasColumnName("fk_promocionCarrusel").ValueGeneratedNever();
+            e.Property(x => x.FkPromocionRegla).HasColumnName("fk_promocionRegla");
         });
 
         modelBuilder.Entity<PromocionCarrusel>(e =>
@@ -247,6 +272,209 @@ public class AppDbContext : DbContext, IDataProtectionKeyContext
             e.Property(x => x.FechaCreacion).HasColumnName("fecha_creacion");
             e.Property(x => x.FechaPago).HasColumnName("fecha_pago");
             e.HasOne(x => x.Pedido).WithMany().HasForeignKey(x => x.FkPedido);
+        });
+
+        modelBuilder.Entity<CobroTransferencia>(e =>
+        {
+            e.ToTable("cobros_transferencia");
+            e.HasKey(x => x.FkCobro);
+            e.Property(x => x.FkCobro).HasColumnName("fk_cobro").ValueGeneratedNever();
+            e.Property(x => x.MontoTransferencia).HasColumnName("monto_transferencia");
+            e.Property(x => x.Vencimiento).HasColumnName("vencimiento");
+            e.Property(x => x.MontoActivo).HasColumnName("monto_activo");
+            e.HasIndex(x => x.MontoActivo).IsUnique();
+            e.HasOne(x => x.Cobro).WithOne().HasForeignKey<CobroTransferencia>(x => x.FkCobro);
+        });
+
+        // ── Ventas (mismo mapeo que ComercialDbContext de Comercial Web) ─────────
+        modelBuilder.Entity<Venta>(e =>
+        {
+            e.ToTable("ventas");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.Fecha).HasColumnName("fecha");
+            e.Property(x => x.TotalVenta).HasColumnName("totalVenta").HasPrecision(18, 4);
+            e.Property(x => x.TotalCosto).HasColumnName("totalCosto").HasPrecision(18, 4);
+            e.Property(x => x.FkCliente).HasColumnName("fk_cliente");
+            e.Property(x => x.FkCajero).HasColumnName("fk_cajero");
+            e.Property(x => x.Iva).HasColumnName("IVA").HasPrecision(18, 4);
+            e.Property(x => x.Descuento).HasColumnName("descuento").HasPrecision(18, 4);
+            e.Property(x => x.Recargo).HasColumnName("recargo").HasPrecision(18, 4);
+            e.Property(x => x.FkVendedor).HasColumnName("fk_vendedor");
+            e.Property(x => x.Comision).HasColumnName("comision").HasPrecision(18, 4);
+            e.Property(x => x.Impuesto).HasColumnName("impuesto").HasPrecision(18, 4);
+        });
+
+        modelBuilder.Entity<VentaDetalle>(e =>
+        {
+            e.ToTable("ventasDetalle");
+            e.HasKey(x => x.Linea);
+            e.Property(x => x.Linea).HasColumnName("linea");
+            e.Property(x => x.FkVenta).HasColumnName("fk_venta");
+            e.Property(x => x.FkProducto).HasColumnName("fk_producto");
+            e.Property(x => x.CodBarras).HasColumnName("codBarras");
+            e.Property(x => x.CodProveedor).HasColumnName("codProveedor");
+            e.Property(x => x.Descripcion).HasColumnName("descripcion");
+            e.Property(x => x.PrecioSinIva).HasColumnName("precioSinIva").HasPrecision(18, 4);
+            e.Property(x => x.PrecioConIva).HasColumnName("precioConIva").HasPrecision(18, 4);
+            e.Property(x => x.Cantidad).HasColumnName("cantidad").HasPrecision(18, 4);
+            e.Property(x => x.Costo).HasColumnName("costo").HasPrecision(18, 4);
+            e.Property(x => x.Subtotal).HasColumnName("subtotal").HasPrecision(18, 4);
+            e.Property(x => x.Descuento).HasColumnName("descuento").HasPrecision(18, 4);
+            e.Property(x => x.Recargo).HasColumnName("recargo").HasPrecision(18, 4);
+            e.Property(x => x.SubtotalSinIva).HasColumnName("subtotalSinIVA").HasPrecision(18, 4);
+        });
+
+        modelBuilder.Entity<PedidoVenta>(e =>
+        {
+            e.ToTable("pedidos_ventas");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.FkPedido).HasColumnName("fk_pedido");
+            e.Property(x => x.FkVenta).HasColumnName("fk_venta");
+            e.Property(x => x.Fecha).HasColumnName("fecha");
+            e.HasIndex(x => new { x.FkPedido, x.FkVenta }).IsUnique();
+        });
+
+        // ── Promociones por cantidad / porcentaje (tablas del sistema comercial; solo existen si se corrio su script) ──
+        modelBuilder.Entity<PromocionRegla>(e =>
+        {
+            e.ToTable("promociones_reglas");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.Nombre).HasMaxLength(100).HasColumnName("nombre");
+            e.Property(x => x.Tipo).HasMaxLength(4).HasColumnName("tipo");
+            e.Property(x => x.Porcentaje).HasPrecision(5, 2).HasColumnName("porcentaje");
+            e.Property(x => x.Lleva).HasColumnName("lleva");
+            e.Property(x => x.Paga).HasColumnName("paga");
+            e.Property(x => x.AgrupaVariantes).HasColumnName("agrupaVariantes");
+            e.Property(x => x.VigenteDesde).HasColumnName("vigenteDesde");
+            e.Property(x => x.VigenteHasta).HasColumnName("vigenteHasta");
+            e.Property(x => x.Activa).HasColumnName("activa");
+            e.Property(x => x.FechaAlta).HasColumnName("fechaAlta");
+            e.Property(x => x.Usuario).HasMaxLength(50).HasColumnName("usuario");
+        });
+        modelBuilder.Entity<PromocionReglaProducto>(e =>
+        {
+            e.ToTable("promociones_reglas_productos");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.FkRegla).HasColumnName("fk_regla");
+            e.Property(x => x.FkProducto).HasColumnName("fk_producto");
+        });
+        modelBuilder.Entity<PedidoPromoDetalle>(e =>
+        {
+            e.ToTable("pedidos_promo_detalle");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.FkPedidoDetalle).HasColumnName("fk_pedidoDetalle");
+            e.Property(x => x.FkRegla).HasColumnName("fk_regla");
+            e.Property(x => x.Nombre).HasMaxLength(100).HasColumnName("nombre");
+            e.Property(x => x.Tipo).HasMaxLength(4).HasColumnName("tipo");
+            e.Property(x => x.Porcentaje).HasPrecision(5, 2).HasColumnName("porcentaje");
+            e.Property(x => x.Lleva).HasColumnName("lleva");
+            e.Property(x => x.Paga).HasColumnName("paga");
+            e.Property(x => x.CantBonificada).HasPrecision(18, 4).HasColumnName("cantBonificada");
+            e.Property(x => x.Ahorro).HasPrecision(18, 4).HasColumnName("ahorro");
+        });
+        modelBuilder.Entity<VentaPromoDetalle>(e =>
+        {
+            e.ToTable("ventas_promo_detalle");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.FkVentaDetalle).HasColumnName("fk_ventaDetalle");
+            e.Property(x => x.FkRegla).HasColumnName("fk_regla");
+            e.Property(x => x.Nombre).HasMaxLength(100).HasColumnName("nombre");
+            e.Property(x => x.Tipo).HasMaxLength(4).HasColumnName("tipo");
+            e.Property(x => x.Porcentaje).HasPrecision(5, 2).HasColumnName("porcentaje");
+            e.Property(x => x.Lleva).HasColumnName("lleva");
+            e.Property(x => x.Paga).HasColumnName("paga");
+            e.Property(x => x.CantBonificada).HasPrecision(18, 4).HasColumnName("cantBonificada");
+            e.Property(x => x.Ahorro).HasPrecision(18, 4).HasColumnName("ahorro");
+        });
+
+        // ── Variantes de producto ────────────────────────────────────────────────
+        modelBuilder.Entity<VarianteMedida>(e =>
+        {
+            e.ToTable("variantesMedidas");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.Nombre).HasColumnName("nombre");
+            e.Property(x => x.Orden).HasColumnName("orden");
+            e.Property(x => x.Activa).HasColumnName("activa");
+            e.HasIndex(x => x.Nombre).IsUnique();
+        });
+
+        modelBuilder.Entity<VarianteColor>(e =>
+        {
+            e.ToTable("variantesColores");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.Nombre).HasColumnName("nombre");
+            e.Property(x => x.CodigoHex).HasColumnName("codigoHex");
+            e.Property(x => x.Orden).HasColumnName("orden");
+            e.Property(x => x.Activa).HasColumnName("activa");
+            e.HasIndex(x => x.Nombre).IsUnique();
+        });
+
+        modelBuilder.Entity<ProductoPrincipal>(e =>
+        {
+            e.ToTable("productosPrincipales");
+            e.HasKey(x => x.FkProducto);
+            e.Property(x => x.FkProducto).HasColumnName("fk_producto").ValueGeneratedNever();
+            e.Property(x => x.UsaMedidas).HasColumnName("usaMedidas");
+            e.Property(x => x.UsaColores).HasColumnName("usaColores");
+            e.Property(x => x.PreciosIguales).HasColumnName("preciosIguales");
+            e.Property(x => x.FechaAlta).HasColumnName("fechaAlta");
+            e.HasOne(x => x.Producto).WithOne().HasForeignKey<ProductoPrincipal>(x => x.FkProducto);
+            e.HasMany(x => x.Variantes).WithOne(v => v.Principal).HasForeignKey(v => v.FkPrincipal);
+        });
+
+        modelBuilder.Entity<ProductoVariante>(e =>
+        {
+            e.ToTable("productosVariantes");
+            e.HasKey(x => x.FkProducto);
+            e.Property(x => x.FkProducto).HasColumnName("fk_producto").ValueGeneratedNever();
+            e.Property(x => x.FkPrincipal).HasColumnName("fk_principal");
+            e.Property(x => x.FkMedida).HasColumnName("fk_medida");
+            e.Property(x => x.FkColor).HasColumnName("fk_color");
+            e.Property(x => x.Activa).HasColumnName("activa");
+            e.Property(x => x.Orden).HasColumnName("orden");
+            e.Property(x => x.FechaAlta).HasColumnName("fechaAlta");
+            e.HasOne(x => x.Producto).WithOne().HasForeignKey<ProductoVariante>(x => x.FkProducto);
+            e.HasIndex(x => new { x.FkPrincipal, x.FkMedida, x.FkColor }).IsUnique();
+            e.HasIndex(x => new { x.FkPrincipal, x.Activa });
+        });
+
+        modelBuilder.Entity<PrecioProveedor>(e =>
+        {
+            e.ToTable("preciosProveedores");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.FkProducto).HasColumnName("fk_producto");
+            e.Property(x => x.Precio).HasColumnName("precio");
+        });
+
+        modelBuilder.Entity<TransferenciaMp>(e =>
+        {
+            e.ToTable("transferencias_mp");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.MpPaymentId).HasColumnName("mp_payment_id");
+            e.Property(x => x.Monto).HasColumnName("monto");
+            e.Property(x => x.Moneda).HasColumnName("moneda");
+            e.Property(x => x.FechaAprobacion).HasColumnName("fecha_aprobacion");
+            e.Property(x => x.FechaDetectada).HasColumnName("fecha_detectada");
+            e.Property(x => x.PaymentMethodId).HasColumnName("payment_method_id");
+            e.Property(x => x.OperationType).HasColumnName("operation_type");
+            e.Property(x => x.PayerId).HasColumnName("payer_id");
+            e.Property(x => x.StatusMp).HasColumnName("status_mp");
+            e.Property(x => x.Estado).HasColumnName("estado");
+            e.Property(x => x.FkCobro).HasColumnName("fk_cobro");
+            e.Property(x => x.Motivo).HasColumnName("motivo");
+            e.Property(x => x.AsignadaPor).HasColumnName("asignada_por");
+            e.Property(x => x.JsonMp).HasColumnName("json_mp");
+            e.HasIndex(x => x.MpPaymentId).IsUnique();
         });
 
         modelBuilder.Entity<Usuario>(e =>

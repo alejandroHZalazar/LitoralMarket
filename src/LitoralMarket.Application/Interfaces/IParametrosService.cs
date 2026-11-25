@@ -9,6 +9,23 @@ public interface IParametrosService
     Task<bool> MostrarPreciosSinIvaAsync();
     /// <summary>ecommerce/CodProveedorEnCatalogo == "1" → se muestra Productos.codProveedor en catálogo y detalle.</summary>
     Task<bool> MostrarCodProveedorEnCatalogoAsync();
+    /// <summary>
+    /// ecommerce/MostrarStockEnCatalogo == "1" → las tarjetas de producto muestran el stock disponible.
+    /// Cualquier otro valor (no existe, NULL, 0, otro) → no se muestra.
+    /// </summary>
+    Task<bool> MostrarStockEnCatalogoAsync();
+    /// <summary>
+    /// ecommerce/LimitarCantidadPorStock == "1" → no se puede pedir más cantidad que el stock disponible
+    /// (catálogo, carrito y confirmación del pedido). Cualquier otro valor (no existe, NULL, 0, otro) →
+    /// sin límite: se puede pedir cualquier cantidad mientras haya stock (comportamiento histórico).
+    /// </summary>
+    Task<bool> LimitarCantidadPorStockAsync();
+    /// <summary>
+    /// ecommerce/HabilitarVariantesProducto == "1" → se pueden administrar productos con variantes (medidas y/o
+    /// colores) y el catálogo agrupa cada producto con variantes en una sola ficha. Cualquier otro valor (no
+    /// existe, NULL, 0, otro) → solo productos simples (comportamiento histórico, sin tocar las tablas de variantes).
+    /// </summary>
+    Task<bool> HabilitarVariantesProductoAsync();
     /// <summary>ecommerce/CarruselPromociones == "1" → se muestra el carrusel de promociones en Inicio.</summary>
     Task<bool> MostrarCarruselPromocionesAsync();
     /// <summary>

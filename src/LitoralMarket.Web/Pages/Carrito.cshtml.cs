@@ -18,7 +18,11 @@ public class CarritoModel : PageModel
 
     public List<CarritoItemDto> Items         { get; private set; } = new();
     public List<string>         Eliminados    { get; private set; } = new();
+    /// <summary>Líneas cuya cantidad se redujo al stock disponible (solo con ecommerce/LimitarCantidadPorStock = 1).</summary>
+    public List<string>         Ajustados     { get; private set; } = new();
     public decimal              Total         { get; private set; }
+    /// <summary>Lo que se deja de cobrar por promociones (solo con promociones/descuentos = 1; apagado es 0).</summary>
+    public decimal              Ahorro        { get; private set; }
     public bool                 PreciosSinIva { get; private set; }
 
     private async Task<int> ObtenerPedidoIdAsync()
@@ -64,12 +68,15 @@ public class CarritoModel : PageModel
         var pedidoId = await ObtenerPedidoIdAsync();
 
         // Sincronizar: refresca precios/costos y elimina sin stock (ya persiste el total)
-        Eliminados = await _carrito.SincronizarCarritoAsync(pedidoId);
+        var sync = await _carrito.SincronizarCarritoAsync(pedidoId);
+        Eliminados = sync.Eliminados;
+        Ajustados  = sync.Ajustados;
 
         Items = await _carrito.ObtenerItemsAsync(pedidoId);
         // El total se calcula en memoria desde los items ya cargados: es la misma
         // suma de subtotales que el sync acaba de persistir, sin round-trips extra.
-        Total = Items.Sum(i => i.Subtotal);
+        Total  = Items.Sum(i => i.Subtotal);
+        Ahorro = Items.Sum(i => i.PromoAhorro);
         ViewData["CarritoCount"] = Items.Count;
 
         // Solo visualización: no afecta precios/cálculos, solo si se muestra el aviso.

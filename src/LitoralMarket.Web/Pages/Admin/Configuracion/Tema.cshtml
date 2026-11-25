@@ -1,5 +1,8 @@
 @page
 @model LitoralMarket.Web.Pages.Admin.Configuracion.TemaModel
+@functions {
+    static string PromocionDefaultHex() => TemaModel.PromocionDefault;
+}
 @{
     ViewData["Title"] = "Temas visuales";
 
@@ -41,6 +44,21 @@
         <div class="alert alert-info d-flex align-items-center gap-2 mb-4" role="alert">
             <i class="bi bi-arrow-counterclockwise"></i>
             Colores restaurados. Cada tema vuelve a usar su paleta original.
+        </div>
+    }
+
+    @if (TempData["AparienciaGuardada"] is true)
+    {
+        <div class="alert alert-success d-flex align-items-center gap-2 mb-4" role="alert">
+            <i class="bi bi-check-circle-fill"></i>
+            Apariencia guardada. Se aplica a toda la tienda pública.
+        </div>
+    }
+    @if (TempData["AparienciaRestaurada"] is true)
+    {
+        <div class="alert alert-info d-flex align-items-center gap-2 mb-4" role="alert">
+            <i class="bi bi-arrow-counterclockwise"></i>
+            Apariencia restaurada: la tienda vuelve a sus tipografías y colores originales.
         </div>
     }
 
@@ -116,6 +134,149 @@
         </div>
     </div>
 
+    <!-- ═══ APARIENCIA DE LA TIENDA ═══ -->
+    <div class="card shadow-sm mb-4" id="card-apariencia">
+        <div class="card-body p-4">
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <i class="bi bi-brush-fill text-success"></i>
+                <span class="fw-bold">Apariencia de la tienda</span>
+                @if (Model.AparienciaCustom)
+                {
+                    <span class="badge bg-success ms-2">Personalizada</span>
+                }
+                else
+                {
+                    <span class="badge bg-secondary ms-2">Por defecto</span>
+                }
+            </div>
+            <p class="text-muted small mb-4">
+                Tipografías y colores de la tienda pública. El <strong>color del texto se calcula solo</strong> según el
+                fondo (claro u oscuro) para que siempre se lea bien. Lo que no personalices conserva la apariencia original.
+                Los colores primario y de acento se eligen en la tarjeta de arriba y también se ven en esta vista previa.
+            </p>
+
+            <div class="row g-4">
+                <div class="col-12 col-lg-6">
+                    <form method="post" asp-page-handler="Apariencia" id="form-apariencia">
+
+                        <div class="tv-seccion">Tipografía</div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold mb-1" for="tv-fuente-titulos">Fuente de títulos</label>
+                            <select class="form-select form-select-sm" name="fuenteTitulos" id="tv-fuente-titulos">
+                                <option value="" data-familia="">Predeterminada del sitio</option>
+                                @foreach (var f in Model.FuentesTitulos)
+                                {
+                                    <option value="@f.Clave" data-familia="@f.Familia" data-paquete="@f.Paquete"
+                                            selected="@(Model.FuenteTitulos == f.Clave)">@f.Nombre — @f.Estilo</option>
+                                }
+                            </select>
+                            <div class="form-text">Títulos, encabezados, nombres de productos y elementos destacados.</div>
+                        </div>
+                        <div class="mb-4">
+                            <label class="form-label small fw-semibold mb-1" for="tv-fuente-texto">Fuente del texto</label>
+                            <select class="form-select form-select-sm" name="fuenteTexto" id="tv-fuente-texto">
+                                <option value="" data-familia="">Predeterminada del sitio</option>
+                                @foreach (var f in Model.FuentesTexto)
+                                {
+                                    <option value="@f.Clave" data-familia="@f.Familia" data-paquete="@f.Paquete"
+                                            selected="@(Model.FuenteTexto == f.Clave)">@f.Nombre — @f.Estilo</option>
+                                }
+                            </select>
+                            <div class="form-text">Párrafos, descripciones, formularios y textos generales.</div>
+                        </div>
+
+                        <div class="tv-seccion">Colores</div>
+
+                        <div class="tv-campo mb-3">
+                            <div class="form-check form-switch mb-1">
+                                <input class="form-check-input tv-usar" type="checkbox" role="switch" id="usar-navegacion" data-campo="navegacion"
+                                       checked="@(Model.ColorNavegacion is not null)" />
+                                <label class="form-check-label small fw-semibold" for="usar-navegacion">Menú lateral y barra superior</label>
+                            </div>
+                            <div class="input-group input-group-sm">
+                                <input type="color" class="form-control form-control-color" name="navegacion" id="tv-navegacion"
+                                       value="@(Model.ColorNavegacion ?? Model.NavegacionDefault)" disabled="@(Model.ColorNavegacion is null)" style="max-width:52px" title="Color de la barra y el menú" />
+                                <input type="text" class="form-control text-uppercase" id="tv-navegacion-hex" maxlength="7" spellcheck="false"
+                                       value="@(Model.ColorNavegacion ?? Model.NavegacionDefault)" disabled="@(Model.ColorNavegacion is null)" aria-label="Hex barra y menú" />
+                            </div>
+                            <div class="form-text">Fondo de ambos (y del pie de página). Sin personalizar, se usa el primario oscurecido.</div>
+                        </div>
+
+                        <div class="tv-campo mb-3">
+                            <div class="form-check form-switch mb-1">
+                                <input class="form-check-input tv-usar" type="checkbox" role="switch" id="usar-promocion" data-campo="promocion"
+                                       checked="@(Model.ColorPromocion is not null)" />
+                                <label class="form-check-label small fw-semibold" for="usar-promocion">Color de promoción</label>
+                            </div>
+                            <div class="input-group input-group-sm">
+                                <input type="color" class="form-control form-control-color" name="promocion" id="tv-promocion"
+                                       value="@(Model.ColorPromocion ?? PromocionDefaultHex())" disabled="@(Model.ColorPromocion is null)" style="max-width:52px" title="Color de promoción" />
+                                <input type="text" class="form-control text-uppercase" id="tv-promocion-hex" maxlength="7" spellcheck="false"
+                                       value="@(Model.ColorPromocion ?? PromocionDefaultHex())" disabled="@(Model.ColorPromocion is null)" aria-label="Hex promoción" />
+                            </div>
+                            <div class="form-text">Etiquetas y distintivos de ofertas («20% OFF», «Llevá 3, pagá 2», «PROMO»).</div>
+                        </div>
+
+                        <div class="tv-campo mb-3">
+                            <div class="form-check form-switch mb-1">
+                                <input class="form-check-input tv-usar" type="checkbox" role="switch" id="usar-fondo" data-campo="fondo"
+                                       checked="@(Model.ColorFondo is not null)" />
+                                <label class="form-check-label small fw-semibold" for="usar-fondo">Fondo de página</label>
+                            </div>
+                            <div class="input-group input-group-sm">
+                                <input type="color" class="form-control form-control-color" name="fondo" id="tv-fondo"
+                                       value="@(Model.ColorFondo ?? TemaModel.FondoDefault)" disabled="@(Model.ColorFondo is null)" style="max-width:52px" title="Fondo de página" />
+                                <input type="text" class="form-control text-uppercase" id="tv-fondo-hex" maxlength="7" spellcheck="false"
+                                       value="@(Model.ColorFondo ?? TemaModel.FondoDefault)" disabled="@(Model.ColorFondo is null)" aria-label="Hex fondo" />
+                            </div>
+                            <div class="form-text">Se aplica en el modo claro (el oscuro y el de alto contraste conservan su fondo). Con un fondo oscuro, el texto y las tarjetas se adaptan solos.</div>
+                        </div>
+
+                        <div id="tv-avisos" class="small mb-3" aria-live="polite"></div>
+
+                        <div class="d-flex flex-wrap gap-2">
+                            <button type="submit" class="btn btn-success btn-sm"><i class="bi bi-check-lg me-1"></i>Guardar apariencia</button>
+                            <button type="submit" class="btn btn-outline-secondary btn-sm" asp-page-handler="RestaurarApariencia" formnovalidate>
+                                <i class="bi bi-arrow-counterclockwise me-1"></i>Restaurar original
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Vista previa en vivo (no guarda nada) -->
+                <div class="col-12 col-lg-6">
+                    <div class="tv-seccion">Vista previa</div>
+                    <div id="tv-prev" class="tv-prev" aria-label="Vista previa de la tienda">
+                        <div class="tv-nav">
+                            <span class="tv-brand tv-titulo">TU JOYERÍA</span>
+                            <span class="tv-buscar"></span>
+                            <span class="tv-btn-acento">Mis pedidos</span>
+                        </div>
+                        <div class="tv-cuerpo">
+                            <div class="tv-lateral">
+                                <div class="tv-item">Anillos</div>
+                                <div class="tv-item tv-activo">Pulseras</div>
+                                <div class="tv-item">Relojes</div>
+                            </div>
+                            <div class="tv-contenido">
+                                <div class="tv-h tv-titulo">Colección Oro 18K</div>
+                                <div class="tv-p">Piezas únicas para cada ocasión. Envíos a todo el país.</div>
+                                <div class="tv-tarjeta">
+                                    <span class="tv-badge tv-titulo">20% OFF</span>
+                                    <div class="tv-nombre tv-titulo">Pulsera Oro 18 K</div>
+                                    <div class="tv-precio">$25.000,00</div>
+                                    <div class="tv-cond"><span class="tv-cond-ico">&#9432;</span> Llevá 3, pagá 2</div>
+                                    <span class="tv-boton">Agregar</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-text mt-2">Muestra la barra, el menú, una tarjeta con promoción y los textos con la configuración elegida, antes de guardar.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <h6 class="fw-bold text-muted mb-3">
         <i class="bi bi-brightness-high me-1"></i>Modo de visualización
     </h6>
@@ -185,6 +346,31 @@
 </div>
 
 @section Scripts {
+<style>
+    .tv-seccion { font-size:.68rem; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--text-secondary,#6b7280);
+        border-bottom:1px solid var(--border-ui,#e5e7eb); padding-bottom:3px; margin-bottom:10px; }
+    /* Vista previa: todo se dibuja con variables locales que actualiza el script (no toca el resto de la página) */
+    .tv-prev { border:1px solid var(--border-ui,#d0d7e8); border-radius:10px; overflow:hidden; font-family:var(--tv-fuente-x); font-size:12px; background:var(--tv-fondo); color:var(--tv-texto); }
+    .tv-titulo { font-family:var(--tv-fuente-t); }
+    .tv-nav { display:flex; align-items:center; gap:8px; padding:8px 10px; background:linear-gradient(160deg,var(--tv-nav-osc),var(--tv-nav)); color:var(--tv-nav-fg); }
+    .tv-brand { font-weight:700; letter-spacing:.4px; font-size:12px; white-space:nowrap; }
+    .tv-buscar { flex:1; height:14px; border-radius:8px; background:rgba(255,255,255,.92); min-width:20px; }
+    .tv-btn-acento { background:var(--tv-acento); color:var(--tv-acento-texto); border-radius:6px; padding:2px 8px; font-weight:700; font-size:11px; white-space:nowrap; }
+    .tv-cuerpo { display:flex; min-height:190px; }
+    .tv-lateral { width:34%; max-width:130px; padding:8px 0; background:linear-gradient(180deg,var(--tv-nav),var(--tv-nav-osc)); color:var(--tv-nav-fg); }
+    .tv-item { padding:5px 10px; font-weight:600; font-size:11px; opacity:.8; border-left:3px solid transparent; }
+    .tv-item.tv-activo { opacity:1; color:var(--tv-activo); border-left-color:var(--tv-acento); }
+    .tv-contenido { flex:1; padding:10px; min-width:0; }
+    .tv-h { font-size:15px; font-weight:700; margin-bottom:2px; }
+    .tv-p { color:var(--tv-texto2); margin-bottom:8px; line-height:1.3; }
+    .tv-tarjeta { position:relative; max-width:170px; background:var(--tv-superficie); border:1px solid var(--tv-borde); border-radius:10px; padding:8px; }
+    .tv-badge { position:absolute; top:6px; right:6px; background:var(--tv-promo); color:var(--tv-promo-texto); border-radius:5px; padding:1px 6px; font-size:10px; font-weight:800; }
+    .tv-nombre { font-size:12px; font-weight:700; margin:22px 0 2px; }
+    .tv-precio { color:var(--tv-acento-fg); font-weight:800; font-size:14px; }
+    .tv-cond { color:var(--tv-promo-fg); font-size:10px; margin:3px 0 6px; }
+    .tv-boton { display:inline-block; background:var(--tv-primario); color:var(--tv-primario-texto); border-radius:6px; padding:2px 10px; font-weight:700; font-size:11px; }
+    @@media (max-width: 575.98px) { .tv-cuerpo { min-height:170px; } .tv-lateral { width:38%; } }
+</style>
 <script>
 (function () {
     var HEX = /^#[0-9a-fA-F]{6}$/;
@@ -219,5 +405,156 @@
     bind('cp-primario', 'cp-primario-hex', 'cp-prev-primario');
     bind('cp-acento',   'cp-acento-hex',   'cp-prev-acento');
 }());
+</script>
+<script>
+/* Apariencia de la tienda: vista previa en vivo. Replica EXACTAMENTE las reglas de TemaVisualHelper (C#): el color del texto
+   se calcula solo (WCAG) y nunca se configura a mano. El servidor vuelve a calcular todo al mostrar la tienda. */
+(function () {
+    'use strict';
+    var HEX = /^#[0-9a-fA-F]{6}$/;
+    var TEXTO_OSCURO = '#12201A', TEXTO_CLARO = '#FFFFFF';
+    var FONTSOURCE = '@Model.FontsourceVersion';
+    var NAV_DEFECTO_PRIMARIO_PCT = 0.40;
+    var $ = function (id) { return document.getElementById(id); };
+
+    // ── color: luminancia / contraste ───────────────────────────────────────
+    function rgb(h) { return [parseInt(h.substr(1, 2), 16), parseInt(h.substr(3, 2), 16), parseInt(h.substr(5, 2), 16)]; }
+    function lum(h) {
+        var c = rgb(h).map(function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+        return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    }
+    function contraste(a, b) { var x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+    function textoContrastante(h) { var l = lum(h); return (l + 0.05) / 0.05 >= 1.05 / (l + 0.05) ? TEXTO_OSCURO : TEXTO_CLARO; }
+    function esOscuro(h) { return textoContrastante(h) === TEXTO_CLARO; }
+    function hex2(n) { var s = n.toString(16).toUpperCase(); return s.length < 2 ? '0' + s : s; }
+    function mezclar(h, con, p) {
+        var a = rgb(h), b = rgb(con);
+        return '#' + [0, 1, 2].map(function (i) { return hex2(Math.round(a[i] * (1 - p) + b[i] * p)); }).join('');
+    }
+    function textoSobre(a, b) {
+        function peor(t) { return Math.min(contraste(a, t), contraste(b, t)); }
+        return peor(TEXTO_CLARO) >= peor(TEXTO_OSCURO) ? TEXTO_CLARO : TEXTO_OSCURO;
+    }
+    function aclararHastaLeerse(h, fondo) {
+        for (var i = 0; i <= 18; i++) {
+            var c = i === 0 ? h : mezclar(h, '#FFFFFF', i * 0.05);
+            if (contraste(c, fondo) >= 4.5) return c;
+        }
+        return mezclar(h, '#FFFFFF', 0.9);
+    }
+    function oscurecerHastaLeerse(h) {
+        for (var i = 0; i <= 18; i++) {                       // pasos de 5 % hacia negro, igual que el servidor
+            var c = i === 0 ? h : mezclar(h, '#000000', i * 0.05);
+            if (contraste(c, '#FFFFFF') >= 4.5) return c;
+        }
+        return mezclar(h, '#000000', 0.9);
+    }
+    function colorActivo(acento, nav, navOsc, navFg) {
+        var cand = acento ? mezclar(acento, '#FFFFFF', 0.38) : '#E8C87A';
+        function sirve(c) { return contraste(c, nav) >= 3 && contraste(c, navOsc) >= 3; }
+        if (sirve(cand)) return cand;
+        var base = acento || '#C9A84C', opciones = [mezclar(base, '#000000', 0.45), mezclar(base, '#FFFFFF', 0.6), base];
+        for (var i = 0; i < opciones.length; i++) if (sirve(opciones[i])) return opciones[i];
+        return navFg;
+    }
+
+    // ── campos ──────────────────────────────────────────────────────────────
+    function valor(id) { var v = ($(id).value || '').trim().toUpperCase(); if (v[0] !== '#') v = '#' + v; return HEX.test(v) ? v : null; }
+    function usa(campo) { return $('usar-' + campo).checked; }
+
+    function cargarFuente(paquete) {
+        if (!paquete || document.getElementById('lnk-' + paquete)) return;
+        [400, 700].forEach(function (w) {
+            var l = document.createElement('link');
+            l.rel = 'stylesheet'; l.id = (w === 400 ? 'lnk-' : 'lnk7-') + paquete;
+            l.href = 'https://cdn.jsdelivr.net/npm/@@fontsource/' + paquete + '@@' + FONTSOURCE + '/' + w + '.css';
+            document.head.appendChild(l);
+        });
+    }
+    function familia(selId, porDefecto) {
+        var o = $(selId).selectedOptions[0];
+        if (o && o.dataset.paquete) cargarFuente(o.dataset.paquete);
+        return (o && o.dataset.familia) ? o.dataset.familia : porDefecto;
+    }
+
+    function actualizar() {
+        var prev = $('tv-prev'); if (!prev) return;
+        var primario = valor('cp-primario') || '#1DB062';
+        var acento   = valor('cp-acento')   || '#C9A84C';
+        var avisos = [];
+
+        // Barra superior y menu lateral
+        var nav = usa('navegacion') ? (valor('tv-navegacion') || mezclar(primario, '#000000', NAV_DEFECTO_PRIMARIO_PCT)) : mezclar(primario, '#000000', NAV_DEFECTO_PRIMARIO_PCT);
+        var navOsc, navFg;
+        if (usa('navegacion')) {
+            navOsc = mezclar(nav, '#000000', esOscuro(nav) ? 0.22 : 0.08);
+            navFg = textoSobre(nav, navOsc);
+        } else {
+            // sin personalizar: el degradado original (primario al 80 % y 60 % hacia negro) con texto blanco
+            nav = mezclar(primario, '#000000', 0.20); navOsc = mezclar(primario, '#000000', 0.40); navFg = TEXTO_CLARO;
+        }
+        var activo = usa('navegacion') ? colorActivo(acento, nav, navOsc, navFg) : mezclar(acento, '#FFFFFF', 0.38);
+        if (usa('navegacion') && contraste(navFg, nav) < 4.5)
+            avisos.push('El texto de la barra no alcanza un contraste cómodo con ese color: probá uno más claro u oscuro.');
+
+        // Promocion
+        var promo = usa('promocion') ? (valor('tv-promocion') || '#C62828') : '#C62828';
+        var promoTexto = usa('promocion') ? textoContrastante(promo) : '#FFFFFF';
+        var promoFg = usa('promocion') ? oscurecerHastaLeerse(promo) : '#C62828';
+
+        // Fondo de pagina y texto automatico
+        var fondo = usa('fondo') ? (valor('tv-fondo') || '#F6FAF7') : '#F6FAF7';
+        var texto = '#374151', texto2 = '#6B7280', superficie = '#FFFFFF', borde = '#E5E7EB';
+        if (usa('fondo')) {
+            if (esOscuro(fondo)) {
+                texto = '#F3F4F6'; texto2 = '#9CA3AF'; superficie = mezclar(fondo, '#FFFFFF', 0.10); borde = mezclar(fondo, '#FFFFFF', 0.25);
+                promoFg = usa('promocion') ? mezclar(promo, '#FFFFFF', 0.45) : '#FF8A80';
+            } else if (contraste(fondo, '#374151') < 4.5) { texto = '#111827'; texto2 = '#374151'; }
+        }
+
+        var st = prev.style;
+        st.setProperty('--tv-nav', nav); st.setProperty('--tv-nav-osc', navOsc); st.setProperty('--tv-nav-fg', navFg); st.setProperty('--tv-activo', activo);
+        st.setProperty('--tv-acento', acento); st.setProperty('--tv-acento-texto', textoContrastante(acento));
+        // El precio usa el color primario como texto; con fondo oscuro se aclara lo justo para leerse sobre las tarjetas.
+        var primarioTexto = (usa('fondo') && esOscuro(fondo)) ? aclararHastaLeerse(primario, superficie) : primario;
+        st.setProperty('--tv-acento-fg', primarioTexto);
+        st.setProperty('--tv-primario', primarioTexto); st.setProperty('--tv-primario-texto', textoContrastante(primarioTexto));
+        st.setProperty('--tv-promo', promo); st.setProperty('--tv-promo-texto', promoTexto); st.setProperty('--tv-promo-fg', promoFg);
+        st.setProperty('--tv-fondo', fondo); st.setProperty('--tv-texto', texto); st.setProperty('--tv-texto2', texto2);
+        st.setProperty('--tv-superficie', superficie); st.setProperty('--tv-borde', borde);
+        st.setProperty('--tv-fuente-t', familia('tv-fuente-titulos', "'Segoe UI', system-ui, sans-serif"));
+        st.setProperty('--tv-fuente-x', familia('tv-fuente-texto', "'Segoe UI', system-ui, sans-serif"));
+
+        $('tv-avisos').innerHTML = avisos.map(function (a) { return '<div class="text-warning"><i class="bi bi-exclamation-triangle me-1"></i>' + a + '</div>'; }).join('');
+    }
+
+    // ── eventos ─────────────────────────────────────────────────────────────
+    ['navegacion', 'promocion', 'fondo'].forEach(function (c) {
+        var color = $('tv-' + c), hex = $('tv-' + c + '-hex'), usar = $('usar-' + c);
+        usar.addEventListener('change', function () {
+            color.disabled = hex.disabled = !usar.checked;
+            actualizar();
+        });
+        color.addEventListener('input', function () { hex.value = color.value.toUpperCase(); actualizar(); });
+        hex.addEventListener('input', function () {
+            var v = hex.value.trim(); if (v[0] !== '#') v = '#' + v;
+            if (HEX.test(v)) { color.value = v; hex.classList.remove('is-invalid'); actualizar(); } else hex.classList.add('is-invalid');
+        });
+    });
+    ['tv-fuente-titulos', 'tv-fuente-texto', 'cp-primario', 'cp-acento', 'cp-primario-hex', 'cp-acento-hex'].forEach(function (id) {
+        $(id).addEventListener(id.indexOf('tv-fuente') === 0 ? 'change' : 'input', actualizar);
+    });
+    // No guardar un color invalido: se evita enviar el formulario con un hexadecimal a medio escribir.
+    $('form-apariencia').addEventListener('submit', function (e) {
+        if (e.submitter && e.submitter.hasAttribute('formnovalidate')) return;
+        var malos = ['navegacion', 'promocion', 'fondo'].filter(function (c) { return usa(c) && !valor('tv-' + c + '-hex'); });
+        if (malos.length) { e.preventDefault(); $('tv-avisos').innerHTML = '<div class="text-danger">Revisá los colores: tienen que ser hexadecimales de 6 dígitos (#RRGGBB).</div>'; }
+    });
+
+    // expone la logica para pruebas automaticas
+    window.TemaVisualJs = { aclararHastaLeerse: aclararHastaLeerse, oscurecerHastaLeerse: oscurecerHastaLeerse, lum: lum, contraste: contraste, textoContrastante: textoContrastante, esOscuro: esOscuro, mezclar: mezclar, textoSobre: textoSobre, colorActivo: colorActivo };
+    actualizar();
+}());
+
 </script>
 }

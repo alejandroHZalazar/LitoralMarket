@@ -37,8 +37,22 @@ public class ProductosInicioService : IProductosInicioService
                 Baja  = p.Baja == true
             }).ToListAsync();
 
-        return filas.Select(f =>
+        // Variantes de producto (ecommerce/HabilitarVariantesProducto = 1): el stock de una ficha es el de sus variantes
+        // activas (la ficha tiene 0 propio). Una consulta, solo con el parametro encendido.
+        var stockFichas = new Dictionary<int, decimal>();
+        if (filas.Count > 0 && await _parametros.HabilitarVariantesProductoAsync())
         {
+            var ids = filas.Select(f => f.Id).ToList();
+            stockFichas = await _db.ProductosVariantes.AsNoTracking()
+                .Where(x => ids.Contains(x.FkPrincipal) && x.Activa && x.Producto!.Baja != true)
+                .GroupBy(x => x.FkPrincipal)
+                .Select(g => new { Id = g.Key, Stock = g.Sum(x => x.Producto!.Stock != null ? (x.Producto.Stock.Cantidad ?? 0m) : 0m) })
+                .ToDictionaryAsync(x => x.Id, x => x.Stock);
+        }
+
+        return filas.Select(f0 =>
+        {
+            var f = stockFichas.TryGetValue(f0.Id, out var stockFicha) ? new { f0.Id, f0.CodProveedor, f0.CodBarras, f0.Descripcion, f0.Orden, Stock = stockFicha, f0.Baja } : f0;
             var sinStock = !mostrarSinStock && f.Stock <= 0;
             return new ProductoInicioItemDto
             {

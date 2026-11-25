@@ -11,14 +11,22 @@ document.addEventListener('click', function (e) {
     const min     = parseFloat(input.min)  || step;
     const max     = input.max ? parseFloat(input.max) : Infinity;
     let   val     = parseFloat(input.value) || min;
+    const previo  = val;
+    let   avisado = false;
 
     if (btn.classList.contains('btn-menos')) {
         val = Math.max(min, parseFloat((val - step).toFixed(4)));
     } else {
-        val = Math.min(max, parseFloat((val + step).toFixed(4)));
+        const siguiente = parseFloat((val + step).toFixed(4));
+        // Tope por stock (el input trae max solo con ecommerce/LimitarCantidadPorStock = 1)
+        if (siguiente > max) { avisarMaximoCantidad(max); avisado = true; }
+        val = Math.min(max, siguiente);
     }
 
     input.value = step < 1 ? val.toFixed(2) : val.toString();
+
+    // Ya estaba en el máximo: no hay nada que cambiar ni guardar (y no se recarga el carrito antes de ver el aviso).
+    if (avisado && val === previo) return;
 
     // Dispara 'change' para que el delegate de abajo (validación + auto-guardado)
     // reaccione igual que si el valor lo hubiese tipeado el usuario — la asignación
@@ -40,16 +48,29 @@ document.addEventListener('change', function (e) {
     let val    = parseFloat(input.value);
 
     if (isNaN(val) || val < min) val = min;
-    if (val > max) val = max;
+    let recortado = false;
+    if (val > max) { val = max; recortado = true; avisarMaximoCantidad(max); }
 
     input.value = step < 1 ? val.toFixed(2) : Math.round(val / step) * step;
 
     // Carrito: la cantidad ya está en el pedido, cada cambio se persiste solo.
     // Catálogo/detalle: no llevan data-autosave, el envío es explícito (botón "Agregar").
     if (input.dataset.autosave === 'true') {
-        input.form?.requestSubmit ? input.form.requestSubmit() : input.form?.submit();
+        const guardar = function () {
+            input.form?.requestSubmit ? input.form.requestSubmit() : input.form?.submit();
+        };
+        // Si se recortó al máximo, se espera un instante para que el cliente alcance a leer el aviso antes de recargar.
+        recortado ? setTimeout(guardar, 1400) : guardar();
     }
 });
+
+// Aviso cuando la cantidad se recorta al tope por stock. Solo actúa si el input tiene max, es decir con
+// ecommerce/LimitarCantidadPorStock = 1; sin max (Infinity) no hace nada.
+function avisarMaximoCantidad(max) {
+    if (!isFinite(max)) return;
+    const texto = Number.isInteger(max) ? String(max) : max.toFixed(2).replace(/\.?0+$/, '');
+    mostrarToast('Cantidad máxima disponible: ' + texto, 'error');
+}
 
 
 /* =============================================

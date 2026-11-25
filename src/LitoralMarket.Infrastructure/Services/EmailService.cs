@@ -251,6 +251,114 @@ public class EmailService : IEmailService
     }
 
     // ──────────────────────────────────────────────────────────────
+    // Instrucciones de pago por transferencia (destino, importe exacto y plazo)
+    // Usa el mismo interruptor que el link de MercadoPago: ecommerce/enviarMailMercadoPago.
+    // ──────────────────────────────────────────────────────────────
+    public async Task<bool> EnviarInstruccionesTransferenciaAsync(int pedidoId, int cobroId)
+    {
+        if (!await MailHabilitado("ecommerce", "enviarMailMercadoPago"))
+        {
+            _logger.LogWarning(
+                "EnviarInstruccionesTransferenciaAsync: parámetro ecommerce/enviarMailMercadoPago no está en '1' — email no enviado para pedido #{Id}",
+                pedidoId);
+            return false;
+        }
+
+        var pedido = await _db.Pedidos
+            .Include(p => p.Cliente)
+            .FirstOrDefaultAsync(p => p.Id == pedidoId);
+        if (pedido is null)
+        {
+            _logger.LogWarning("EnviarInstruccionesTransferenciaAsync: pedido #{Id} no encontrado en BD", pedidoId);
+            return false;
+        }
+
+        var emailDestino = ObtenerEmailCliente(pedido);
+        if (string.IsNullOrWhiteSpace(emailDestino))
+        {
+            _logger.LogWarning("EnviarInstruccionesTransferenciaAsync: pedido #{Id} sin email de cliente", pedidoId);
+            return false;
+        }
+
+        var cobro = await _db.CobrosTransferencia.AsNoTracking()
+            .Include(t => t.Cobro)
+            .FirstOrDefaultAsync(t => t.FkCobro == cobroId);
+        if (cobro?.Cobro is null)
+        {
+            _logger.LogWarning("EnviarInstruccionesTransferenciaAsync: cobro #{CobroId} sin importe de transferencia", cobroId);
+            return false;
+        }
+
+        var empresa = await _params.GetValorAsync("empresa", "nombre") ?? "LitoralMarket";
+        var alias   = await _params.GetValorAsync("mercadopago", "transferenciaAlias");
+        var cvu     = await _params.GetValorAsync("mercadopago", "transferenciaCvu");
+        var titular = await _params.GetValorAsync("mercadopago", "transferenciaTitular");
+
+        var builder = new BodyBuilder
+        {
+            HtmlBody = HtmlInstruccionesTransferencia(
+                pedidoId, ObtenerNombreCliente(pedido), empresa,
+                cobro.MontoTransferencia, pedido.Total ?? cobro.Cobro.Monto, cobro.Vencimiento,
+                alias, cvu, titular)
+        };
+
+        return await EnviarAsync(emailDestino, $"Cómo pagar tu pedido #{pedidoId:D6} por transferencia — {empresa}", builder);
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // Aviso al administrador: transferencias recibidas que no se pudieron asociar solas
+    // ──────────────────────────────────────────────────────────────
+    public async Task EnviarAlertaTransferenciasAdminAsync(IReadOnlyList<string> detalles)
+    {
+        if (detalles.Count == 0) return;
+        if (!await MailHabilitado("ecommerce", "enviarMailAdmin")) return;
+
+        var emailsAdmin = await ObtenerEmailsAdminAsync();
+        if (emailsAdmin.Count == 0)
+        {
+            _logger.LogWarning("EnviarAlertaTransferenciasAdminAsync: no hay email de admin válido.");
+            return;
+        }
+
+        var empresa = await _params.GetValorAsync("empresa", "nombre") ?? "LitoralMarket";
+        var builder = new BodyBuilder { HtmlBody = HtmlAlertaTransferencias(detalles, empresa) };
+        await EnviarAsync(emailsAdmin, $"💸 {detalles.Count} transferencia(s) para revisar — {empresa}", builder);
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // Aviso al administrador: pedido pagado que no se pudo confirmar (falló la venta)
+    // Se envía siempre que haya destinatarios: es un problema operativo, no una notificación de rutina.
+    // ──────────────────────────────────────────────────────────────
+    public async Task EnviarAlertaVentaFallidaAsync(int pedidoId, string motivo)
+    {
+        var emailsAdmin = await ObtenerEmailsAdminAsync();
+        if (emailsAdmin.Count == 0)
+        {
+            _logger.LogWarning("EnviarAlertaVentaFallidaAsync: no hay email de admin válido (pedido #{Id}).", pedidoId);
+            return;
+        }
+
+        var empresa = await _params.GetValorAsync("empresa", "nombre") ?? "LitoralMarket";
+        var cuerpo = $"""
+            <h2 style="margin:0 0 8px;color:#c0392b;font-size:18px;">Pedido pagado sin confirmar</h2>
+            <p style="margin:0 0 12px;color:#444;font-size:14px;">
+              El pedido <strong>#{pedidoId:D6}</strong> recibió el pago, pero <strong>no se pudo registrar la venta</strong>
+              y por eso no quedó confirmado (no se descontó stock ni se generó la venta).
+            </p>
+            <p style="margin:0 0 12px;color:#444;font-size:14px;">
+              <strong>Motivo:</strong> {System.Net.WebUtility.HtmlEncode(motivo)}
+            </p>
+            <p style="margin:0;color:#444;font-size:14px;">
+              Corregí la causa y volvé a confirmar el pedido desde <strong>Admin &gt; Pedidos</strong>.
+              Reintentar es seguro: no genera ventas ni descuentos de stock duplicados.
+            </p>
+            """;
+
+        var builder = new BodyBuilder { HtmlBody = HtmlBase($"Pedido #{pedidoId:D6} sin confirmar", empresa, cuerpo) };
+        await EnviarAsync(emailsAdmin, $"⚠️ Pedido #{pedidoId:D6} pagado sin confirmar — {empresa}", builder);
+    }
+
+    // ──────────────────────────────────────────────────────────────
     // Notificación interna al administrador
     // ──────────────────────────────────────────────────────────────
     public async Task EnviarNotificacionAdminAsync(int pedidoId)
@@ -955,6 +1063,75 @@ public class EmailService : IEmailService
             """;
 
         return HtmlBase($"Link de pago — Pedido #{pedidoId:D6}", empresa, cuerpo);
+    }
+
+    private static string HtmlInstruccionesTransferencia(
+        int pedidoId, string nombreCliente, string empresa,
+        decimal montoTransferir, decimal total, DateTime? vencimiento,
+        string? alias, string? cvu, string? titular)
+    {
+        static string Enc(string? v) => System.Net.WebUtility.HtmlEncode(v?.Trim() ?? string.Empty);
+
+        static string Fila(string etiqueta, string valor) =>
+            "<tr>" +
+            $"<td style='padding:8px;background:#f4f6f8;font-weight:bold;width:35%;'>{etiqueta}</td>" +
+            $"<td style='padding:8px;font-family:Consolas,monospace;'>{valor}</td></tr>";
+
+        var filas =
+            (string.IsNullOrWhiteSpace(titular) ? "" : Fila("Titular", Enc(titular))) +
+            (string.IsNullOrWhiteSpace(alias)   ? "" : Fila("Alias",   Enc(alias))) +
+            (string.IsNullOrWhiteSpace(cvu)     ? "" : Fila("CVU",     Enc(cvu)));
+
+        var plazo = vencimiento.HasValue
+            ? $"<p style='margin:16px 0 0;color:#666;font-size:14px;'>⏰ Tenés tiempo hasta el <strong>{vencimiento:dd/MM/yyyy 'a las' HH:mm} hs.</strong> Pasado ese plazo el pedido se cancela y tendrás que elegir otra forma de pago.</p>"
+            : string.Empty;
+
+        var cuerpo = $"""
+            <h2 style="margin:0 0 8px;color:#1DB862;font-size:20px;">¡Tu pedido está reservado!</h2>
+            <p style="margin:0 0 20px;color:#444;font-size:15px;">
+              Hola <strong>{Enc(nombreCliente)}</strong>, recibimos tu pedido <strong>#{pedidoId:D6}</strong>
+              (total <strong>$ {total:N2}</strong>). Para confirmarlo, hacé una transferencia a esta cuenta de Mercado Pago:
+            </p>
+
+            <table style="width:100%;border-collapse:collapse;font-size:14px;">{filas}</table>
+
+            <div style="text-align:center;background:#eaf7f0;border:2px solid #1DB862;border-radius:8px;padding:18px;margin:22px 0;">
+              <div style="font-size:13px;color:#555;">Transferí exactamente</div>
+              <div style="font-size:30px;font-weight:700;color:#1DB862;">$ {montoTransferir:N2}</div>
+            </div>
+
+            <div style="background:#fff8dc;border:1px solid #c8a000;border-radius:6px;padding:14px 16px;">
+              <p style="margin:0;font-size:13px;color:#7a5000;">
+                ⚠️ <strong>El importe debe ser exactamente ese</strong>, con los centavos: así identificamos tu pago
+                y confirmamos el pedido automáticamente. (Ya incluye un pequeño descuento respecto del total.)
+                Si transferís otro importe, el pedido no se confirma solo y tendrá que revisarlo un administrador.
+              </p>
+            </div>
+            {plazo}
+            <p style="margin:20px 0 0;font-size:13px;color:#888;">
+              Este comprobante no es válido como factura. La compra se efectiviza al recibir la transferencia.
+            </p>
+            """;
+
+        return HtmlBase($"Pagá tu pedido #{pedidoId:D6} por transferencia", empresa, cuerpo);
+    }
+
+    private static string HtmlAlertaTransferencias(IReadOnlyList<string> detalles, string empresa)
+    {
+        var items = string.Concat(detalles.Select(d =>
+            $"<li style='margin:0 0 8px;font-size:13px;color:#444;'>{System.Net.WebUtility.HtmlEncode(d)}</li>"));
+
+        var cuerpo = $"""
+            <h2 style="margin:0 0 8px;color:#c0392b;font-size:18px;">Transferencias para revisar</h2>
+            <p style="margin:0 0 14px;color:#444;font-size:14px;">
+              Llegaron transferencias a la cuenta de Mercado Pago que <strong>no se pudieron asociar solas</strong>
+              a un pedido (ningún pedido se confirmó con ellas). Asignalas o ignoralas en
+              <strong>Admin &gt; Medios de pago</strong>.
+            </p>
+            <ul style="padding-left:18px;margin:0;">{items}</ul>
+            """;
+
+        return HtmlBase("Transferencias para revisar", empresa, cuerpo);
     }
 
     private static string HtmlConfirmacionPedido(

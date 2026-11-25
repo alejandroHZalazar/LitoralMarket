@@ -39,6 +39,22 @@
     </div>
 }
 
+@if (Model.Ajustados.Any())
+{
+    <div class="alert alert-warning d-flex gap-2 align-items-start mb-4">
+        <i class="bi bi-info-circle-fill fs-5 flex-shrink-0 mt-1"></i>
+        <div>
+            <strong>Ajustamos la cantidad de algunos productos al stock disponible:</strong>
+            <ul class="mb-0 mt-1">
+                @foreach (var linea in Model.Ajustados)
+                {
+                    <li>@linea</li>
+                }
+            </ul>
+        </div>
+    </div>
+}
+
 @if (TempData["Error"] is string errorMsg)
 {
     <div class="alert alert-warning d-flex gap-2 align-items-start mb-4">
@@ -85,10 +101,26 @@ else
                                                      alt="@item.Descripcion"
                                                      onerror="this.style.display='none'" />
                                             }
-                                            <span class="fw-semibold small">@item.Descripcion</span>
+                                            <div>
+                                                <span class="fw-semibold small">@item.Descripcion</span>
+                                                @if (item.PromoTexto is not null)
+                                                {
+                                                    <div class="promo-linea"><i class="bi bi-tag-fill me-1" aria-hidden="true"></i>@item.PromoTexto</div>
+                                                }
+                                                @if (item.PromoProxima is not null)
+                                                {
+                                                    <div class="promo-proxima"><i class="bi bi-lightbulb me-1" aria-hidden="true"></i>@item.PromoProxima</div>
+                                                }
+                                            </div>
                                         </div>
                                     </td>
-                                    <td class="text-center">$@item.Precio.ToString("N2")</td>
+                                    <td class="text-center">
+                                        @if (item.PrecioOriginal.HasValue)
+                                        {
+                                            <div class="producto-precio-tachado">$@item.PrecioOriginal.Value.ToString("N2")</div>
+                                        }
+                                        $@item.Precio.ToString("N2")
+                                    </td>
                                     <td>
                                         <!-- Modificar cantidad: mismo control +/- que catálogo/detalle
                                              (unificado en _CantidadStepper); acá se auto-guarda en cada
@@ -99,11 +131,15 @@ else
                                             @Html.AntiForgeryToken()
                                             <input type="hidden" name="lineaId" value="@item.LineaId" />
                                             <partial name="_CantidadStepper"
-                                                     model="@(new CantidadStepperVm(item.Cantidad, item.Fraccionado, item.CantidadMinimaVenta, AutoGuardar: true))" />
+                                                     model="@(new CantidadStepperVm(item.Cantidad, item.Fraccionado, item.CantidadMinimaVenta, AutoGuardar: true, Maximo: item.MaximoPermitido))" />
                                         </form>
                                     </td>
                                     <td class="text-end fw-bold" style="color:var(--verde);">
                                         $@item.Subtotal.ToString("N2")
+                                        @if (item.PromoAhorro > 0)
+                                        {
+                                            <div class="promo-ahorro small fw-semibold">Ahorrás $@item.PromoAhorro.ToString("N2")</div>
+                                        }
                                     </td>
                                     <td class="text-center pe-2">
                                         <!-- Eliminar -->
@@ -145,6 +181,13 @@ else
 
                     <hr class="my-2" />
 
+                    @if (Model.Ahorro > 0)
+                    {
+                        <div class="d-flex justify-content-between small mb-1">
+                            <span class="promo-ahorro"><i class="bi bi-tag-fill me-1" aria-hidden="true"></i>Ahorro por promociones</span>
+                            <span class="promo-ahorro">-$@Model.Ahorro.ToString("N2")</span>
+                        </div>
+                    }
                     <div class="d-flex justify-content-between fs-5 fw-bold">
                         <span>Total (@Model.Items.Count @(Model.Items.Count == 1 ? "ítem" : "ítems"))</span>
                         <span style="color:var(--verde);">$@Model.Total.ToString("N2")</span>

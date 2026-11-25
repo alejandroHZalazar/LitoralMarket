@@ -125,6 +125,11 @@ else
                                     <span class="badge rounded-pill"
                                           style="background:#009EE3;">MercadoPago</span>
                                 }
+                                else if (r.MetodoPago == "transferencia")
+                                {
+                                    <span class="badge rounded-pill"
+                                          style="background:#009EE3;">Transferencia</span>
+                                }
                                 else if (r.MetodoPago == "reembolso")
                                 {
                                     <span class="badge rounded-pill bg-secondary">Pago contra reembolso</span>
@@ -216,7 +221,7 @@ else
                             <p class="text-muted text-center mb-0" style="font-size:.75rem;">
                                 <i class="bi bi-exclamation-triangle me-1 text-warning"></i>
                                 Este comprobante <strong>no es válido como factura</strong>.
-                                @if (r.MetodoPago == "mercadopago")
+                                @if (r.MetodoPago is "mercadopago" or "transferencia")
                                 {
                                     <text>La compra se efectivizará al recibir el pago.</text>
                                 }

@@ -70,11 +70,32 @@ public class PagoEcommerceService : IPagoEcommerceService
     // ─────────────────────────────────────────────────────────────
     // Métodos habilitados
     // ─────────────────────────────────────────────────────────────
-    public async Task<(bool reembolso, bool mercadoPago)> ObtenerMetodosHabilitadosAsync()
+    public async Task<(bool reembolso, bool mercadoPago, bool transferencia)> ObtenerMetodosHabilitadosAsync()
     {
         var reembolso   = await _params.GetValorAsync("ecommerce", "metodoPagoReembolso")   == "1";
         var mercadoPago = await _params.GetValorAsync("ecommerce", "metodoPagoMercadoPago") == "1";
-        return (reembolso, mercadoPago);
+
+        // Transferencia: solo con el flag en '1' Y con un destino cargado (alias o CVU);
+        // sin destino no hay a dónde transferir.
+        var transferencia = false;
+        if (await _params.GetValorAsync("ecommerce", "metodoPagoTransferenciaMP") == "1")
+        {
+            var alias = await _params.GetValorAsync("mercadopago", "transferenciaAlias");
+            var cvu   = await _params.GetValorAsync("mercadopago", "transferenciaCvu");
+            transferencia = !string.IsNullOrWhiteSpace(alias) || !string.IsNullOrWhiteSpace(cvu);
+        }
+
+        return (reembolso, mercadoPago, transferencia);
+    }
+
+    /// <summary>ecommerce/transferenciaVencimientoHoras: entero entre 1 y 168; predeterminado 24.</summary>
+    private async Task<int> GetVencimientoTransferenciaHorasAsync()
+    {
+        var val = await _params.GetValorAsync("ecommerce", "transferenciaVencimientoHoras");
+        return int.TryParse(val?.Trim(), System.Globalization.NumberStyles.None,
+                            System.Globalization.CultureInfo.InvariantCulture, out var h) && h is >= 1 and <= 168
+            ? h
+            : 24;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -92,7 +113,19 @@ public class PagoEcommerceService : IPagoEcommerceService
 
         if (cobro is null) return null;
 
-        return ToDto(cobro);
+        var dto = ToDto(cobro);
+
+        // Los datos propios de la transferencia viven en otra tabla: solo se consulta (y solo existe
+        // necesariamente) cuando el cobro es de ese tipo; el resto de los flujos no la toca.
+        if (cobro.Tipo == "transferencia")
+        {
+            var det = await db.CobrosTransferencia.AsNoTracking()
+                .FirstOrDefaultAsync(t => t.FkCobro == cobro.Id);
+            dto.MontoTransferencia = det?.MontoTransferencia;
+            dto.Vencimiento        = det?.Vencimiento;
+        }
+
+        return dto;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -283,6 +316,222 @@ public class PagoEcommerceService : IPagoEcommerceService
     }
 
     // ─────────────────────────────────────────────────────────────
+    // Transferencia de Mercado Pago — crear cobro con importe único
+    // ─────────────────────────────────────────────────────────────
+    public async Task<ResultadoPagoDto> CrearCobroTransferenciaAsync(int pedidoId)
+    {
+        try
+        {
+            return await CrearCobroTransferenciaCoreAsync(pedidoId);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Típico: se habilitó el flag sin haber corrido sql/create_transferencias_mp.sql (faltan tablas).
+            // El cliente ve un mensaje claro en vez de un 500 y puede elegir otro método.
+            _logger.LogError(ex,
+                "Transferencia: no se pudo crear el cobro del pedido #{Id}. ¿Se corrió sql/create_transferencias_mp.sql?", pedidoId);
+            return Error("No pudimos habilitar el pago por transferencia en este momento. Elegí otro método de pago o intentá más tarde.", pedidoId);
+        }
+    }
+
+    private async Task<ResultadoPagoDto> CrearCobroTransferenciaCoreAsync(int pedidoId)
+    {
+        if (!(await ObtenerMetodosHabilitadosAsync()).transferencia)
+            return Error("El pago por transferencia no está disponible.", pedidoId);
+
+        var pedido = await _db.Pedidos.FirstOrDefaultAsync(p => p.Id == pedidoId);
+        if (pedido is null)
+            return Error("Pedido no encontrado", pedidoId);
+
+        if (pedido.EstadoEcommerce != "pendiente_pago")
+            return Error($"El pedido no está listo para pagar (estado: {pedido.EstadoEcommerce})", pedidoId);
+
+        var total = Math.Round(pedido.Total ?? 0m, 2);
+        if (total < 2m)
+            return Error("El importe del pedido es muy bajo para pagarlo por transferencia.", pedidoId);
+
+        // Primero se liberan los importes de los cobros vencidos.
+        await CancelarTransferenciasVencidasAsync();
+
+        // Doble envío del formulario / recarga: si ya hay un cobro vigente, se devuelve el mismo.
+        var existente = await _db.CobrosTransferencia.AsNoTracking()
+            .Include(t => t.Cobro)
+            .Where(t => t.Cobro!.FkPedido == pedidoId && t.Cobro.Estado == "pendiente")
+            .OrderByDescending(t => t.FkCobro)
+            .FirstOrDefaultAsync();
+        if (existente is not null)
+            return ResultadoTransferencia(existente, emailEnviado: false);
+
+        var horas = await GetVencimientoTransferenciaHorasAsync();
+
+        // El importe es el total menos entre $0,01 y $0,99, distinto del de cualquier otro cobro de
+        // transferencia pendiente. El índice UNIQUE (monto_activo) garantiza la unicidad aun con dos
+        // pedidos simultáneos: si otro tomó el mismo importe justo antes, se descarta y se prueba el siguiente.
+        var descartados = new HashSet<decimal>();
+        for (var intento = 0; intento < 5; intento++)
+        {
+            var usados = (await _db.CobrosTransferencia.AsNoTracking()
+                    .Where(t => t.MontoActivo != null)
+                    .Select(t => t.MontoActivo!.Value)
+                    .ToListAsync())
+                .ToHashSet();
+
+            // Cuarentena: el importe de un cobro que venció hace poco NO se reutiliza enseguida. Si el
+            // cliente del pedido vencido transfiere tarde, esa transferencia no debe confirmar a otro pedido
+            // que casualmente tomó el mismo importe. Solo se reutiliza si no queda ninguno libre.
+            var limiteCuarentena = DateTime.Now.AddDays(-7);
+            var enCuarentena = (await _db.CobrosTransferencia.AsNoTracking()
+                    .Where(t => t.Cobro!.Estado == "cancelado" && t.Vencimiento > limiteCuarentena)
+                    .Select(t => t.MontoTransferencia)
+                    .ToListAsync())
+                .ToHashSet();
+
+            decimal? elegido = null, respaldo = null;
+            for (var centavos = 1; centavos <= 99; centavos++)
+            {
+                var candidato = total - centavos / 100m;
+                if (usados.Contains(candidato) || descartados.Contains(candidato)) continue;   // en uso: nunca
+                respaldo ??= candidato;
+                if (!enCuarentena.Contains(candidato)) { elegido = candidato; break; }
+            }
+            elegido ??= respaldo;
+
+            if (elegido is null)
+                return Error("En este momento no podemos generar el importe para transferir. Probá de nuevo en unos minutos o elegí otro método de pago.", pedidoId);
+
+            var ahora = DateTime.Now;
+            var cobro = new CobroEcommerce
+            {
+                FkPedido      = pedidoId,
+                Tipo          = "transferencia",
+                Estado        = "pendiente",
+                Monto         = total,
+                Concepto      = $"Pedido #{pedidoId} — Transferencia Mercado Pago",
+                FechaCreacion = ahora
+            };
+            var detalle = new CobroTransferencia
+            {
+                Cobro               = cobro,
+                MontoTransferencia  = elegido.Value,
+                MontoActivo         = elegido.Value,
+                Vencimiento         = ahora.AddHours(horas)
+            };
+
+            // Un solo SaveChanges = una sola transacción: o quedan el cobro y su detalle, o ninguno.
+            _db.CobrosEcommerce.Add(cobro);
+            _db.CobrosTransferencia.Add(detalle);
+            try
+            {
+                await _db.SaveChangesAsync();
+            }
+            catch (DbUpdateException ex)
+            {
+                // Otro pedido tomó este importe entre la lectura y el INSERT: se descarta y se reintenta.
+                _db.Entry(detalle).State = EntityState.Detached;
+                _db.Entry(cobro).State   = EntityState.Detached;
+                descartados.Add(elegido.Value);
+                _logger.LogWarning(ex,
+                    "Transferencia: importe {Monto} ya tomado para pedido #{Id} (intento {N}) — reintentando",
+                    elegido, pedidoId, intento + 1);
+                continue;
+            }
+
+            var cobroId = cobro.Id;
+            EmailFireAndForget(e => e.EnviarInstruccionesTransferenciaAsync(pedidoId, cobroId), pedidoId, "instrucciones-transferencia");
+            EmailFireAndForget(e => e.EnviarNotificacionAdminAsync(pedidoId),                   pedidoId, "admin-transferencia");
+
+            return ResultadoTransferencia(detalle, emailEnviado: true);
+        }
+
+        return Error("No pudimos reservar el importe para transferir. Probá de nuevo en unos minutos.", pedidoId);
+    }
+
+    public async Task<int> CancelarTransferenciasVencidasAsync()
+    {
+        var ahora = DateTime.Now;
+
+        // Cobros con importe todavía "activo" y plazo vencido.
+        var ids = await _db.CobrosTransferencia.AsNoTracking()
+            .Where(t => t.MontoActivo != null && t.Vencimiento < ahora)
+            .Select(t => t.FkCobro)
+            .ToListAsync();
+        if (ids.Count == 0) return 0;
+
+        await using var tx = await _db.Database.BeginTransactionAsync();
+
+        var n = await _db.CobrosEcommerce
+            .Where(c => ids.Contains(c.Id) && c.Estado == "pendiente")
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(c => c.Estado,   "cancelado")
+                .SetProperty(c => c.MpStatus, "vencido"));
+
+        // Se libera el importe de todos (los que ya no estaban pendientes tampoco deben retenerlo).
+        await _db.CobrosTransferencia
+            .Where(t => ids.Contains(t.FkCobro))
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.MontoActivo, (decimal?)null));
+
+        await tx.CommitAsync();
+
+        if (n > 0)
+            _logger.LogInformation("Transferencia: {N} cobro(s) vencido(s) cancelado(s) — importes liberados", n);
+        return n;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Confirmación única de un cobro aprobado
+    // ─────────────────────────────────────────────────────────────
+    public async Task<bool> ConfirmarCobroAsync(int cobroId, int pedidoId, string? mpPaymentId, string? mpStatus,
+        string origen, bool soloPendiente = true)
+    {
+        await using var tx = await _db.Database.BeginTransactionAsync();
+
+        // UPDATE condicional atómico: si otro proceso (webhook, poller, página, admin) ya aprobó el
+        // cobro, no se afecta ninguna fila y no se repite el descuento de stock ni los emails.
+        var ahora = DateTime.Now;
+        var candidatos = _db.CobrosEcommerce.Where(c => c.Id == cobroId && c.FkPedido == pedidoId);
+        candidatos = soloPendiente
+            ? candidatos.Where(c => c.Estado == "pendiente")
+            : candidatos.Where(c => c.Estado != "aprobado");
+
+        var filas = await candidatos.ExecuteUpdateAsync(s => s
+            .SetProperty(c => c.Estado,      "aprobado")
+            .SetProperty(c => c.MpPaymentId, mpPaymentId)
+            .SetProperty(c => c.MpStatus,    mpStatus)
+            .SetProperty(c => c.FechaPago,   ahora));
+
+        if (filas == 0)
+        {
+            await tx.RollbackAsync();
+            _logger.LogInformation(
+                "ConfirmarCobro[{Origen}]: cobro #{CobroId} (pedido #{PedidoId}) ya no estaba pendiente — se omite",
+                origen, cobroId, pedidoId);
+            return false;
+        }
+
+        // Un cobro de transferencia que se aprueba libera su importe "activo". Solo en ese caso se toca
+        // la tabla de transferencias: los cobros de MercadoPago/reembolso no dependen de ella.
+        var tipo = await _db.CobrosEcommerce.Where(c => c.Id == cobroId).Select(c => c.Tipo).FirstOrDefaultAsync();
+        if (tipo == "transferencia")
+            await _db.CobrosTransferencia
+                .Where(t => t.FkCobro == cobroId)
+                .ExecuteUpdateAsync(s => s.SetProperty(t => t.MontoActivo, (decimal?)null));
+
+        // Mismo camino que el pago por QR: estado confirmado + descuento de stock + movimiento tipo 3.
+        // Si falla, la excepción sale y el cobro vuelve a 'pendiente' (rollback al liberar la transacción).
+        await _pedidos.ConfirmarPagoAsync(pedidoId);
+        await tx.CommitAsync();
+
+        _logger.LogInformation(
+            "ConfirmarCobro[{Origen}]: cobro #{CobroId} aprobado — pedido #{PedidoId} confirmado (pago {PaymentId})",
+            origen, cobroId, pedidoId, mpPaymentId);
+
+        // Emails en background, solo cuando ESTA llamada fue la que confirmó.
+        EmailFireAndForget(e => e.EnviarConfirmacionPedidoAsync(pedidoId), pedidoId, $"confirmacion-{origen}");
+        EmailFireAndForget(e => e.EnviarNotificacionAdminAsync(pedidoId),  pedidoId, $"admin-{origen}");
+        return true;
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // MercadoPago — webhook
     // ─────────────────────────────────────────────────────────────
     public async Task ProcesarNotificacionMercadoPagoAsync(string paymentId)
@@ -367,26 +616,24 @@ public class PagoEcommerceService : IPagoEcommerceService
         }
 
         // ── 5. Actualizar cobro y procesar según estado ─────────────────
-        cobro.MpPaymentId = paymentId;
-        cobro.MpStatus    = status;
-
         if (status == "approved")
         {
-            cobro.Estado    = "aprobado";
-            cobro.FechaPago = DateTime.Now;
-            await _db.SaveChangesAsync();
-
             _logger.LogInformation(
                 "MP Webhook: pago aprobado — confirmando pedido #{PedidoId}", pedidoId);
 
-            await _pedidos.ConfirmarPagoAsync(pedidoId);
-
-            // Emails en background: no bloqueamos el hilo de polling ni el webhook.
-            // Un timeout de 14 s en el cliente JS no puede cortar el envío de email.
-            EmailFireAndForget(e => e.EnviarConfirmacionPedidoAsync(pedidoId), pedidoId, "confirmacion-mp-webhook");
-            EmailFireAndForget(e => e.EnviarNotificacionAdminAsync(pedidoId),  pedidoId, "admin-mp-webhook");
+            // Confirmación única e idempotente (UPDATE condicional + transacción + emails una sola vez).
+            // soloPendiente:false → también acepta un cobro 'rechazado' que luego se pagó con otra tarjeta.
+            var confirmado = await ConfirmarCobroAsync(cobro.Id, pedidoId, paymentId, status, "mp", soloPendiente: false);
+            if (!confirmado)
+                _logger.LogInformation(
+                    "MP Webhook: pedido #{PedidoId} paymentId={PaymentId} ya estaba aprobado — notificación repetida", pedidoId, paymentId);
+            return;
         }
-        else if (status is "rejected" or "cancelled")
+
+        cobro.MpPaymentId = paymentId;
+        cobro.MpStatus    = status;
+
+        if (status is "rejected" or "cancelled")
         {
             cobro.Estado = status == "rejected" ? "rechazado" : "cancelado";
             await _db.SaveChangesAsync();
@@ -422,5 +669,17 @@ public class PagoEcommerceService : IPagoEcommerceService
         MpLinkPago        = c.MpLinkPago,
         MpFechaExpiracion = c.MpFechaExpiracion,
         FechaCreacion     = c.FechaCreacion
+    };
+
+    /// <summary>Resultado de un cobro de transferencia. <paramref name="detalle"/> debe traer <c>Cobro</c> cargado.</summary>
+    private static ResultadoPagoDto ResultadoTransferencia(CobroTransferencia detalle, bool emailEnviado) => new()
+    {
+        Exito              = true,
+        PedidoId           = detalle.Cobro!.FkPedido,
+        CobroId            = detalle.FkCobro,
+        Tipo               = "transferencia",
+        MontoTransferencia = detalle.MontoTransferencia,
+        Vencimiento        = detalle.Vencimiento,
+        EmailEnviado       = emailEnviado
     };
 }

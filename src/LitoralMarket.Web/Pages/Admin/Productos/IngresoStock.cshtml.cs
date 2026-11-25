@@ -22,7 +22,7 @@ public class IngresoStockModel : PageModel
         if (string.IsNullOrWhiteSpace(valor))
             return Content(FilaVacia("Escribí al menos un carácter para buscar."), "text/html");
 
-        var lista = await _productos.BuscarAsync(tipo, valor.Trim());
+        var lista = await _productos.BuscarAsync(tipo, valor.Trim(), ContextoBusquedaProducto.ParaStock);
 
         if (!lista.Any())
             return Content(FilaVacia("No se encontraron productos."), "text/html");

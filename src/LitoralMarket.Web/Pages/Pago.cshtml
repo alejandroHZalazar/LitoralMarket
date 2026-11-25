@@ -156,6 +156,135 @@
                 </div>
             </div>
         }
+        else if (Model.PagoYaProcesado && Model.Resultado?.Tipo == "transferencia")
+        {
+            <!-- Transferencia: destino + importe exacto -->
+            <div class="card border-0 shadow-sm mb-3">
+                <div class="card-body py-4">
+                    <div class="text-center mb-3">
+                        <span style="font-size:3rem; color:var(--verde);">
+                            <i class="bi bi-check-circle-fill"></i>
+                        </span>
+                        <h5 class="fw-bold mb-1 mt-2">¡Tu pedido está reservado!</h5>
+                        <p class="text-muted small mb-0">
+                            Hacé una transferencia a la cuenta de Mercado Pago de la tienda para confirmarlo.
+                        </p>
+                    </div>
+
+                    <div class="text-center rounded p-3 mb-3" style="background:#eaf7f0; border:2px solid var(--verde);">
+                        <div class="small text-muted">Transferí exactamente</div>
+                        <div class="fw-bold" style="font-size:2rem; color:var(--verde);">
+                            $@((Model.Resultado.MontoTransferencia ?? 0m).ToString("N2"))
+                        </div>
+                        <button type="button" class="btn btn-outline-success btn-sm mt-1"
+                                onclick="copiarTexto(this)"
+                                data-texto="@((Model.Resultado.MontoTransferencia ?? 0m).ToString("0.00", CultureInfo.InvariantCulture))">
+                            <i class="bi bi-clipboard me-1"></i>Copiar importe
+                        </button>
+                    </div>
+
+                    <div class="alert alert-warning small d-flex gap-2 align-items-start">
+                        <i class="bi bi-exclamation-triangle-fill mt-1"></i>
+                        <div>
+                            <strong>El importe tiene que ser exactamente ese</strong>, con los centavos. Así identificamos tu pago
+                            y confirmamos el pedido automáticamente (ya incluye un pequeño descuento sobre el total).
+                            Si transferís otro importe, el pedido no se confirma solo y lo tendrá que revisar un administrador.
+                        </div>
+                    </div>
+
+                    <ul class="list-group list-group-flush mb-3">
+                        @if (!string.IsNullOrWhiteSpace(Model.TransferenciaTitular))
+                        {
+                            <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                <span class="text-muted small">Titular</span>
+                                <strong>@Model.TransferenciaTitular</strong>
+                            </li>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(Model.TransferenciaAlias))
+                        {
+                            <li class="list-group-item d-flex justify-content-between align-items-center gap-2 px-0">
+                                <span class="text-muted small">Alias</span>
+                                <span class="d-flex align-items-center gap-2">
+                                    <strong>@Model.TransferenciaAlias</strong>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="copiarTexto(this)"
+                                            data-texto="@Model.TransferenciaAlias" aria-label="Copiar alias">
+                                        <i class="bi bi-clipboard"></i>
+                                    </button>
+                                </span>
+                            </li>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(Model.TransferenciaCvu))
+                        {
+                            <li class="list-group-item d-flex justify-content-between align-items-center gap-2 px-0">
+                                <span class="text-muted small">CVU</span>
+                                <span class="d-flex align-items-center gap-2">
+                                    <strong style="word-break:break-all;">@Model.TransferenciaCvu</strong>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="copiarTexto(this)"
+                                            data-texto="@Model.TransferenciaCvu" aria-label="Copiar CVU">
+                                        <i class="bi bi-clipboard"></i>
+                                    </button>
+                                </span>
+                            </li>
+                        }
+                    </ul>
+
+                    @if (Model.Resultado.Vencimiento.HasValue)
+                    {
+                        <p class="text-muted small mb-3">
+                            <i class="bi bi-alarm me-1"></i>
+                            Tenés tiempo hasta el <strong>@Model.Resultado.Vencimiento.Value.ToString("dd/MM/yyyy 'a las' HH:mm") hs.</strong>
+                            Pasado ese plazo, el pedido se cancela y tendrás que elegir otra forma de pago.
+                        </p>
+                    }
+
+                    @if (Model.Resultado?.EmailEnviado == true)
+                    {
+                        <div class="alert alert-success small text-start d-flex align-items-start gap-2">
+                            <i class="bi bi-envelope-check-fill fs-5 mt-1 flex-shrink-0"></i>
+                            <div>
+                                <strong>Te enviamos un email</strong> con estos datos.<br />
+                                Si no lo ves en tu bandeja de entrada, <strong>revisá la carpeta de spam o correo no deseado</strong>.
+                            </div>
+                        </div>
+                    }
+
+                    @* ── Coordinación de entrega por WhatsApp ── *@
+                    @if (!string.IsNullOrWhiteSpace(Model.TelefonoWhatsApp))
+                    {
+                        var _waNumTr = PhoneHelper.NormalizarParaWhatsApp(Model.TelefonoWhatsApp);
+                        <div class="d-flex align-items-start gap-3 mb-3 p-3 rounded text-start"
+                             style="background:#f0fdf4;border:1px solid #86efac;">
+                            <i class="bi bi-whatsapp flex-shrink-0 mt-1" style="font-size:1.4rem;color:#25D366;"></i>
+                            <div>
+                                <strong class="small">📦 Coordinación de entrega</strong><br />
+                                <span class="text-muted" style="font-size:.82rem;">
+                                    Una vez confirmado el pago, coordiná la entrega por WhatsApp:
+                                </span>
+                                <div class="mt-1">
+                                    <a href="https://wa.me/@_waNumTr" target="_blank" rel="noopener noreferrer"
+                                       class="btn btn-sm fw-semibold px-3"
+                                       style="background:#25D366;color:#fff;border:none;">
+                                        <i class="bi bi-whatsapp me-1"></i>@Model.TelefonoWhatsApp
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    @* ── Panel de estado en tiempo real (polling) ── *@
+                    <div id="mp-poll-panel" class="mp-poll-panel esperando" role="status" aria-live="polite">
+                        <span class="mp-poll-icon"><i class="bi bi-clock-history" id="mp-poll-icon-i"></i></span>
+                        <span class="mp-poll-texto">
+                            <div class="mp-poll-titulo" id="mp-poll-titulo">Esperando tu transferencia...</div>
+                            <div class="mp-poll-subtitulo" id="mp-poll-subtitulo">
+                                Detectamos la transferencia automáticamente. Podés cerrar esta página y volver más tarde.
+                            </div>
+                        </span>
+                        <span class="mp-poll-timer" id="mp-poll-timer">0:00</span>
+                    </div>
+                </div>
+            </div>
+        }
         else
         {
             <!-- Selección de método de pago -->
@@ -222,7 +351,31 @@
                                 </label>
                             }
 
-                            @if (!Model.MetodoReembolso && !Model.MetodoMercadoPago)
+                            @if (Model.MetodoTransferencia)
+                            {
+                                <label class="dir-opcion" id="opcion-transferencia">
+                                    <input type="radio"
+                                           name="Seleccion.MetodoPago"
+                                           value="transferencia"
+                                           class="dir-radio visually-hidden" />
+                                    <div class="dir-opcion-inner">
+                                        <div class="dir-icono" style="background:#009EE3;">
+                                            <i class="bi bi-bank" style="color:#fff;"></i>
+                                        </div>
+                                        <div class="dir-info flex-grow-1">
+                                            <div class="dir-nombre">Transferencia</div>
+                                            <div class="dir-detalle">
+                                                <i class="bi bi-lightning-charge me-1"></i>Desde tu banco o billetera, con confirmación automática
+                                            </div>
+                                        </div>
+                                        <div class="dir-costo">
+                                            <span class="badge-gratis">Sin comisión</span>
+                                        </div>
+                                    </div>
+                                </label>
+                            }
+
+                            @if (!Model.MetodoReembolso && !Model.MetodoMercadoPago && !Model.MetodoTransferencia)
                             {
                                 <div class="alert alert-warning">
                                     <i class="bi bi-exclamation-triangle me-2"></i>
@@ -237,7 +390,7 @@
                 <button type="submit"
                         id="btnConfirmarPago"
                         class="btn-agregar w-100 py-2 fs-6"
-                        @(!Model.MetodoReembolso && !Model.MetodoMercadoPago ? "disabled" : "")>
+                        @(!Model.MetodoReembolso && !Model.MetodoMercadoPago && !Model.MetodoTransferencia ? "disabled" : "")>
                     <i class="bi bi-check-circle me-2"></i>Confirmar pago
                 </button>
             </form>
@@ -349,12 +502,13 @@
 /* ════════════════════════════════════════════════════════════════
    POLLING DE ESTADO DE PAGO — solo activo cuando hay QR visible
    ════════════════════════════════════════════════════════════════ */
-@if (Model.PagoYaProcesado && Model.Resultado?.Tipo == "mercadopago")
+@if (Model.EsperandoPago)
 {
     <text>
 (function () {
     'use strict';
 
+    var ES_TRANSFERENCIA = @(Model.Resultado?.Tipo == "transferencia" ? "true" : "false");
     var PEDIDO_ID    = @Model.Id;
     var REDIRECT_URL = '/Pedido/@Model.Id';
     var INTERVALO_MS = 5000;   // poll cada 5 s
@@ -375,6 +529,15 @@
         cancelado:   { icon: 'bi-dash-circle-fill', cls: 'error',       titulo: 'Pago cancelado.',                           sub: 'Si fue un error, podés intentarlo de nuevo desde el link de arriba.' },
         expirado:    { icon: 'bi-alarm-fill',       cls: 'error',       titulo: 'Tiempo de verificación agotado.',           sub: 'Si ya pagaste, tu pedido se confirmará en breve de forma automática.' }
     };
+
+    if (ES_TRANSFERENCIA) {
+        ESTADOS.esperando.titulo   = 'Esperando tu transferencia...';
+        ESTADOS.verificando.titulo = 'Buscando tu transferencia...';
+        ESTADOS.verificando.sub    = 'Esto puede tardar un par de minutos.';
+        ESTADOS.cancelado.titulo   = 'El plazo para transferir venció.';
+        ESTADOS.cancelado.sub      = 'Recargá la página para elegir otra forma de pago. Si ya transferiste, avisanos por WhatsApp.';
+        ESTADOS.expirado.sub       = 'Si ya transferiste, tu pedido se confirmará en cuanto detectemos el pago.';
+    }
 
     function actualizarPanel(nuevoEstado) {
         if (terminado && nuevoEstado !== 'confirmado' && nuevoEstado !== 'rechazado' && nuevoEstado !== 'cancelado') return;
@@ -498,6 +661,34 @@
 
 })();
     </text>
+}
+
+/* ════════════════════════════════════════════════════════════════
+   COPIAR TEXTO (alias, CVU, importe)
+   ════════════════════════════════════════════════════════════════ */
+function copiarTexto(btn) {
+    var texto = btn.getAttribute('data-texto');
+    if (!texto) return;
+
+    var ok = function() {
+        var original = btn.innerHTML;
+        btn.innerHTML = '<i class="bi bi-check2 me-1"></i>¡Copiado!';
+        setTimeout(function() { btn.innerHTML = original; }, 1800);
+    };
+
+    var fallback = function() {
+        var ta = document.createElement('textarea');
+        ta.value = texto; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); ok(); } catch (e) {}
+        document.body.removeChild(ta);
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(texto).then(ok).catch(fallback);
+    } else {
+        fallback();
+    }
 }
 
 /* ════════════════════════════════════════════════════════════════

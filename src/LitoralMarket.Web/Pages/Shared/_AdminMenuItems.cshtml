@@ -1,4 +1,5 @@
 @inject LitoralMarket.Application.Interfaces.IParametrosService Parametros
+@inject LitoralMarket.Application.Interfaces.IPromocionesService PromocionesDescuentos
 @* Ítems del menú de administración — se incluye en ambas ramas del layout.
    Agregar aquí cualquier nueva sección admin: se refleja automáticamente. *@
 <li><span class="dropdown-item-text small text-muted fw-semibold">
@@ -11,13 +12,24 @@
 {
     <li><a class="dropdown-item" asp-page="/Admin/Productos/Inicio"><i class="bi bi-stars me-2 text-muted"></i>Productos del Inicio</a></li>
 }
+@* Solo con ecommerce/HabilitarVariantesProducto = 1 (valor cacheado). *@
+@if (await Parametros.HabilitarVariantesProductoAsync())
+{
+    <li><a class="dropdown-item" asp-page="/Admin/Productos/Variantes"><i class="bi bi-palette me-2 text-muted"></i>Medidas y colores</a></li>
+}
 <li><a class="dropdown-item" asp-page="/Admin/Productos/IngresoStock"><i class="bi bi-box-arrow-in-down me-2 text-muted"></i>Ingreso de stock</a></li>
 <li><a class="dropdown-item" asp-page="/Admin/Productos/AjusteStock"><i class="bi bi-sliders me-2 text-muted"></i>Ajuste de stock</a></li>
 <li><a class="dropdown-item" asp-page="/Admin/Promociones/Index"><i class="bi bi-images me-2 text-muted"></i>Promociones (carrusel)</a></li>
+@* Solo con promociones/descuentos = 1 y las tablas creadas (valor cacheado 60 s: sin consulta por página). *@
+@if (await PromocionesDescuentos.HabilitadoAsync())
+{
+    <li><a class="dropdown-item" asp-page="/Admin/PromocionesDescuentos/Index"><i class="bi bi-percent me-2 text-muted"></i>Promociones por cantidad / descuento</a></li>
+}
 <li><a class="dropdown-item" asp-page="/Admin/Proveedores/Index"><i class="bi bi-truck me-2 text-muted"></i>Proveedores</a></li>
 <li><a class="dropdown-item" asp-page="/Admin/Rubros/Index"><i class="bi bi-tag me-2 text-muted"></i>Rubros</a></li>
 <li><a class="dropdown-item" asp-page="/Admin/DireccionesEntrega/Index"><i class="bi bi-geo-alt me-2 text-muted"></i>Direcciones de entrega</a></li>
 <li><a class="dropdown-item" asp-page="/Admin/Parametros/Index"><i class="bi bi-sliders2 me-2 text-muted"></i>Parámetros</a></li>
+<li><a class="dropdown-item" asp-page="/Admin/MediosPago/Index"><i class="bi bi-wallet2 me-2 text-muted"></i>Medios de pago</a></li>
 <li><a class="dropdown-item" asp-page="/Admin/Configuracion/MercadoPago"><i class="bi bi-credit-card me-2 text-muted"></i>Mercado Pago</a></li>
 <li><a class="dropdown-item" asp-page="/Admin/Configuracion/Tema"><i class="bi bi-palette2 me-2 text-muted"></i>Temas visuales</a></li>
 <li><a class="dropdown-item" asp-page="/Admin/Estadisticas/Index"><i class="bi bi-graph-up me-2 text-muted"></i>Estadísticas</a></li>

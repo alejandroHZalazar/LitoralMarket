@@ -11,11 +11,16 @@ public class ProductoAdminService : IProductoAdminService
 {
     private readonly AppDbContext _db;
     private readonly IProductoRepository _repo;
+    private readonly IParametrosService _params;
+    private readonly IGeneradorCodigoBarrasService _codigos;
 
-    public ProductoAdminService(AppDbContext db, IProductoRepository repo)
+    public ProductoAdminService(AppDbContext db, IProductoRepository repo, IParametrosService parametros,
+                                IGeneradorCodigoBarrasService codigos)
     {
-        _db   = db;
-        _repo = repo;
+        _codigos = codigos;
+        _db     = db;
+        _repo   = repo;
+        _params = parametros;
     }
 
     // Ruta completa del rubro ("Padre > Subrubro") tomada del árbol cacheado: sin consultas extra.
@@ -28,8 +33,12 @@ public class ProductoAdminService : IProductoAdminService
     // ──────────────────────────────────────────────────────────────
     // Búsqueda
     // ──────────────────────────────────────────────────────────────
-    public async Task<List<ProductoAdminDto>> BuscarAsync(int tipo, string valor)
+    public async Task<List<ProductoAdminDto>> BuscarAsync(int tipo, string valor,
+        ContextoBusquedaProducto contexto = ContextoBusquedaProducto.Todos)
     {
+        // Con variantes apagadas (valor cacheado) la búsqueda es exactamente la de siempre.
+        var variantes = contexto != ContextoBusquedaProducto.Todos && await _params.HabilitarVariantesProductoAsync();
+
         var q = _db.Productos.Include(p => p.Rubro).AsQueryable();
 
         q = tipo switch
@@ -38,11 +47,26 @@ public class ProductoAdminService : IProductoAdminService
             1 => q.Where(p => p.CodBarras    != null && p.CodBarras.Contains(valor)),
             _ => q.Where(p => p.Descripcion  != null && p.Descripcion.Contains(valor))
         };
+        q = q.Where(p => p.Baja != true);
+
+        // Administración: si el texto coincide con una VARIANTE (ej. su código de barras), se muestra su ficha.
+        List<int> fichasDeCoincidencias = new();
+        if (variantes && contexto == ContextoBusquedaProducto.Administracion)
+            fichasDeCoincidencias = await (from v in _db.ProductosVariantes
+                                           join m in q on v.FkProducto equals m.Id
+                                           select v.FkPrincipal).Distinct().ToListAsync();
+
+        if (variantes)
+        {
+            if (contexto == ContextoBusquedaProducto.ParaStock)
+                q = q.Where(p => !_db.ProductosPrincipales.Any(pp => pp.FkProducto == p.Id));      // la ficha no tiene stock propio
+            else
+                q = q.Where(p => !_db.ProductosVariantes.Any(v => v.FkProducto == p.Id));          // las variantes se ven por su ficha
+        }
 
         // Proyección directa: NO materializa la entidad Producto (evita cargar el
         // blob 'imagen' de hasta 200 productos, que antes se traía sin usarse).
         var lista = await q
-            .Where(p => p.Baja != true)
             .OrderBy(p => p.Descripcion)
             .Take(200)
             .Select(p => new ProductoAdminDto
@@ -56,9 +80,46 @@ public class ProductoAdminService : IProductoAdminService
             })
             .ToListAsync();
 
+        if (fichasDeCoincidencias.Count > 0)
+        {
+            var yaEstan = lista.Select(x => x.Id).ToHashSet();
+            var faltan = fichasDeCoincidencias.Where(i => !yaEstan.Contains(i)).ToList();
+            if (faltan.Count > 0)
+            {
+                var extra = await _db.Productos
+                    .Where(p => faltan.Contains(p.Id) && p.Baja != true)
+                    .Select(p => new ProductoAdminDto
+                    {
+                        Id = p.Id, CodProveedor = p.CodProveedor, CodBarras = p.CodBarras, Descripcion = p.Descripcion,
+                        FkRubro = p.FkRubro, RubroNombre = p.Rubro != null ? p.Rubro.Descripcion : null
+                    })
+                    .ToListAsync();
+                lista = lista.Concat(extra).OrderBy(x => x.Descripcion).Take(200).ToList();
+            }
+        }
+
         var rutas = await RutasRubrosAsync();
         foreach (var dto in lista)
             dto.RubroRuta = RutaDe(rutas, dto.FkRubro);
+
+        // Marca fichas (con su cantidad de variantes) y variantes (con su ficha) para mostrarlas en la grilla.
+        if (variantes && lista.Count > 0)
+        {
+            var ids = lista.Select(x => x.Id).ToList();
+            var fichas = await _db.ProductosPrincipales.Where(pp => ids.Contains(pp.FkProducto))
+                .Select(pp => pp.FkProducto).ToListAsync();
+            var cantidades = await _db.ProductosVariantes.Where(v => ids.Contains(v.FkPrincipal))
+                .GroupBy(v => v.FkPrincipal).Select(g => new { Id = g.Key, N = g.Count() }).ToListAsync();
+            var padres = await _db.ProductosVariantes.Where(v => ids.Contains(v.FkProducto))
+                .Select(v => new { v.FkProducto, v.FkPrincipal }).ToListAsync();
+
+            foreach (var dto in lista)
+            {
+                dto.EsFicha       = fichas.Contains(dto.Id);
+                dto.CantVariantes = cantidades.FirstOrDefault(c => c.Id == dto.Id)?.N ?? 0;
+                dto.FkPrincipal   = padres.FirstOrDefault(pd => pd.FkProducto == dto.Id)?.FkPrincipal;
+            }
+        }
 
         return lista;
     }
@@ -199,8 +260,24 @@ public class ProductoAdminService : IProductoAdminService
     // ──────────────────────────────────────────────────────────────
     // Alta
     // ──────────────────────────────────────────────────────────────
-    public async Task<int> CrearAsync(ProductoAdminDto dto)
+    public async Task<int> CrearAsync(ProductoAdminDto dto, bool generarCodigo = true)
     {
+        // Código automático (productos/generaCodigoBarras = '1'): solo si no se cargó ninguno de los dos. El parámetro se
+        // consulta antes de abrir la transacción; la reserva es la primera lectura dentro de ella (misma lógica que Comercial Web).
+        var generar = generarCodigo
+                      && string.IsNullOrWhiteSpace(dto.CodBarras) && string.IsNullOrWhiteSpace(dto.CodProveedor)
+                      && await _codigos.HabilitadoAsync();
+
+        // Con generación, alta atómica (si falla, el contador vuelve atrás). Si quien llama ya abrió una transacción, se une a ella.
+        await using var tx = generar && _db.Database.CurrentTransaction is null
+            ? await _db.Database.BeginTransactionAsync()
+            : null;
+        if (generar)
+        {
+            var codigo = (await _codigos.ReservarAsync(1))[0];
+            dto.CodBarras = dto.CodProveedor = codigo;
+        }
+
         var producto = new Producto
         {
             CodProveedor     = dto.CodProveedor,
@@ -237,6 +314,7 @@ public class ProductoAdminService : IProductoAdminService
             Costo      = dto.PrecioCosto
         });
         await _db.SaveChangesAsync();
+        if (tx is not null) await tx.CommitAsync();   // sin confirmar, al descartarse la transacción se revierte todo
 
         return producto.Id;
     }
@@ -300,6 +378,21 @@ public class ProductoAdminService : IProductoAdminService
         var p = await _db.Productos.FindAsync(id);
         if (p is null) return;
         p.Baja = true;
+
+        // Con variantes habilitadas: dar de baja una ficha da de baja todas sus variantes, y dar de baja una
+        // variante deshabilita su combinación. Con el parámetro apagado esto no consulta nada.
+        if (await _params.HabilitarVariantesProductoAsync())
+        {
+            var variante = await _db.ProductosVariantes.FirstOrDefaultAsync(v => v.FkProducto == id);
+            if (variante is not null) variante.Activa = false;
+
+            var hijas = await _db.ProductosVariantes.Where(v => v.FkPrincipal == id)
+                .Select(v => v.FkProducto).ToListAsync();
+            if (hijas.Count > 0)
+                await _db.Productos.Where(x => hijas.Contains(x.Id))
+                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.Baja, true));
+        }
+
         await _db.SaveChangesAsync();
     }
 

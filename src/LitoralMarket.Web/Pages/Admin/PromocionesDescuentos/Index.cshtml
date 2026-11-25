@@ -1,0 +1,115 @@
+@page
+@model LitoralMarket.Web.Pages.Admin.PromocionesDescuentos.IndexModel
+@Html.AntiForgeryToken()
+@{
+    ViewData["Title"] = "Promociones por cantidad / descuento";
+}
+
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+    <h2 class="mb-0 fw-bold"><i class="bi bi-percent me-2 text-success"></i>Promociones por cantidad / descuento</h2>
+    @if (Model.Habilitado)
+    {
+        <a class="btn btn-success" asp-page="Edit"><i class="bi bi-plus-lg me-1"></i>Nueva promoción</a>
+    }
+</div>
+
+@if (!Model.Habilitado)
+{
+    <div class="alert alert-warning">
+        <i class="bi bi-info-circle me-1"></i>
+        @if (!Model.TablasListas)
+        {
+            <span>Faltan crear las tablas de promociones en esta base: ejecutá el script <code>scripts/promociones_reglas.sql</code> de Comercial Web.</span>
+        }
+        else
+        {
+            <span>Las promociones están deshabilitadas. Para usarlas, el parámetro <code>promociones / descuentos</code> debe valer <code>1</code>
+            (es el mismo parámetro que usa Comercial Web).</span>
+        }
+    </div>
+    return;
+}
+
+<p class="text-muted small">
+    2x1, 3x2, 4x2… y porcentajes de descuento sobre productos. Son las <strong>mismas promociones que administra Comercial Web</strong>:
+    se aplican en la tienda (catálogo, detalle, carrito y pedido) y en Ventas, Venta minorista y Pedidos. Si un producto participa de
+    varias promociones vigentes, se aplica la más conveniente para el cliente (no se acumulan).
+</p>
+
+<div id="alertaPd"></div>
+
+<div class="card shadow-sm border-0">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 pd-tabla">
+            <thead class="table-dark">
+                <tr><th>Nombre</th><th>Tipo</th><th>Beneficio</th><th>Vigencia (hora Argentina)</th><th class="text-center">Productos</th><th>Estado</th><th></th></tr>
+            </thead>
+            <tbody>
+            @foreach (var r in Model.Reglas)
+            {
+                <tr id="fila-@r.Id">
+                    <td data-label="Nombre"><strong>@r.Nombre</strong></td>
+                    <td data-label="Tipo"><span class="badge text-bg-light border">@(r.Tipo == "NXM" ? "Cantidad" : "Porcentaje")</span></td>
+                    <td data-label="Beneficio">@r.Resumen</td>
+                    <td data-label="Vigencia" class="text-nowrap">@r.Desde.ToString("dd/MM/yyyy HH:mm") &rarr; @r.Hasta.ToString("dd/MM/yyyy HH:mm")</td>
+                    <td data-label="Productos" class="text-center">@r.CantProductos</td>
+                    <td data-label="Estado">
+                        @if (!r.Activa) { <span class="badge bg-secondary">Inactiva</span> }
+                        else if (r.Vigente) { <span class="badge bg-success">Vigente</span> }
+                        else { <span class="badge bg-warning text-dark" title="Activa, pero fuera de su período de vigencia">Fuera de vigencia</span> }
+                    </td>
+                    <td class="text-end text-nowrap">
+                        <a class="btn btn-sm btn-outline-primary" asp-page="Edit" asp-route-id="@r.Id" title="Editar"><i class="bi bi-pencil"></i><span class="d-none d-md-inline ms-1">Editar</span></a>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-toggle="@r.Id">@(r.Activa ? "Desactivar" : "Activar")</button>
+                        <button type="button" class="btn btn-sm btn-outline-danger" data-eliminar="@r.Id" data-nombre="@r.Nombre" title="Eliminar"><i class="bi bi-trash"></i></button>
+                    </td>
+                </tr>
+            }
+            @if (!Model.Reglas.Any())
+            {
+                <tr><td colspan="7" class="text-center text-muted py-4">Todavía no hay promociones. Creá la primera con “Nueva promoción”.</td></tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@section Scripts {
+<style>
+    @@media (max-width: 767.98px) {
+        .pd-tabla thead { display: none; }
+        .pd-tabla, .pd-tabla tbody, .pd-tabla tr, .pd-tabla td { display: block; width: 100%; }
+        .pd-tabla tr { border-bottom: 1px solid var(--bs-border-color, #dee2e6); padding: .5rem .75rem; }
+        .pd-tabla td { display: flex; justify-content: space-between; gap: .5rem; border: 0; padding: .2rem 0; }
+        .pd-tabla td::before { content: attr(data-label); font-size: .72rem; color: var(--text-secondary, #6b7280); }
+        .pd-tabla td:last-child { justify-content: flex-end; }
+        .pd-tabla td:last-child::before { content: none; }
+    }
+</style>
+<script>
+const TOKEN = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+function aviso(tipo, msg) {
+    document.getElementById('alertaPd').innerHTML =
+        `<div class="alert alert-${tipo} alert-dismissible fade show py-2">${msg}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>`;
+}
+async function post(handler, id) {
+    const r = await fetch(`?handler=${handler}&id=${id}`, { method: 'POST', headers: { 'X-XSRF-TOKEN': TOKEN } });
+    try { return await r.json(); } catch { return { ok: false, error: 'Respuesta inesperada del servidor.' }; }
+}
+document.addEventListener('click', async e => {
+    const t = e.target.closest('[data-toggle]');
+    if (t) {
+        const d = await post('Toggle', t.dataset.toggle);
+        if (!d.ok) { aviso('danger', d.error || 'No se pudo cambiar el estado.'); return; }
+        location.reload(); return;
+    }
+    const x = e.target.closest('[data-eliminar]');
+    if (x) {
+        if (!confirm('¿Eliminar la promoción "' + x.dataset.nombre + '"?\n\nLos pedidos y ventas ya registrados conservan el detalle de lo que se aplicó.')) return;
+        const d = await post('Eliminar', x.dataset.eliminar);
+        if (!d.ok) { aviso('danger', d.error || 'No se pudo eliminar.'); return; }
+        document.getElementById('fila-' + x.dataset.eliminar)?.remove();
+    }
+});
+</script>
+}

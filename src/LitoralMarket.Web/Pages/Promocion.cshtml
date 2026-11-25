@@ -1,0 +1,89 @@
+@page "{id:int}"
+@model PromocionModel
+@using LitoralMarket.Application.DTOs
+@{
+    var disponible = Model.Promo.Estado == EstadoPromoDestino.Vigente;
+    ViewData["Title"] = disponible ? $"Promoción: {Model.Promo.Nombre}" : "Promoción";
+    ViewData["MostrarSinStock"] = Model.MostrarSinStock;
+}
+
+@if (!disponible)
+{
+    var motivo = Model.Promo.Estado switch
+    {
+        EstadoPromoDestino.Vencida => "La promoción ya finalizó.",
+        EstadoPromoDestino.Futura  => "La promoción todavía no comenzó.",
+        EstadoPromoDestino.Inactiva => "La promoción no está activa en este momento.",
+        _ => "La promoción que buscás no está disponible."
+    };
+    <div class="promo-aviso text-center py-5">
+        <i class="bi bi-tag promo-aviso-icono" aria-hidden="true"></i>
+        <h2 class="h4 mt-2">Esta promoción ya no está disponible</h2>
+        <p class="text-secondary mb-3">@motivo</p>
+        <a asp-page="/Index" class="btn btn-agregar d-inline-block px-4" style="width:auto"><i class="bi bi-house me-1"></i>Ver todos los productos</a>
+    </div>
+    return;
+}
+
+<div class="promo-cabecera mb-3">
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+        <span class="badge badge-promo-estatico fs-6">@Model.Promo.Beneficio</span>
+        <h2 class="mb-0">@Model.Promo.Nombre</h2>
+    </div>
+    @if (Model.Promo.Condicion is not null)
+    {
+        <p class="producto-promo-cond mb-1"><i class="bi bi-info-circle" aria-hidden="true"></i> @Model.Promo.Condicion</p>
+    }
+    <p class="text-secondary small mb-0">
+        Vigente hasta el @Model.Promo.Hasta.ToString("dd/MM/yyyy HH:mm") · @Model.TotalResultados producto@(Model.TotalResultados == 1 ? "" : "s")
+    </p>
+</div>
+
+@if (!Model.Productos.Any())
+{
+    <div class="alert alert-info">No hay productos disponibles de esta promoción por ahora.</div>
+    return;
+}
+
+<div class="row row-cols-2 row-cols-md-3 row-cols-lg-4 g-3">
+    @foreach (var producto in Model.Productos)
+    {
+        <div class="col position-relative">
+            <partial name="_ProductoCard" model="producto" />
+        </div>
+    }
+</div>
+
+@if (Model.TotalPaginas > 1)
+{
+    int _ventana = 2;
+    int _ini = Math.Max(1, Model.PaginaActual - _ventana);
+    int _fin = Math.Min(Model.TotalPaginas, Model.PaginaActual + _ventana);
+
+    <nav class="mt-4" aria-label="Paginación">
+        <ul class="pagination justify-content-center flex-wrap">
+            <li class="page-item @(Model.PaginaActual == 1 ? "disabled" : "")">
+                <a class="page-link" asp-page="/Promocion" asp-route-id="@Model.Promo.Id" asp-route-pagina="@(Model.PaginaActual - 1)"><i class="bi bi-chevron-left"></i></a>
+            </li>
+            @if (_ini > 1)
+            {
+                <li class="page-item"><a class="page-link" asp-page="/Promocion" asp-route-id="@Model.Promo.Id" asp-route-pagina="1">1</a></li>
+                @if (_ini > 2) { <li class="page-item disabled"><span class="page-link">…</span></li> }
+            }
+            @for (int i = _ini; i <= _fin; i++)
+            {
+                <li class="page-item @(i == Model.PaginaActual ? "active" : "")">
+                    <a class="page-link" asp-page="/Promocion" asp-route-id="@Model.Promo.Id" asp-route-pagina="@i">@i</a>
+                </li>
+            }
+            @if (_fin < Model.TotalPaginas)
+            {
+                @if (_fin < Model.TotalPaginas - 1) { <li class="page-item disabled"><span class="page-link">…</span></li> }
+                <li class="page-item"><a class="page-link" asp-page="/Promocion" asp-route-id="@Model.Promo.Id" asp-route-pagina="@Model.TotalPaginas">@Model.TotalPaginas</a></li>
+            }
+            <li class="page-item @(Model.PaginaActual == Model.TotalPaginas ? "disabled" : "")">
+                <a class="page-link" asp-page="/Promocion" asp-route-id="@Model.Promo.Id" asp-route-pagina="@(Model.PaginaActual + 1)"><i class="bi bi-chevron-right"></i></a>
+            </li>
+        </ul>
+    </nav>
+}

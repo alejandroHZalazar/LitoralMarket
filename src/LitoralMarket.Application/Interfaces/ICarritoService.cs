@@ -24,7 +24,9 @@ public interface ICarritoService
     /// <summary>
     /// Refresca precios de lista y costos desde la BD, y elimina los ítems
     /// cuyo stock actual es cero o negativo.
-    /// Devuelve las descripciones de los productos eliminados (puede estar vacía).
+    /// Con ecommerce/LimitarCantidadPorStock = 1 además reduce al máximo disponible las líneas que lo superan
+    /// (y quita las que no alcanzan ni para la cantidad mínima de venta).
+    /// Devuelve qué se eliminó y qué se ajustó (listas posiblemente vacías).
     /// </summary>
-    Task<List<string>> SincronizarCarritoAsync(int pedidoId);
+    Task<SincronizacionCarrito> SincronizarCarritoAsync(int pedidoId);
 }

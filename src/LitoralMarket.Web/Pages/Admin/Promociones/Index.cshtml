@@ -10,9 +10,12 @@
 <input type="hidden" id="maxMb" value="@Model.MaxMb" />
 
 <style>
-    /* Misma presentación que la imagen de una tarjeta de producto: contain + relleno + fondo suave. */
-    .promo-marco   { position: relative; overflow: hidden; border-radius: 10px; background: var(--bg-subtle); border: 1px solid var(--border-ui); height: 150px; }
-    .promo-marco img { width: 100%; height: 100%; object-fit: contain; padding: 8px; display: block; }
+    /* Mismo recuadro que el carrusel del Inicio: proporción fija 3:1 (2:1 en celular) y object-fit: cover. */
+    .promo-marco   { position: relative; overflow: hidden; border-radius: 10px; background: var(--bg-subtle); border: 1px solid var(--border-ui); aspect-ratio: 3 / 1; }
+    .promo-marco.movil { aspect-ratio: 2 / 1; }
+    .promo-marco img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .promo-guia    { border-left: 4px solid var(--dorado); background: var(--bg-surface); border-radius: 10px; }
+    .promo-guia code { font-size: .85em; }
     .promo-fila    { border: 1px solid var(--border-ui); border-radius: 10px; background: var(--bg-surface); }
     .promo-pos     { min-width: 2rem; height: 2rem; border-radius: 50%; background: var(--dorado-suave); color: var(--acento-texto); font-weight: 700; }
 </style>
@@ -39,13 +42,57 @@ else
     </div>
 }
 
+<!-- ── FORMATO DE LAS IMÁGENES ─────────────────────────────────────── -->
+<div class="promo-guia shadow-sm p-3 mb-4 small">
+    <div class="fw-semibold mb-2"><i class="bi bi-info-circle-fill me-1 text-success"></i>Cómo deben ser las imágenes del carrusel</div>
+    <p class="mb-2">El carrusel muestra <strong>una imagen por vez, a todo el ancho de la página</strong>, y pasa a la siguiente sola. Para que se vea bien:</p>
+    <ul class="mb-2 ps-3">
+        <li><strong>Formato:</strong> JPG o WEBP (recomendado, pesan menos). También se aceptan PNG y GIF. Hasta @Model.MaxMb MB por imagen; lo ideal es que pese <strong>menos de 400 KB</strong> para que la portada cargue rápido.</li>
+        <li><strong>Tamaño:</strong> <strong>1920 × 640 px</strong>, horizontal, proporción <strong>3:1</strong>. Mínimo 1200 px de ancho. Usá <strong>la misma proporción en todas</strong> las imágenes.</li>
+        <li><strong>Si la proporción es otra,</strong> la imagen no se deforma: se recorta en los bordes para llenar el recuadro.</li>
+        <li><strong>En celular</strong> el recuadro es más alto (2:1) y se pierde aproximadamente un sexto del ancho de cada lado. Poné el texto, el logo y el botón dentro del <strong>66 % central</strong> de la imagen.</li>
+    </ul>
+    <div class="fw-semibold mb-1">Estilo</div>
+    <ul class="mb-0 ps-3">
+        <li>Todo el contenido (título, texto, botón o precio) tiene que estar <strong>dibujado dentro de la imagen</strong>: el carrusel no agrega textos ni botones por encima.</li>
+        <li>Letras grandes y con buen contraste; evitá texto chico, que en el celular no se lee.</li>
+        <li>Sin bordes ni márgenes blancos, y sin pegar nada importante a los bordes ni a la franja inferior, donde se dibujan los puntos de avance.</li>
+        <li>Un mensaje por imagen. Las flechas y los puntos se muestran solos cuando hay 2 o más imágenes.</li>
+    </ul>
+</div>
+
+@if (!Model.PromosHabilitadas || !Model.DestinosDisponibles)
+{
+    <div class="alert alert-secondary py-2 small">
+        <i class="bi bi-link-45deg me-1"></i><strong>Enlaces de los banners:</strong>
+        @if (!Model.PromosHabilitadas)
+        {
+            <span>para que un banner lleve a los productos de una promoción hace falta el módulo de promociones por cantidad / descuento
+            (parámetro <code>promociones / descuentos</code> = <code>1</code>). Los banners funcionan igual, solo como imagen.</span>
+        }
+        else
+        {
+            <span>falta crear la tabla de destinos: ejecutá el script <code>sql/carrusel_destinos.sql</code> y recargá la página.
+            Los banners funcionan igual, solo como imagen.</span>
+        }
+    </div>
+}
+else
+{
+    <div class="alert alert-light border py-2 small">
+        <i class="bi bi-link-45deg me-1"></i><strong>Enlaces de los banners:</strong> cada banner puede llevar a los productos de una promoción
+        vigente (por cantidad o por porcentaje). Al hacer clic en el banner completo el cliente ve solo los productos de esa promoción.
+        Si la promoción vence o se elimina, el banner sigue mostrándose y la página de destino avisa que ya no está disponible.
+    </div>
+}
+
 <!-- ── AGREGAR ─────────────────────────────────────────────────────── -->
 <div class="card shadow-sm border-0 mb-4">
     <div class="card-body">
         <div class="small fw-semibold text-uppercase text-muted mb-2">Agregar promoción</div>
         <div class="row g-3">
             <div class="col-12 col-lg-5">
-                <label class="form-label small mb-1">Imagen <span class="text-muted">(JPG, PNG, WEBP o GIF · hasta @Model.MaxMb MB · se ajusta sin recortar; con ~900 px de ancho alcanza)</span></label>
+                <label class="form-label small mb-1">Imagen <span class="text-muted">(JPG o WEBP de 1920 × 640 px, proporción 3:1 · hasta @Model.MaxMb MB; también PNG o GIF)</span></label>
                 <input id="nuevaImagen" type="file" class="form-control form-control-sm" accept="image/jpeg,image/png,image/webp,image/gif" />
                 <label class="form-label small mb-1 mt-2">Texto alternativo <span class="text-muted">(opcional, accesibilidad)</span></label>
                 <input id="nuevoTitulo" type="text" maxlength="150" class="form-control form-control-sm" placeholder="Ej.: Ofertas de la semana" />
@@ -54,9 +101,10 @@ else
                 </button>
             </div>
             <div class="col-12 col-lg-7">
-                <div class="small text-muted mb-1">Vista previa de la tarjeta (la imagen entra completa, sin deformarse)</div>
-                <div style="max-width:340px">
-                    <div class="promo-marco" style="height:200px"><img id="prevTarjeta" alt="" hidden /></div>
+                <div class="small text-muted mb-1">Vista previa: así se ve en escritorio (3:1) y en celular (2:1, recortada a los costados)</div>
+                <div style="max-width:480px">
+                    <div class="promo-marco"><img id="prevTarjeta" alt="" hidden /></div>
+                    <div class="promo-marco movil mt-2" style="max-width:240px"><img id="prevMovil" alt="" hidden /></div>
                 </div>
             </div>
         </div>
@@ -68,7 +116,7 @@ else
     <div class="card-body">
         <div class="small fw-semibold text-uppercase text-muted mb-2">
             Promociones cargadas
-            <span class="text-muted fw-normal text-lowercase">· se muestran en este orden, de a 3 en escritorio; usá las flechas para cambiarlo</span>
+            <span class="text-muted fw-normal text-lowercase">· se muestran en este orden, una por vez; usá las flechas para cambiarlo</span>
         </div>
 
         <div id="listaPromos" class="d-flex flex-column gap-2">
@@ -87,12 +135,31 @@ else
                             <span class="promo-pos d-inline-flex align-items-center justify-content-center small" data-pos>@p.Orden</span>
                             <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" data-accion="bajar" title="Bajar"><i class="bi bi-chevron-down"></i></button>
                         </div>
-                        <div class="col-12 col-sm" style="min-width:200px;max-width:340px">
+                        <div class="col-12 col-sm" style="min-width:200px;max-width:420px">
                             <div class="promo-marco"><img src="/images/promociones/@p.Id?v=@p.Version" alt="@p.Titulo" loading="lazy" /></div>
                         </div>
                         <div class="col-12 col-md">
                             <input type="text" maxlength="150" class="form-control form-control-sm mb-2" data-titulo
                                    value="@p.Titulo" placeholder="Texto alternativo (opcional)" />
+                            @* Destino del banner: promoción por cantidad / porcentaje (se guarda el id de la promoción) *@
+                            @if (Model.PromosHabilitadas && Model.DestinosDisponibles)
+                            {
+                                <div class="promo-destino mb-2" data-destino data-regla="@(p.FkPromocionRegla?.ToString() ?? "")">
+                                    <div class="row g-2 align-items-center">
+                                        <div class="col-12 col-md-5">
+                                            <select class="form-select form-select-sm" data-destino-tipo aria-label="Al hacer clic en el banner">
+                                                <option value="">Sin enlace (solo imagen)</option>
+                                                <option value="NXM">Lleva a una promoción por cantidad</option>
+                                                <option value="PORC">Lleva a una promoción por porcentaje</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-12 col-md-7">
+                                            <select class="form-select form-select-sm" data-destino-regla aria-label="Promoción" disabled></select>
+                                        </div>
+                                    </div>
+                                    <div class="small mt-1" data-destino-estado></div>
+                                </div>
+                            }
                             <div class="d-flex flex-wrap gap-2">
                                 <label class="btn btn-sm btn-outline-primary mb-0">
                                     <i class="bi bi-arrow-repeat me-1"></i>Reemplazar imagen
@@ -116,22 +183,27 @@ else
     <div class="card shadow-sm border-0 mb-4">
         <div class="card-body">
             <div class="small fw-semibold text-uppercase text-muted mb-2">Vista previa del carrusel</div>
-            @{ ViewData["IntervaloSeg"] = Model.IntervaloSegundos; }
+            @{ ViewData["IntervaloSeg"] = Model.IntervaloSegundos; ViewData["SinEnlaces"] = true; }
             <partial name="_CarruselPromociones" model="Model.Promociones" view-data="ViewData" />
             <div class="small text-muted">
-                Así se ve en la portada: 3 promociones en escritorio, 2 en tablet y 1 en móvil. Avanza sola cada
+                Así se ve en la portada: una imagen por vez a todo el ancho. Avanza sola cada
                 @Model.IntervaloSegundos s (parámetro <code>ecommerce / IntervaloCarruselPromociones</code>) y se pausa cuando alguien la mueve.
             </div>
         </div>
     </div>
 }
 
+<script id="reglasData" type="application/json">@Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+    Model.Reglas.Select(r => new { id = r.Id, nombre = r.Nombre, tipo = r.Tipo, resumen = r.Resumen, vigente = r.Vigente })))</script>
+<style>
+    .promo-destino { border: 1px dashed var(--border-ui); border-radius: 8px; padding: .5rem; background: var(--bg-subtle); }
+</style>
 <script>
 (function () {
     var TOKEN = document.getElementById('csrfToken').value;
     var MAX_MB = parseInt(document.getElementById('maxMb').value, 10) || 5;
-    var ANCHO_MAX = 960;       // la tarjeta se ve a ~330 px: 960 cubre pantallas de alta densidad sin cargar de más
-    var PESO_OK = 300 * 1024;  // por debajo de este peso (y de ANCHO_MAX) se sube tal cual
+    var ANCHO_MAX = 1920;      // la imagen se ve a todo el ancho: 1920 cubre escritorio de alta resolución sin cargar de más
+    var PESO_OK = 400 * 1024;  // por debajo de este peso (y de ANCHO_MAX) se sube tal cual
     var lista = document.getElementById('listaPromos');
 
     function alerta(msg, tipo) {
@@ -191,18 +263,19 @@ else
     var inpNueva = document.getElementById('nuevaImagen');
     var btnAgregar = document.getElementById('btnAgregar');
     var prev = document.getElementById('prevTarjeta');
+    var prevMovil = document.getElementById('prevMovil');
 
     inpNueva.addEventListener('change', async function () {
         var f = inpNueva.files[0];
         var err = f ? validarArchivo(f) : null;
         if (!f || err) {
-            prev.hidden = true;
+            prev.hidden = true; prevMovil.hidden = true;
             btnAgregar.disabled = true;
             if (err) alerta(err, 'warning');
             return;
         }
         var u = await leerDataUrl(f);
-        if (u) { prev.src = u; prev.hidden = false; }
+        if (u) { prev.src = u; prev.hidden = false; prevMovil.src = u; prevMovil.hidden = false; }
         btnAgregar.disabled = false;
     });
 
@@ -219,6 +292,78 @@ else
         if (r.ok) { location.reload(); return; }
         alerta(r.error || 'No se pudo agregar la promoción.');
         btnAgregar.disabled = false;
+    });
+
+    // ── destino del banner: promoción por cantidad / porcentaje ─────────────
+    var REGLAS = [];
+    try { REGLAS = JSON.parse(document.getElementById('reglasData').textContent) || []; } catch (e) { REGLAS = []; }
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); }
+
+    // Llena el combo de promociones del tipo elegido: solo las vigentes + la actual aunque ya no lo esté (marcada).
+    function llenarReglas(caja, tipo, actualId) {
+        var sel = caja.querySelector('[data-destino-regla]');
+        if (!tipo) { sel.innerHTML = '<option value="">—</option>'; sel.disabled = true; return; }
+        var opts = '<option value="">Elegí una promoción…</option>';
+        REGLAS.filter(function (r) { return r.tipo === tipo && (r.vigente || r.id === actualId); }).forEach(function (r) {
+            opts += '<option value="' + r.id + '"' + (r.id === actualId ? ' selected' : '') + '>' + esc(r.nombre) + ' — ' + esc(r.resumen) + (r.vigente ? '' : ' (no vigente)') + '</option>';
+        });
+        if (actualId && !REGLAS.some(function (r) { return r.id === actualId; }))
+            opts += '<option value="' + actualId + '" selected>Promoción #' + actualId + ' (eliminada)</option>';
+        sel.innerHTML = opts;
+        sel.disabled = false;
+    }
+
+    function estadoDestino(caja) {
+        var id = parseInt(caja.dataset.regla, 10) || 0;
+        var lbl = caja.querySelector('[data-destino-estado]');
+        if (!id) { lbl.className = 'small mt-1 text-muted'; lbl.textContent = 'Sin enlace: el banner es solo una imagen.'; return; }
+        var r = REGLAS.find(function (x) { return x.id === id; });
+        if (!r) { lbl.className = 'small mt-1 text-danger'; lbl.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>La promoción asociada ya no existe: el clic muestra un aviso. Elegí otra o quitá el enlace.'; return; }
+        if (!r.vigente) { lbl.className = 'small mt-1 text-warning'; lbl.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>Lleva a «' + esc(r.nombre) + '», que no está vigente: el clic muestra un aviso.'; return; }
+        lbl.className = 'small mt-1 text-success';
+        lbl.innerHTML = '<i class="bi bi-link-45deg me-1"></i>Lleva a: <strong>' + esc(r.nombre) + '</strong> (' + esc(r.resumen) + ')';
+    }
+
+    lista.querySelectorAll('[data-destino]').forEach(function (caja) {
+        var id = parseInt(caja.dataset.regla, 10) || 0;
+        var r = id ? REGLAS.find(function (x) { return x.id === id; }) : null;
+        var tipo = r ? r.tipo : '';
+        caja.querySelector('[data-destino-tipo]').value = tipo;
+        // Si la promoción ya no existe no se conoce su tipo: se deja el combo de tipo vacío y el estado avisa.
+        llenarReglas(caja, tipo, id);
+        estadoDestino(caja);
+    });
+
+    lista.addEventListener('change', async function (e) {
+        var t = e.target;
+        var caja = t.closest('[data-destino]');
+        if (!caja) return;
+        var fila = caja.closest('.promo-fila');
+        var selTipo = caja.querySelector('[data-destino-tipo]');
+        var selRegla = caja.querySelector('[data-destino-regla]');
+
+        if (t === selTipo) {
+            // Cambiar el tipo: "Sin enlace" guarda de inmediato; un tipo nuevo espera a que se elija la promoción.
+            if (!selTipo.value) {
+                var rq = await post('Destino', { id: +fila.dataset.id, tipo: null, reglaId: null }, true);
+                if (!rq.ok) { alerta(rq.error || 'No se pudo quitar el enlace.'); return; }
+                caja.dataset.regla = '';
+                llenarReglas(caja, '', 0); estadoDestino(caja);
+            } else {
+                llenarReglas(caja, selTipo.value, 0);
+                var lbl = caja.querySelector('[data-destino-estado]');
+                lbl.className = 'small mt-1 text-muted'; lbl.textContent = 'Elegí la promoción a la que lleva el banner.';
+            }
+            return;
+        }
+        if (t === selRegla) {
+            var reglaId = selRegla.value ? parseInt(selRegla.value, 10) : null;
+            var res = await post('Destino', { id: +fila.dataset.id, tipo: selTipo.value || null, reglaId: reglaId }, true);
+            if (!res.ok) { alerta(res.error || 'No se pudo guardar el enlace.'); return; }
+            caja.dataset.regla = reglaId ? String(reglaId) : '';
+            estadoDestino(caja);
+            alerta(reglaId ? 'Enlace guardado.' : 'Enlace quitado.', 'success');
+        }
     });
 
     // ── título (se guarda al salir del campo) ───────────────

@@ -8,8 +8,10 @@ namespace LitoralMarket.Web.Pages.Shared;
 /// <param name="Fraccionado">Si el producto admite cantidades no enteras (paso 0.01) cuando no hay cantidadMinimaVenta.</param>
 /// <param name="CantidadMinimaVenta">Productos.cantidadMinimaVenta. Si es &gt; 1, el input queda readonly y solo se mueve en múltiplos de ese valor.</param>
 /// <param name="AutoGuardar">true = al cambiar el valor (típicamente en el carrito), se envía el formulario contenedor automáticamente.</param>
+/// <param name="Maximo">Mayor cantidad permitida según el stock. Solo se informa con ecommerce/LimitarCantidadPorStock = 1; null o 0 = sin tope.</param>
 public record CantidadStepperVm(
     decimal Valor,
     bool Fraccionado,
     decimal? CantidadMinimaVenta,
-    bool AutoGuardar = false);
+    bool AutoGuardar = false,
+    decimal? Maximo = null);

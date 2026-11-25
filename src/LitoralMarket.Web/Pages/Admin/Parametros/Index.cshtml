@@ -194,6 +194,7 @@ else
 
         const id  = btn.dataset.id;
         const res = await fetch(`/Admin/Parametros?handler=ParametroJson&id=${id}`);
+        if (res.status === 403) { location.reload(); return; }   // venció el acceso: vuelve a pedir la contraseña
         if (!res.ok) { alert('No se pudo cargar el parámetro.'); return; }
         const d = await res.json();
 

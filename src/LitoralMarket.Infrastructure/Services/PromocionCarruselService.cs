@@ -19,6 +19,7 @@ public class PromocionCarruselService : IPromocionCarruselService
     public const int MaxTitulo = 150;
     private const string CacheKey = "promociones_carrusel";
     private static readonly TimeSpan CacheDuracion = TimeSpan.FromMinutes(10);
+    private const string KeyTablaDestinos = "carrusel_destinos_tabla";
 
     private readonly AppDbContext _db;
     private readonly IMemoryCache _cache;
@@ -43,16 +44,70 @@ public class PromocionCarruselService : IPromocionCarruselService
             .Select(p => new { p.Id, p.Titulo, p.Orden, p.FechaModificacion })
             .ToListAsync();
 
+        // Destinos (banner -> promocion): UNA consulta extra, solo si la tabla existe; entra en la misma cache de la lista.
+        var destinos = new Dictionary<int, int>();
+        if (filas.Count > 0 && await DestinosDisponiblesAsync())
+            destinos = await _db.PromocionesCarruselDestinos.AsNoTracking()
+                .ToDictionaryAsync(d => d.FkPromocionCarrusel, d => d.FkPromocionRegla);
+
         lista = filas.Select(f => new PromocionCarruselDto
         {
             Id      = f.Id,
             Titulo  = f.Titulo,
             Orden   = f.Orden,
-            Version = f.FechaModificacion.Ticks
+            Version = f.FechaModificacion.Ticks,
+            FkPromocionRegla = destinos.TryGetValue(f.Id, out var regla) ? regla : null
         }).ToList();
 
         _cache.Set(CacheKey, lista, CacheDuracion);
         return lista;
+    }
+
+    public async Task<bool> DestinosDisponiblesAsync()
+    {
+        if (_cache.TryGetValue(KeyTablaDestinos, out bool existe)) return existe;
+        existe = await ContarTablaDestinosAsync() == 1;
+        _cache.Set(KeyTablaDestinos, existe, TimeSpan.FromSeconds(60));
+        return existe;
+    }
+
+    /// <summary>Costura para las pruebas (SQLite no tiene information_schema).</summary>
+    protected virtual async Task<int> ContarTablaDestinosAsync()
+        => (await _db.Database.SqlQueryRaw<int>(
+            "SELECT COUNT(*) AS `Value` FROM information_schema.TABLES " +
+            "WHERE TABLE_SCHEMA = DATABASE() AND LOWER(TABLE_NAME) = 'promocionescarruseldestinos'")
+            .ToListAsync()).FirstOrDefault();
+
+    public async Task<ResultadoPromocion> AsignarDestinoAsync(int bannerId, int? reglaId)
+    {
+        if (!await DestinosDisponiblesAsync())
+            return ResultadoPromocion.Fallo("Falta crear la tabla de destinos (script sql/carrusel_destinos.sql).");
+        if (reglaId is <= 0) return ResultadoPromocion.Fallo("La promoción elegida no es válida.");
+
+        try
+        {
+            if (!await _db.PromocionesCarrusel.AnyAsync(p => p.Id == bannerId))
+                return ResultadoPromocion.Fallo("El banner no existe.");
+
+            var actual = await _db.PromocionesCarruselDestinos.FirstOrDefaultAsync(d => d.FkPromocionCarrusel == bannerId);
+            if (reglaId is null)
+            {
+                if (actual is not null) _db.PromocionesCarruselDestinos.Remove(actual);
+            }
+            else if (actual is null)
+                _db.PromocionesCarruselDestinos.Add(new PromocionCarruselDestino { FkPromocionCarrusel = bannerId, FkPromocionRegla = reglaId.Value });
+            else
+                actual.FkPromocionRegla = reglaId.Value;
+
+            await _db.SaveChangesAsync();
+            Invalidar();
+            return ResultadoPromocion.Correcto(bannerId);
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Error al asignar el destino del banner {Id}", bannerId);
+            return ResultadoPromocion.Fallo("No se pudo guardar el enlace.");
+        }
     }
 
     public async Task<PromocionImagen?> ObtenerImagenAsync(int id)

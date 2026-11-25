@@ -2,6 +2,22 @@ using System.ComponentModel.DataAnnotations;
 
 namespace LitoralMarket.Application.DTOs;
 
+/// <summary>
+/// Para qué se busca un producto en la administración. Solo importa con ecommerce/HabilitarVariantesProducto = 1;
+/// apagado, todos los contextos devuelven lo mismo que siempre.
+/// </summary>
+public enum ContextoBusquedaProducto
+{
+    /// <summary>Todo, sin distinguir fichas ni variantes (comportamiento histórico).</summary>
+    Todos = 0,
+    /// <summary>ABM de productos: fichas y productos simples (las variantes se editan desde su ficha; si el texto coincide con una variante se muestra su ficha).</summary>
+    Administracion = 1,
+    /// <summary>Ingreso y ajuste de stock: productos simples y variantes (la ficha no tiene stock propio).</summary>
+    ParaStock = 2,
+    /// <summary>Selección para el catálogo (Inicio): fichas y productos simples; las variantes no se eligen sueltas.</summary>
+    ParaCatalogo = 3
+}
+
 /// <summary>Ítem para ingreso masivo de stock.</summary>
 /// <param name="ProductoId">Id del producto.</param>
 /// <param name="Cantidad">Unidades a ingresar (entero positivo).</param>
@@ -52,4 +68,12 @@ public class ProductoAdminDto
     public bool    Fraccionado     { get; set; }
     public bool    Dolarizado      { get; set; }
     public bool    Baja            { get; set; }
+
+    // ── Variantes (solo se completan con ecommerce/HabilitarVariantesProducto = 1) ──
+    /// <summary>El producto es una ficha principal que agrupa variantes.</summary>
+    public bool    EsFicha         { get; set; }
+    /// <summary>Cantidad de variantes de la ficha (si <see cref="EsFicha"/>).</summary>
+    public int     CantVariantes   { get; set; }
+    /// <summary>Si el producto es una variante: Productos.id de su ficha.</summary>
+    public int?    FkPrincipal     { get; set; }
 }

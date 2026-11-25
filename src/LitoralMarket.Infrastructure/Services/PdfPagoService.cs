@@ -215,7 +215,7 @@ public class PdfPagoService : IPdfPagoService
                 {
                     var bg = altRow ? ColorGrisCla : ColorBlanco;
                     altRow = !altRow;
-                    itemTable.AddCell(CeldaItem(S(item.Descripcion), fontNormal, bg, TextAlignment.LEFT));
+                    itemTable.AddCell(CeldaItem(S(item.Descripcion + (item.Descuento == 100m ? " (bonificado)" : "")), fontNormal, bg, TextAlignment.LEFT));
                     itemTable.AddCell(CeldaItem((item.Cantidad ?? 0).ToString("G"), fontNormal, bg, TextAlignment.CENTER));
                     itemTable.AddCell(CeldaItem($"$ {item.PrecioConIva ?? 0:N2}", fontNormal, bg, TextAlignment.RIGHT));
                     itemTable.AddCell(CeldaItem($"$ {item.Subtotal ?? 0:N2}", fontNormal, bg, TextAlignment.RIGHT));
@@ -427,7 +427,7 @@ public class PdfPagoService : IPdfPagoService
                 foreach (var item in pedido.Detalles)
                 {
                     var bg = altRow ? ColorGrisCla : ColorBlanco; altRow = !altRow;
-                    itemTable.AddCell(CeldaItem(S(item.Descripcion), fontNormal, bg, TextAlignment.LEFT));
+                    itemTable.AddCell(CeldaItem(S(item.Descripcion + (item.Descuento == 100m ? " (bonificado)" : "")), fontNormal, bg, TextAlignment.LEFT));
                     itemTable.AddCell(CeldaItem((item.Cantidad ?? 0).ToString("G"), fontNormal, bg, TextAlignment.CENTER));
                     itemTable.AddCell(CeldaItem($"$ {item.PrecioConIva ?? 0:N2}", fontNormal, bg, TextAlignment.RIGHT));
                     itemTable.AddCell(CeldaItem($"$ {item.Subtotal ?? 0:N2}", fontNormal, bg, TextAlignment.RIGHT));

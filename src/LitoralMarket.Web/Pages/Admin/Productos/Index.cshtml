@@ -110,7 +110,7 @@
                                        placeholder="Nombre del producto" />
                                 <span asp-validation-for="Producto.Descripcion" class="text-danger small"></span>
                             </div>
-                            <div class="row g-2 mb-2">
+                            <div class="row g-2 mb-2 solo-simple">
                                 <div class="col-6">
                                     <label class="form-label form-label-sm">Cód. Proveedor</label>
                                     <input asp-for="Producto.CodProveedor" class="form-control form-control-sm" />
@@ -167,13 +167,23 @@
                                     </div>
                                 </div>
                             </div>
+                            @if (Model.VariantesHabilitadas)
+                            {
+                                <div class="form-check form-switch mt-3">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="chkTieneVariantes">
+                                    <label class="form-check-label fw-semibold small" for="chkTieneVariantes">
+                                        <i class="bi bi-grid-3x3-gap me-1"></i>Este producto tiene variantes (medidas y/o colores)
+                                    </label>
+                                </div>
+                            }
                         </div>
 
                         <!-- ── Col derecha ── -->
                         <div class="col-12 col-md-6">
 
                             <!-- Precios -->
-                            <div class="admin-section-title">Precios</div>
+                            <div id="seccionPrecios">
+                            <div class="admin-section-title">Precios <span id="lblPrecioComun" class="d-none text-muted fw-normal text-lowercase">· comunes a todas las variantes</span></div>
                             <div class="mb-2">
                                 <label class="form-label form-label-sm">Precio proveedor</label>
                                 <div class="input-group input-group-sm">
@@ -203,11 +213,12 @@
                                            class="form-control" type="number" step="0.01" min="0" />
                                 </div>
                             </div>
+                            </div>
 
                             <!-- Stock -->
                             <div class="admin-section-title mt-3">Stock</div>
                             <div class="row g-2 mb-2">
-                                <div class="col-6">
+                                <div class="col-6 solo-simple">
                                     <label class="form-label form-label-sm">Stock actual</label>
                                     <input asp-for="Producto.StockActual" id="inpStockActual"
                                            class="form-control form-control-sm" type="number"
@@ -216,7 +227,7 @@
                                         <i class="bi bi-exclamation-triangle me-1"></i>El stock se modifica desde el módulo de movimientos.
                                     </div>
                                 </div>
-                                <div class="col-6">
+                                <div class="col-6 solo-simple">
                                     <label class="form-label form-label-sm">Stock mínimo</label>
                                     <input asp-for="Producto.StockMinimo"
                                            class="form-control form-control-sm" type="number"
@@ -251,6 +262,98 @@
                                 Usá las flechas para ordenar.
                             </p>
                         </div>
+
+                        @if (Model.VariantesHabilitadas)
+                        {
+                        <!-- Variantes (solo con ecommerce/HabilitarVariantesProducto = 1) -->
+                        <div class="col-12 d-none" id="variantesPanel">
+                            <div class="admin-section-title">Variantes</div>
+
+                            <div class="alert alert-info py-2 small d-none" id="varAvisoDim">
+                                <i class="bi bi-info-circle me-1"></i>Este producto ya tiene variantes: no se pueden cambiar las dimensiones
+                                (medidas/colores). Podés agregar opciones, deshabilitar combinaciones y editar códigos y precios.
+                            </div>
+
+                            <!-- Paso 1 -->
+                            <div class="var-paso">
+                                <div class="var-paso-titulo"><span class="var-num">1</span>¿Qué varía en este producto?</div>
+                                <div class="d-flex flex-wrap gap-3">
+                                    <div class="form-check"><input class="form-check-input" type="radio" name="varDim" id="varDimMC" value="mc" checked><label class="form-check-label" for="varDimMC">Medidas y colores</label></div>
+                                    <div class="form-check"><input class="form-check-input" type="radio" name="varDim" id="varDimM" value="m"><label class="form-check-label" for="varDimM">Solo medidas</label></div>
+                                    <div class="form-check"><input class="form-check-input" type="radio" name="varDim" id="varDimC" value="c"><label class="form-check-label" for="varDimC">Solo colores</label></div>
+                                </div>
+                            </div>
+
+                            <!-- Paso 2 -->
+                            <div class="var-paso">
+                                <div class="var-paso-titulo"><span class="var-num">2</span>¿El precio de costo y el precio de venta serán iguales para todas las medidas y colores?</div>
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <button type="button" class="btn btn-outline-success active" id="btnPreciosIguales">Sí, son iguales</button>
+                                    <button type="button" class="btn btn-outline-success" id="btnPreciosDistintos">No, varían</button>
+                                </div>
+                                <div class="small text-muted mt-1" id="varPreciosComunHint">Cargá el costo y el precio de venta una sola vez, en el bloque <strong>Precios</strong> de arriba. Se copian a todas las variantes; cada una puede tener un precio propio (lápiz de la grilla).</div>
+                                <div class="small text-muted mt-1 d-none" id="varPreciosGrillaHint">Cargá el costo y el precio de cada variante en la grilla. Podés usar las acciones masivas.</div>
+                            </div>
+
+                            <!-- Paso 3 -->
+                            <div class="var-paso">
+                                <div class="var-paso-titulo"><span class="var-num">3</span>Elegí las opciones</div>
+                                <div class="row g-3">
+                                    <div class="col-12 col-md-6" id="varCfgM">
+                                        <div class="fw-semibold small mb-1">Medidas</div>
+                                        <div class="d-flex flex-wrap gap-1 mb-2" id="varChipsM"></div>
+                                        <div class="input-group input-group-sm mb-1">
+                                            <select class="form-select" id="varSelM"></select>
+                                        </div>
+                                        <div class="input-group input-group-sm">
+                                            <input type="text" class="form-control" id="varNuevaM" maxlength="40" placeholder="Crear medida nueva…">
+                                            <button type="button" class="btn btn-outline-secondary" id="varBtnNuevaM">Crear</button>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 col-md-6" id="varCfgC">
+                                        <div class="fw-semibold small mb-1">Colores</div>
+                                        <div class="d-flex flex-wrap gap-1 mb-2" id="varChipsC"></div>
+                                        <div class="input-group input-group-sm mb-1">
+                                            <select class="form-select" id="varSelC"></select>
+                                        </div>
+                                        <div class="input-group input-group-sm">
+                                            <input type="text" class="form-control" id="varNuevaC" maxlength="40" placeholder="Crear color nuevo…">
+                                            <input type="color" class="form-control form-control-color" id="varNuevoHex" title="Muestra (opcional)" style="max-width:44px">
+                                            <button type="button" class="btn btn-outline-secondary" id="varBtnNuevaC">Crear</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-success mt-2" id="varBtnGenerar">
+                                    <i class="bi bi-magic me-1"></i>Generar combinaciones
+                                </button>
+                            </div>
+
+                            <!-- Paso 4 -->
+                            <div class="var-paso">
+                                <div class="var-paso-titulo"><span class="var-num">4</span>Combinaciones</div>
+                                <div id="varMatriz" class="mb-3"></div>
+
+                                <div class="d-flex flex-wrap gap-2 align-items-end mb-2 var-acciones">
+                                    @if (!Model.CodigoAutomatico)
+                                    {
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" id="varBtnCodigos">
+                                            <i class="bi bi-upc me-1"></i>Generar códigos de proveedor
+                                        </button>
+                                    }
+                                    <div class="input-group input-group-sm" style="width:auto">
+                                        <input type="number" step="0.01" min="0" class="form-control" id="varBulkCosto" placeholder="Costo" style="width:90px">
+                                        <input type="number" step="0.01" min="0" class="form-control" id="varBulkPrecio" placeholder="Precio" style="width:90px">
+                                        <input type="number" step="0.1" class="form-control" id="varBulkPct" placeholder="± %" style="width:70px">
+                                        <input type="number" step="1" min="0" class="form-control" id="varBulkStock" placeholder="Stock ini." style="width:90px">
+                                        <button type="button" class="btn btn-outline-success" id="varBtnAplicar" title="Aplica a las filas tildadas (o a todas si no hay ninguna)">Aplicar</button>
+                                    </div>
+                                </div>
+                                <div class="small text-muted mb-2" id="varResumen"></div>
+                                <div id="varGrilla" class="var-grilla-wrap"></div>
+                            </div>
+                        </div>
+                        }
+
 
                         <!-- Descripción larga (ancho completo) -->
                         <div class="col-12">
@@ -299,8 +402,44 @@
     </div>
 </div>
 
+@if (Model.VariantesHabilitadas)
+{
+<!-- =========================================================
+     MODAL: confirmar cambio de precio común (vista previa)
+     ========================================================= -->
+<div class="modal fade" id="modalPropagacion" tabindex="-1" aria-hidden="true" style="z-index:1065">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title"><i class="bi bi-currency-dollar me-2"></i>Cambió el costo o el precio común</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body small">
+                <p class="mb-2">Se actualizarán <strong id="propSiguen">0</strong> variante(s) que siguen el precio común.
+                   <strong id="propPropias">0</strong> tienen precio propio.</p>
+                <div id="propListaWrap" class="mb-2 d-none">
+                    <div class="text-muted">Con precio propio:</div>
+                    <ul class="mb-0 ps-3" id="propListaPropias"></ul>
+                </div>
+                <div class="form-check"><input class="form-check-input" type="radio" name="propModo" id="propM1" value="1" checked><label class="form-check-label" for="propM1">Actualizar solo las que siguen el precio común</label></div>
+                <div class="form-check"><input class="form-check-input" type="radio" name="propModo" id="propM2" value="2"><label class="form-check-label" for="propM2">Actualizar todas (también las de precio propio)</label></div>
+                <div class="form-check"><input class="form-check-input" type="radio" name="propModo" id="propM0" value="0"><label class="form-check-label" for="propM0">No tocar las variantes existentes</label></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success" id="btnPropOk">Continuar y guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+}
+
 @section Scripts {
 <partial name="_ValidationScriptsPartial" />
+@if (Model.VariantesHabilitadas)
+{
+    <script src="~/js/admin-variantes.js" asp-append-version="true"></script>
+}
 <style>
     .admin-section-title {
         font-size: 0.68rem; font-weight: 700; letter-spacing: 1px;
@@ -341,11 +480,47 @@
     #productoModal .modal-footer {
         flex-shrink: 0;         /* el footer NUNCA se achica ni se clippea */
     }
+
+    /* ── Variantes ── */
+    .var-paso { border: 1px solid var(--bs-border-color, #dee2e6); border-radius: .5rem; padding: .75rem; margin-bottom: .75rem; }
+    .var-paso-titulo { font-weight: 600; font-size: .85rem; margin-bottom: .5rem; display: flex; align-items: center; gap: .5rem; }
+    .var-num { display: inline-flex; width: 1.4rem; height: 1.4rem; border-radius: 50%; align-items: center; justify-content: center;
+        background: var(--verde, #1db062); color: #fff; font-size: .75rem; flex: 0 0 auto; }
+    .var-chip { display: inline-flex; align-items: center; gap: .35rem; padding: .15rem .5rem; border-radius: 999px; font-size: .8rem;
+        background: rgba(29,176,98,.12); border: 1px solid rgba(29,176,98,.3); }
+    .var-chip .btn-close { font-size: .55rem; }
+    .var-dot { display: inline-block; width: .8rem; height: .8rem; border-radius: 50%; border: 1px solid rgba(0,0,0,.25); margin-right: .25rem; vertical-align: -1px; }
+    .var-grilla-wrap { overflow-x: auto; }
+    .var-grilla td, .var-grilla th { white-space: nowrap; }
+    .var-grilla input.form-control { min-width: 110px; }
+    .var-grilla .var-in-stock { min-width: 80px; }
+    .var-off { opacity: .55; }
+    @@media (max-width: 767.98px) {
+        /* La grilla pasa a tarjetas: una por variante, con la etiqueta de cada dato. */
+        .var-grilla thead { display: none; }
+        .var-grilla, .var-grilla tbody, .var-grilla tr, .var-grilla td { display: block; width: 100%; }
+        .var-grilla tr { border: 1px solid var(--bs-border-color, #dee2e6); border-radius: .5rem; margin-bottom: .6rem; padding: .35rem .5rem; }
+        .var-grilla td { display: flex; justify-content: space-between; align-items: center; gap: .5rem; border: 0; padding: .2rem 0; white-space: normal; }
+        .var-grilla td::before { content: attr(data-label); font-size: .72rem; color: var(--text-secondary, #6b7280); flex: 0 0 38%; }
+        .var-grilla td[data-label=""]::before { content: none; }
+        .var-grilla input.form-control { min-width: 0; }
+        .var-grilla td .input-group { flex: 1 1 0; min-width: 0; }
+    }
 </style>
 <script>
 // ── Estado ────────────────────────────────────────────────────────
 let _idBaja   = 0;
 const TOKEN   = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+// productos/generaCodigoBarras = '1': en el alta, los códigos vacíos se asignan automáticamente.
+const CODIGO_AUTOMATICO = @(Model.CodigoAutomatico ? "true" : "false");
+window.AdminVariantes?.init({ token: TOKEN, codigoAutomatico: CODIGO_AUTOMATICO });
+
+function indicarCodigoAutomatico(esAlta) {
+    ['Producto.CodProveedor', 'Producto.CodBarras'].forEach(n => {
+        const el = document.querySelector(`[name="${n}"]`);
+        if (el) el.placeholder = CODIGO_AUTOMATICO && esAlta ? 'Alta: vacío = automático' : '';
+    });
+}
 
 // ── Búsqueda ──────────────────────────────────────────────────────
 let _busqTimer;
@@ -404,6 +579,8 @@ document.getElementById('formProducto').addEventListener('submit', async functio
 
     btnGuardar.disabled = true;
     try {
+        // Producto con variantes: valida, confirma el cambio de precio común y agrega variantesJson.
+        if (window.AdminVariantes && !(await AdminVariantes.preparar(fd))) { return; }
         const res  = await fetch(form.action, { method: 'POST', body: fd });
         let data   = null;
         try { data = await res.json(); } catch { /* respuesta no-JSON (ej. error del servidor) */ }
@@ -432,6 +609,8 @@ function abrirModalNuevo() {
     document.getElementById('warningStock').classList.add('d-none');
     limpiarOpcionProveedorInactivo();
     resetImagenes();
+    window.AdminVariantes?.reset();
+    indicarCodigoAutomatico(true);
     new bootstrap.Modal(document.getElementById('productoModal')).show();
 }
 
@@ -487,8 +666,13 @@ async function abrirModalEditar(id) {
     document.getElementById('inpStockActual').readOnly = true;
     document.getElementById('warningStock').classList.remove('d-none');
 
+    indicarCodigoAutomatico(false);
+
     // Imágenes existentes (metadatos)
     await cargarImagenesProducto(id);
+
+    // Variantes (solo con el parámetro): si es una ficha, carga sus combinaciones y oculta lo propio de productos simples.
+    if (window.AdminVariantes) await AdminVariantes.load(id);
 
     document.getElementById('modalTitulo').innerHTML = `<i class="bi bi-pencil me-2 text-success"></i>Editar: ${p.descripcion ?? ''}`;
     new bootstrap.Modal(document.getElementById('productoModal')).show();

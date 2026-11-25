@@ -1,4 +1,5 @@
 using System.Text.Json;
+using LitoralMarket.Application.DTOs;
 using LitoralMarket.Application.Helpers;
 using LitoralMarket.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -54,7 +55,7 @@ public class InicioModel : PageModel
         if (string.IsNullOrWhiteSpace(valor))
             return Resultado(new { ok = false, error = "Escribí al menos un carácter para buscar." });
 
-        var lista = await _productos.BuscarAsync(tipo, valor.Trim());
+        var lista = await _productos.BuscarAsync(tipo, valor.Trim(), ContextoBusquedaProducto.ParaCatalogo);
         return Resultado(new
         {
             ok = true,

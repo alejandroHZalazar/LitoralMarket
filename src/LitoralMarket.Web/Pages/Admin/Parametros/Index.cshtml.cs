@@ -1,7 +1,9 @@
 using LitoralMarket.Application.Interfaces;
 using LitoralMarket.Domain.Entities;
+using LitoralMarket.Web.Seguridad;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using System.Text.Json;
 
@@ -14,6 +16,18 @@ public class IndexModel : PageModel
     public IndexModel(IParametrosAdminService svc) => _svc = svc;
 
     public List<Parametro> Parametros { get; private set; } = new();
+
+    // ── Clave de acceso: cubre la página y TODOS sus handlers ─────────────
+    public override void OnPageHandlerExecuting(PageHandlerExecutingContext context)
+    {
+        if (AccesoParametros.EstaDesbloqueado(context.HttpContext)) return;
+
+        // La pantalla redirige a pedir la clave; las llamadas AJAX reciben 403.
+        context.Result = string.IsNullOrEmpty(context.HandlerMethod?.Name)
+            ? RedirectToPage("Acceso")
+            : new JsonResult(new { ok = false, error = "El acceso venció: recargá la página e ingresá la contraseña." })
+              { StatusCode = StatusCodes.Status403Forbidden };
+    }
 
     // ── GET — carga la página ─────────────────────────────────────────────
     public async Task OnGetAsync() =>

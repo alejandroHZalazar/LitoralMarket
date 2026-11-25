@@ -5,7 +5,7 @@ public class CobroEcommerce
     public int Id { get; set; }
     public int FkPedido { get; set; }
 
-    /// <summary>reembolso | mercadopago</summary>
+    /// <summary>reembolso | mercadopago | transferencia</summary>
     public string Tipo { get; set; } = "reembolso";
 
     /// <summary>pendiente | aprobado | rechazado | cancelado</summary>

@@ -123,7 +123,7 @@ public class PedidoAdminService : IPedidoAdminService
             MetodoPago       = cobro?.Tipo,
             Items            = p.Detalles.Select(d => new PedidoDetalleDto
             {
-                Descripcion = d.Descripcion ?? string.Empty,
+                Descripcion = (d.Descripcion ?? string.Empty) + (d.Descuento == 100m ? " (bonificado)" : ""),
                 Cantidad    = d.Cantidad    ?? 0,
                 Precio      = d.PrecioConIva ?? 0,
                 Subtotal    = d.Subtotal    ?? 0

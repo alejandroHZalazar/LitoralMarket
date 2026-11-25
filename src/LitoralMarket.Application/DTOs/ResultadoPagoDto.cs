@@ -12,6 +12,10 @@ public class ResultadoPagoDto
     public string? MpLinkPago { get; set; }
     public DateTime? MpFechaExpiracion { get; set; }
 
+    // Transferencia: importe exacto a transferir y fecha límite
+    public decimal? MontoTransferencia { get; set; }
+    public DateTime? Vencimiento { get; set; }
+
     // Email
     public bool EmailEnviado { get; set; }
 }

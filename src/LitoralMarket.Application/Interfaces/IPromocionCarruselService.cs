@@ -22,4 +22,16 @@ public interface IPromocionCarruselService
 
     /// <summary>Define el orden: la posición en la lista pasa a ser el orden. Debe incluir todas las promociones.</summary>
     Task<ResultadoPromocion> ReordenarAsync(IReadOnlyList<int> idsEnOrden);
+
+    /// <summary>
+    /// true si existe la tabla promocionesCarruselDestinos (sql/carrusel_destinos.sql). Sin ella el carrusel y su ABM funcionan
+    /// como siempre, sin enlaces. Cacheado 60 s.
+    /// </summary>
+    Task<bool> DestinosDisponiblesAsync();
+
+    /// <summary>
+    /// Asocia el banner a una promoción (id de promociones_reglas) o le quita el enlace (reglaId = null). No valida la regla:
+    /// eso lo hace quien llama (ver IPromocionesService.ObtenerParaCatalogoAsync).
+    /// </summary>
+    Task<ResultadoPromocion> AsignarDestinoAsync(int bannerId, int? reglaId);
 }

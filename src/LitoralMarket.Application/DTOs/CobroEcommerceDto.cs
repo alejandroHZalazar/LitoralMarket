@@ -14,5 +14,9 @@ public class CobroEcommerceDto
     public string? MpLinkPago { get; set; }
     public DateTime? MpFechaExpiracion { get; set; }
 
+    // Transferencia
+    public decimal? MontoTransferencia { get; set; }
+    public DateTime? Vencimiento { get; set; }
+
     public DateTime FechaCreacion { get; set; }
 }

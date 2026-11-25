@@ -1,0 +1,348 @@
+@page "{id:int?}"
+@model LitoralMarket.Web.Pages.Admin.PromocionesDescuentos.EditModel
+@Html.AntiForgeryToken()
+@{
+    ViewData["Title"] = Model.Id > 0 ? "Editar promoción" : "Nueva promoción";
+    var r = Model.Regla;
+    var jsonOpts = new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase };
+}
+
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+    <h2 class="mb-0 fw-bold"><i class="bi bi-percent me-2 text-success"></i>@(Model.Id > 0 ? "Editar promoción" : "Nueva promoción")</h2>
+    <a asp-page="Index" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Volver al listado</a>
+</div>
+
+@if (!Model.Habilitado)
+{
+    <div class="alert alert-warning">
+        <i class="bi bi-info-circle me-1"></i>
+        @(Model.TablasListas
+            ? "Las promociones están deshabilitadas: el parámetro promociones / descuentos debe valer 1."
+            : "Faltan crear las tablas de promociones en esta base (script scripts/promociones_reglas.sql de Comercial Web).")
+    </div>
+    return;
+}
+
+<div id="alertaPd" class="alert alert-danger py-2 d-none"></div>
+
+@* ═════ DATOS ═════ *@
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-header bg-transparent fw-semibold small text-uppercase">Datos de la promoción</div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label small mb-1" for="txtNombre">Nombre / descripción *</label>
+                <input type="text" id="txtNombre" class="form-control form-control-sm" maxlength="100" style="text-transform:uppercase;"
+                       value="@r.Nombre" placeholder="Ej.: 2X1 SHAMPOO, 20% PERFUMERÍA" />
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small mb-1" for="txtDesde">Vigente desde *</label>
+                <input type="datetime-local" id="txtDesde" class="form-control form-control-sm" value="@r.Desde.ToString("yyyy-MM-ddTHH:mm")" />
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small mb-1" for="txtHasta">Vigente hasta *</label>
+                <input type="datetime-local" id="txtHasta" class="form-control form-control-sm" value="@r.Hasta.ToString("yyyy-MM-ddTHH:mm")" />
+            </div>
+            <div class="col-12">
+                <label class="form-label small mb-1">Tipo de promoción</label>
+                <div class="d-flex gap-3 flex-wrap">
+                    <label class="tipo-opt" id="optPorc"><input type="radio" name="tipo" value="PORC" /> <strong>Porcentaje de descuento</strong><br /><small class="text-muted">Descuento fijo sobre el precio vigente de cada producto.</small></label>
+                    <label class="tipo-opt" id="optNxm"><input type="radio" name="tipo" value="NXM" /> <strong>Por cantidad (2x1, 3x2, 4x2…)</strong><br /><small class="text-muted">El cliente lleva N unidades y paga M.</small></label>
+                </div>
+            </div>
+            <div class="col-6 col-md-3" id="grpPorc">
+                <label class="form-label small mb-1" for="txtPorc">Porcentaje de descuento (%) *</label>
+                <input type="number" id="txtPorc" class="form-control form-control-sm" min="0.01" max="100" step="0.01" value="@(r.Porcentaje?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "")" />
+            </div>
+            <div class="col-6 col-md-2 grp-nxm">
+                <label class="form-label small mb-1" for="txtLleva">Lleva (N) *</label>
+                <input type="number" id="txtLleva" class="form-control form-control-sm" min="2" max="99" step="1" value="@(r.Lleva?.ToString() ?? "")" />
+            </div>
+            <div class="col-6 col-md-2 grp-nxm">
+                <label class="form-label small mb-1" for="txtPaga">Paga (M) *</label>
+                <input type="number" id="txtPaga" class="form-control form-control-sm" min="1" max="98" step="1" value="@(r.Paga?.ToString() ?? "")" />
+            </div>
+            <div class="col-6 col-md-3 grp-nxm d-flex align-items-end"><span id="lblNxm" class="badge text-bg-light border"></span></div>
+            @* Solo NxM. Disponible con variantes habilitadas (una regla que ya la tenia puede conservarla). *@
+            <div class="col-12 grp-nxm">
+                @{ var puedeAgrupar = Model.VariantesHabilitadas || r.AgrupaVariantes; }
+                <div class="agrupa-box @(puedeAgrupar ? "" : "disabled")">
+                    <div class="form-check mb-0">
+                        <input class="form-check-input" type="checkbox" id="chkAgrupa" @(r.AgrupaVariantes ? "checked" : "") @(puedeAgrupar ? "" : "disabled") />
+                        <label class="form-check-label fw-semibold small" for="chkAgrupa">
+                            <i class="bi bi-diagram-3 me-1"></i>Acumular las variantes de una misma ficha
+                        </label>
+                    </div>
+                    <div class="small text-muted mt-1">
+                        Las unidades de las distintas variantes (medidas y colores) de <strong>una misma ficha</strong> se suman para completar el grupo:
+                        con una 3x2, una remera roja S + una roja M + una azul L cuentan como 3 y una sale bonificada. Solo suman las variantes
+                        <strong>incluidas en esta promoción</strong>; nunca se mezclan fichas distintas. Las unidades bonificadas se asignan en el orden en
+                        que están cargadas en el carrito, cada una a su propio precio. Desmarcada, cada variante se evalúa por separado.
+                    </div>
+                    @if (!puedeAgrupar)
+                    {
+                        <div class="small text-warning mt-1"><i class="bi bi-exclamation-triangle me-1"></i>No disponible: los productos con variantes están deshabilitados (parámetro <code>ecommerce / HabilitarVariantesProducto</code>).</div>
+                    }
+                </div>
+            </div>
+            <div class="col-6 col-md-3 d-flex align-items-end">
+                <div class="form-check"><input class="form-check-input" type="checkbox" id="chkActiva" @(r.Activa ? "checked" : "") />
+                    <label class="form-check-label small" for="chkActiva">Promoción activa</label></div>
+            </div>
+        </div>
+        <div class="text-muted small mt-2">
+            Las fechas y horas son en hora de Argentina. Fuera del período la promoción no se aplica aunque esté activa.
+            Si un producto participa de varias promociones vigentes, el sistema aplica automáticamente <strong>la más conveniente para el cliente</strong> (no se acumulan).
+            Los productos fraccionados no participan de las promociones.
+        </div>
+    </div>
+</div>
+
+@* ═════ BÚSQUEDA ═════ *@
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-header bg-transparent fw-semibold small text-uppercase">Buscar productos para agregar</div>
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Proveedores</label>
+                <div class="ms-wrap">
+                    <div class="ms-input" id="msInProv" onclick="toggleMs('Prov')"><span class="ms-label placeholder" id="msLblProv">Todos los proveedores</span>&#9662;</div>
+                    <div class="ms-panel" id="msPanProv">
+                        <div class="ms-ops"><span onclick="msTodos('Prov')">Seleccionar todo</span><span class="n" onclick="msNinguno('Prov')">Ninguno</span></div>
+                        <div class="ms-search-box"><input type="text" placeholder="Buscar…" oninput="msFiltro('Prov',this.value)" /></div>
+                        <div class="ms-options" id="msOptProv">
+                            @foreach (var p in Model.Proveedores) { <label class="ms-option" data-label="@p.Text.ToUpper()"><input type="checkbox" class="chk-Prov" value="@p.Value" onchange="msLabel('Prov')" /> @p.Text</label> }
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Rubros</label>
+                <div class="ms-wrap">
+                    <div class="ms-input" id="msInRub" onclick="toggleMs('Rub')"><span class="ms-label placeholder" id="msLblRub">Todos los rubros</span>&#9662;</div>
+                    <div class="ms-panel" id="msPanRub">
+                        <div class="ms-ops"><span onclick="msTodos('Rub')">Seleccionar todo</span><span class="n" onclick="msNinguno('Rub')">Ninguno</span></div>
+                        <div class="ms-search-box"><input type="text" placeholder="Buscar…" oninput="msFiltro('Rub',this.value)" /></div>
+                        <div class="ms-options" id="msOptRub">
+                            @foreach (var x in Model.Rubros) { <label class="ms-option" data-label="@x.Text.ToUpper()"><input type="checkbox" class="chk-Rub" value="@x.Value" onchange="msLabel('Rub')" /> @x.Text</label> }
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small mb-1" for="txtBuscar">Código de barras, código de proveedor o descripción</label>
+                <input type="text" id="txtBuscar" class="form-control form-control-sm" placeholder="Escriba y presione Enter" onkeydown="if(event.key==='Enter') buscar()" />
+            </div>
+            <div class="col-md-2"><button type="button" class="btn btn-primary btn-sm w-100" id="btnBuscar" onclick="buscar()">Buscar</button></div>
+        </div>
+
+        <div id="panelResultados" class="mt-3 d-none">
+            <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                <span id="lblResultados" class="small text-muted"></span>
+                <button type="button" class="btn btn-success btn-sm" id="btnAgregarTodos" onclick="agregarTodos()">Agregar todos los resultados</button>
+            </div>
+            <div class="pd-scroll" style="max-height:300px;">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead class="table-dark"><tr><th>Cód. prov.</th><th>Descripción</th><th class="d-none d-md-table-cell">Cód. barras</th><th class="d-none d-md-table-cell">Proveedor</th><th class="text-end">Precio</th><th></th></tr></thead>
+                    <tbody id="tbodyRes"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* ═════ PRODUCTOS DE LA PROMOCIÓN ═════ *@
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+        <span class="fw-semibold small text-uppercase">Productos de la promoción <span class="badge text-bg-light border ms-2" id="cntProds">0</span></span>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="quitarTodos()">Quitar todos</button>
+    </div>
+    <div class="pd-scroll" style="max-height:420px;">
+        <table class="table table-sm table-hover align-middle mb-0">
+            <thead class="table-dark"><tr><th>Código</th><th>Descripción</th><th class="d-none d-md-table-cell">Proveedor</th>
+                <th class="text-end">Precio actual</th><th class="text-end">Beneficio</th><th class="text-end">Precio promocional</th><th style="width:50px;"></th></tr></thead>
+            <tbody id="tbodyProds"></tbody>
+        </table>
+        <div id="vacioProds" class="text-center text-muted py-4 small">Todavía no agregó productos.</div>
+    </div>
+    <div class="card-body pt-2 small text-muted">
+        El precio actual se toma siempre del precio vigente del sistema; no se guarda un precio promocional.
+        Si usás variantes de producto, elegí cada variante (la ficha principal no se puede agregar).
+    </div>
+</div>
+
+<div class="d-flex gap-2 mb-4">
+    <button type="button" class="btn btn-success" id="btnGuardar" onclick="guardar()"><i class="bi bi-check-lg me-1"></i>Guardar promoción</button>
+    <a asp-page="Index" class="btn btn-outline-secondary">Cancelar</a>
+</div>
+
+@section Scripts {
+<style>
+    .tipo-opt { border:2px solid var(--bs-border-color, #d0d7e8); border-radius:10px; padding:.6rem 1rem; cursor:pointer; flex:1; min-width:220px; }
+    .tipo-opt.active { border-color: var(--verde, #1db062); background: rgba(29,176,98,.08); }
+    .pd-scroll { overflow:auto; }
+    .agrupa-box { border:1px dashed var(--bs-border-color, #d0d7e8); border-radius:8px; padding:.6rem .8rem; background: rgba(29,176,98,.05); }
+    .agrupa-box.disabled { opacity:.7; background: transparent; }
+    .ms-wrap { position:relative; }
+    .ms-input { display:flex; align-items:center; justify-content:space-between; border:1px solid var(--bs-border-color, #ced4da); border-radius:6px; padding:.25rem .6rem; font-size:.85rem; cursor:pointer; min-height:31px; background:var(--bs-body-bg, #fff); }
+    .ms-input.open { border-color: var(--verde, #1db062); }
+    .ms-label { flex:1; font-size:.82rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .ms-label.placeholder { color: var(--text-secondary, #6b7280); }
+    .ms-panel { display:none; position:absolute; top:calc(100% + 4px); left:0; right:0; background:var(--bs-body-bg, #fff); border:1px solid var(--bs-border-color, #d0d7e8); border-radius:8px; box-shadow:0 4px 18px rgba(0,0,0,.18); z-index:1200; overflow:hidden; }
+    .ms-panel.open { display:block; }
+    .ms-search-box { padding:.4rem .6rem; border-bottom:1px solid var(--bs-border-color, #eee); } .ms-search-box input { width:100%; border:1px solid var(--bs-border-color, #ced4da); border-radius:6px; padding:.2rem .5rem; font-size:.8rem; background:transparent; color:inherit; }
+    .ms-options { max-height:210px; overflow-y:auto; padding:.3rem 0; }
+    .ms-option { display:flex; align-items:center; gap:.5rem; padding:.3rem .75rem; font-size:.82rem; cursor:pointer; } .ms-option:hover { background: rgba(29,176,98,.1); } .ms-option.hidden { display:none; }
+    .ms-ops { display:flex; gap:.75rem; padding:.3rem .7rem; border-bottom:1px solid var(--bs-border-color, #eee); font-size:.73rem; font-weight:600; }
+    .ms-ops span { cursor:pointer; color: var(--verde, #1db062); } .ms-ops span.n { color:#e74a3b; }
+</style>
+<script>
+var _id = @Model.Id;
+var _prods = new Map();                       // productoId -> producto (sin duplicados)
+var _inicial = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(r.Productos, jsonOpts));
+var _tipoInicial = '@r.Tipo';
+var TOKEN = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+var _ultimaBusqueda = [];
+
+var fmtMon = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' });
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function alerta(msg){ var a=document.getElementById('alertaPd'); a.textContent=msg||''; a.classList.toggle('d-none', !msg); if(msg) window.scrollTo({top:0,behavior:'smooth'}); }
+
+// ── Tipo ──
+function tipoActual(){ return document.querySelector('input[name=tipo]:checked').value; }
+function aplicarTipo(){
+    var t = tipoActual();
+    document.getElementById('optPorc').classList.toggle('active', t==='PORC');
+    document.getElementById('optNxm').classList.toggle('active', t==='NXM');
+    document.getElementById('grpPorc').style.display = t==='PORC' ? '' : 'none';
+    document.querySelectorAll('.grp-nxm').forEach(function(e){ e.style.display = t==='NXM' ? '' : 'none'; });
+    var n=+document.getElementById('txtLleva').value, m=+document.getElementById('txtPaga').value;
+    document.getElementById('lblNxm').textContent = (n>0&&m>0) ? ('Promoción ' + n + 'x' + m) : '';
+    renderProds();
+}
+document.querySelectorAll('input[name=tipo]').forEach(function(r){ r.addEventListener('change', aplicarTipo); });
+['txtPorc','txtLleva','txtPaga'].forEach(function(id){ document.getElementById(id).addEventListener('input', aplicarTipo); });
+
+// ── Multi-select ──
+function toggleMs(id){
+    var p=document.getElementById('msPan'+id), i=document.getElementById('msIn'+id), abierto=p.classList.contains('open');
+    document.querySelectorAll('.ms-panel.open').forEach(function(x){x.classList.remove('open');});
+    document.querySelectorAll('.ms-input.open').forEach(function(x){x.classList.remove('open');});
+    if(!abierto){ p.classList.add('open'); i.classList.add('open'); var s=p.querySelector('input[type=text]'); if(s){s.value='';msFiltro(id,'');s.focus();} }
+}
+function msFiltro(id,v){ v=v.trim().toUpperCase(); document.querySelectorAll('#msOpt'+id+' .ms-option').forEach(function(o){ o.classList.toggle('hidden', v!=='' && (o.dataset.label||'').indexOf(v)<0); }); }
+function msLabel(id){
+    var c=[].slice.call(document.querySelectorAll('.chk-'+id+':checked')), l=document.getElementById('msLbl'+id);
+    if(!c.length){ l.textContent = id==='Prov'?'Todos los proveedores':'Todos los rubros'; l.classList.add('placeholder'); }
+    else if(c.length===1){ l.textContent=c[0].closest('label').textContent.trim(); l.classList.remove('placeholder'); }
+    else { l.textContent=c.length+' seleccionado(s)'; l.classList.remove('placeholder'); }
+}
+function msTodos(id){ document.querySelectorAll('#msOpt'+id+' .ms-option:not(.hidden) input').forEach(function(c){c.checked=true;}); msLabel(id); }
+function msNinguno(id){ document.querySelectorAll('.chk-'+id).forEach(function(c){c.checked=false;}); msLabel(id); }
+document.addEventListener('click', function(e){ if(!e.target.closest('.ms-wrap')){ document.querySelectorAll('.ms-panel.open,.ms-input.open').forEach(function(x){x.classList.remove('open');}); } });
+
+// ── Búsqueda ──
+async function consultar(todos){
+    var qs=new URLSearchParams();
+    document.querySelectorAll('.chk-Prov:checked').forEach(function(c){qs.append('proveedores',c.value);});
+    document.querySelectorAll('.chk-Rub:checked').forEach(function(c){qs.append('rubros',c.value);});
+    var t=document.getElementById('txtBuscar').value.trim(); if(t) qs.set('texto',t);
+    if(todos) qs.set('todos','true');
+    var r=await fetch('?handler=BuscarProductos&id='+_id+'&'+qs.toString());
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return r.json();
+}
+async function buscar(){
+    var b=document.getElementById('btnBuscar'); b.disabled=true;
+    try{
+        var d=await consultar(false);
+        if(!d.ok){ alerta(d.error); return; }
+        alerta('');
+        _ultimaBusqueda=d.items;
+        document.getElementById('panelResultados').classList.remove('d-none');
+        document.getElementById('lblResultados').textContent = d.total + ' producto(s) encontrado(s)' + (d.total>d.items.length ? ' — se muestran los primeros ' + d.items.length + '. Use "Agregar todos los resultados" o refine la búsqueda.' : '.');
+        document.getElementById('btnAgregarTodos').disabled = d.total===0;
+        document.getElementById('tbodyRes').innerHTML = d.items.map(function(x){
+            var ya=_prods.has(x.productoId);
+            return '<tr><td>'+esc(x.codProveedor)+'</td><td>'+esc(x.descripcion)+'</td><td class="d-none d-md-table-cell">'+esc(x.codBarras)+'</td><td class="d-none d-md-table-cell">'+esc(x.proveedor)+'</td>'
+                 + '<td class="text-end text-nowrap">'+fmtMon.format(x.precioActual)+'</td>'
+                 + '<td><button type="button" class="btn btn-primary btn-sm py-0" '+(ya?'disabled':'')+' onclick="agregar('+x.productoId+')">'+(ya?'Agregado':'Agregar')+'</button></td></tr>';
+        }).join('') || '<tr><td colspan="6" class="text-center text-muted py-3">Sin resultados.</td></tr>';
+    }catch(e){ alerta('Error al buscar: '+e.message); }
+    finally{ b.disabled=false; }
+}
+function agregar(id){
+    var x=_ultimaBusqueda.find(function(p){return p.productoId===id;});
+    if(!x) return;
+    if(_prods.has(id)){ alerta('El producto "'+x.descripcion+'" ya se encuentra incorporado a la promoción.'); return; }
+    alerta(''); _prods.set(id,x); renderProds();
+    var btn=document.querySelector('#tbodyRes button[onclick="agregar('+id+')"]'); if(btn){btn.disabled=true;btn.textContent='Agregado';}
+}
+async function agregarTodos(){
+    var b=document.getElementById('btnAgregarTodos'); b.disabled=true;
+    try{
+        var d=await consultar(true);
+        if(!d.ok){ alerta(d.error); return; }
+        var nuevos=0, ya=0;
+        d.items.forEach(function(x){ if(_prods.has(x.productoId)) ya++; else { _prods.set(x.productoId,x); nuevos++; } });
+        var msg = nuevos+' producto(s) agregado(s)' + (ya?' ('+ya+' ya estaban incorporados)':'') + '.';
+        if(d.total>d.items.length) msg += ' ATENCIÓN: la búsqueda tiene '+d.total+' productos y solo se agregaron los primeros '+d.items.length+'; refine la búsqueda para el resto.';
+        alerta(''); renderProds(); alert(msg); buscar();
+    }catch(e){ alerta('Error: '+e.message); }
+    finally{ b.disabled=false; }
+}
+function quitar(id){ _prods.delete(id); renderProds(); var btn=document.querySelector('#tbodyRes button[onclick="agregar('+id+')"]'); if(btn){btn.disabled=false;btn.textContent='Agregar';} }
+function quitarTodos(){ if(_prods.size && !confirm('¿Quitar todos los productos de la promoción?')) return; _prods.clear(); renderProds(); if(!document.getElementById('panelResultados').classList.contains('d-none')) buscar(); }
+
+// ── Grilla de productos asociados ──
+function renderProds(){
+    var t=tipoActual(), pct=+document.getElementById('txtPorc').value||0;
+    var n=+document.getElementById('txtLleva').value, m=+document.getElementById('txtPaga').value;
+    var items=[..._prods.values()].sort(function(a,b){return (a.descripcion||'').localeCompare(b.descripcion||'');});
+    document.getElementById('cntProds').textContent=items.length;
+    document.getElementById('vacioProds').style.display=items.length?'none':'block';
+    document.getElementById('tbodyProds').innerHTML=items.map(function(x){
+        var desc, prom;
+        if(t==='PORC'){ desc = pct>0 ? (pct.toLocaleString('es-AR')+' %') : '—'; prom = pct>0 ? fmtMon.format(x.precioActual*(1-pct/100)) : '—'; }
+        else { desc = (n>0&&m>0) ? (n+'x'+m) : '—'; prom = (n>0&&m>0) ? ('lleva '+n+', paga '+m) : '—'; }
+        return '<tr><td>'+esc(x.codProveedor)+'</td><td>'+esc(x.descripcion)+'</td><td class="d-none d-md-table-cell">'+esc(x.proveedor)+'</td>'
+             + '<td class="text-end text-nowrap">'+fmtMon.format(x.precioActual)+'</td><td class="text-end">'+desc+'</td><td class="text-end text-nowrap"><strong>'+prom+'</strong></td>'
+             + '<td><button type="button" class="btn btn-outline-danger btn-sm py-0" title="Quitar de la promoción" onclick="quitar('+x.productoId+')">&times;</button></td></tr>';
+    }).join('');
+}
+
+// ── Guardar ──
+async function guardar(){
+    var t=tipoActual();
+    var dto={ id:_id, nombre:document.getElementById('txtNombre').value.trim(), tipo:t,
+              porcentaje: t==='PORC' ? parseFloat(document.getElementById('txtPorc').value) : null,
+              lleva: t==='NXM' ? parseInt(document.getElementById('txtLleva').value) : null,
+              paga:  t==='NXM' ? parseInt(document.getElementById('txtPaga').value)  : null,
+              agrupaVariantes: t==='NXM' && !!document.getElementById('chkAgrupa')?.checked,
+              desde:document.getElementById('txtDesde').value, hasta:document.getElementById('txtHasta').value,
+              activa:document.getElementById('chkActiva').checked, productoIds:[..._prods.keys()] };
+    // Validaciones rápidas en pantalla (el servidor vuelve a validar todo)
+    if(!dto.nombre){ alerta('Ingrese el nombre de la promoción.'); return; }
+    if(!dto.desde||!dto.hasta){ alerta('Indique la fecha y hora de inicio y de finalización.'); return; }
+    if(dto.hasta<dto.desde){ alerta('La fecha de finalización no puede ser anterior a la de inicio.'); return; }
+    if(t==='PORC'){ if(!(dto.porcentaje>0&&dto.porcentaje<=100)){ alerta('El porcentaje debe ser mayor que 0 y como máximo 100.'); return; } }
+    else { if(!(dto.lleva>=2)||!(dto.paga>=1)||dto.paga>=dto.lleva){ alerta('Indique cuántas unidades lleva (mínimo 2) y cuántas paga (al menos 1 y menos que las que lleva).'); return; } }
+    if(!dto.productoIds.length){ alerta('Agregue al menos un producto a la promoción.'); return; }
+    alerta('');
+    var b=document.getElementById('btnGuardar'); b.disabled=true;
+    try{
+        var r=await fetch('?handler=Guardar',{method:'POST',headers:{'Content-Type':'application/json','X-XSRF-TOKEN':TOKEN},body:JSON.stringify(dto)});
+        var d=await r.json();
+        if(!d.ok){ alerta(d.error||'No se pudo guardar.'); return; }
+        window.location.href='/Admin/PromocionesDescuentos';
+    }catch(e){ alerta('Error al guardar: '+e.message); }
+    finally{ b.disabled=false; }
+}
+
+// ── Inicio ──
+(function(){
+    document.querySelector('input[name=tipo][value='+_tipoInicial+']').checked=true;
+    _inicial.forEach(function(x){ _prods.set(x.productoId,x); });
+    aplicarTipo();
+})();
+</script>
+}

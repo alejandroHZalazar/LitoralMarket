@@ -8,6 +8,8 @@ public class PromocionCarruselDto
     public int     Orden   { get; set; }
     /// <summary>Marca de versión de la imagen (para la URL y el caché del navegador).</summary>
     public long    Version { get; set; }
+    /// <summary>Promoción por cantidad / porcentaje (promociones_reglas.id) a la que lleva el banner. null = sin enlace.</summary>
+    public int?    FkPromocionRegla { get; set; }
 }
 
 /// <summary>Imagen lista para servir.</summary>

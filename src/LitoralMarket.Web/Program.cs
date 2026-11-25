@@ -134,6 +134,21 @@ builder.Services.AddRateLimiter(options =>
             QueueLimit           = 0
         });
     });
+    // "claveParametros" (Admin/Parametros/Acceso): frena la fuerza bruta de la clave. Solo cuenta los intentos (POST).
+    options.AddPolicy("claveParametros", httpContext =>
+    {
+        if (!HttpMethods.IsPost(httpContext.Request.Method))
+            return RateLimitPartition.GetNoLimiter("clave-parametros-no-post");
+
+        var ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "desconocida";
+        return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit          = 5,
+            Window               = TimeSpan.FromSeconds(60),
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit           = 0
+        });
+    });
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 });
 
@@ -178,6 +193,9 @@ builder.Services.AddControllers();
 builder.Services.AddScoped<IProductoRepository, ProductoRepository>();
 builder.Services.AddScoped<IProductoAdminService, ProductoAdminService>();
 builder.Services.AddScoped<IAjusteStockService, AjusteStockService>();
+builder.Services.AddScoped<IVarianteAdminService, VarianteAdminService>();
+builder.Services.AddScoped<IPromocionesService, PromocionesService>();
+builder.Services.AddScoped<IGeneradorCodigoBarrasService, GeneradorCodigoBarrasService>();
 builder.Services.AddScoped<IPromocionCarruselService, PromocionCarruselService>();
 builder.Services.AddScoped<IProductosInicioService, ProductosInicioService>();
 builder.Services.AddScoped<IPedidoAdminService, PedidoAdminService>();
@@ -191,11 +209,13 @@ builder.Services.AddScoped<IParametrosAdminService, ParametrosAdminService>();
 builder.Services.AddScoped<IEstadisticasService, EstadisticasService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ICarritoService, CarritoService>();
+builder.Services.AddScoped<IVentaEcommerceService, VentaEcommerceService>();
 builder.Services.AddScoped<IPedidoService, PedidoService>();
 builder.Services.AddScoped<IPagoEcommerceService, PagoEcommerceService>();
 builder.Services.AddScoped<IPdfPagoService, PdfPagoService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IMercadoPagoOAuthService, MercadoPagoOAuthService>();
+builder.Services.AddScoped<IConciliacionTransferenciasService, ConciliacionTransferenciasService>();
 
 // HttpClient para MercadoPago
 // Timeout 60s: el endpoint oauth/token puede tardar en Railway por cold-start del container
@@ -210,6 +230,11 @@ builder.Services.AddHttpClient("MercadoPago", c =>
 // Los webhooks se reciben en POST /api/mp-webhook (MpWebhookController).
 // Para reactivar el poller como backup, descomentar la línea de abajo.
 // builder.Services.AddHostedService<LitoralMarket.Infrastructure.Services.MercadoPagoPollerService>();
+
+// Detección de transferencias entrantes de Mercado Pago (CVU/alias). Mercado Pago no tiene webhook
+// documentado para transferencias, por eso se consulta periódicamente. Queda inactivo (solo mira un
+// parámetro por minuto) mientras ecommerce/metodoPagoTransferenciaMP no valga '1'.
+builder.Services.AddHostedService<LitoralMarket.Infrastructure.Services.TransferenciasMpPollerService>();
 
 // HttpContextAccessor para acceder al context en servicios
 builder.Services.AddHttpContextAccessor();
@@ -273,7 +298,8 @@ static string SniffMime(byte[] b) =>
 
 // Imagen PRINCIPAL de un producto (tabla imagenesProductos; fallback al blob legacy
 // Productos.imagen durante la transición). No carga blobs en listados: se pide por URL.
-app.MapGet("/images/productos/{id:int}", async (int id, LitoralMarket.Infrastructure.Data.AppDbContext db, HttpContext ctx) =>
+app.MapGet("/images/productos/{id:int}", async (int id, LitoralMarket.Infrastructure.Data.AppDbContext db,
+    LitoralMarket.Application.Interfaces.IParametrosService parametros, HttpContext ctx) =>
 {
     var img = await db.ImagenesProductos
         .Where(i => i.FkProducto == id && !i.Baja)
@@ -292,12 +318,22 @@ app.MapGet("/images/productos/{id:int}", async (int id, LitoralMarket.Infrastruc
     // así una imagen borrada no "revive". El fallback legacy es solo para productos
     // nunca tocados por el sistema nuevo (transición).
     var gestionado = await db.ImagenesProductos.AnyAsync(i => i.FkProducto == id);
-    if (gestionado) return Results.NotFound();
+    if (gestionado) return await ImagenDeFichaAsync(id) ?? Results.NotFound();
 
     var legacy = await db.Productos.Where(p => p.Id == id).Select(p => p.Imagen).FirstOrDefaultAsync();
-    if (legacy is null or { Length: 0 }) return Results.NotFound();
+    if (legacy is null or { Length: 0 }) return await ImagenDeFichaAsync(id) ?? Results.NotFound();
     ctx.Response.Headers.CacheControl = "public, max-age=86400";
     return Results.File(legacy, SniffMime(legacy), enableRangeProcessing: false);
+
+    // Variantes de producto (solo con ecommerce/HabilitarVariantesProducto = 1): una variante sin imagen propia
+    // usa la de su ficha. Con el parametro apagado esta rama devuelve null sin consultar las tablas nuevas.
+    async Task<IResult?> ImagenDeFichaAsync(int varianteId)
+    {
+        if (!await parametros.HabilitarVariantesProductoAsync()) return null;
+        var fichaId = await db.ProductosVariantes.Where(x => x.FkProducto == varianteId)
+            .Select(x => (int?)x.FkPrincipal).FirstOrDefaultAsync();
+        return fichaId.HasValue ? Results.Redirect($"/images/productos/{fichaId.Value}") : null;
+    }
 });
 
 // Imagen PUNTUAL por id (para galería del detalle y miniaturas del ABM).

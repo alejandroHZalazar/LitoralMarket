@@ -1,0 +1,255 @@
+@page
+@model LitoralMarket.Web.Pages.Admin.MediosPago.IndexModel
+@using LitoralMarket.Domain.Entities
+@{
+    ViewData["Title"] = "Medios de pago";
+    var es = new System.Globalization.CultureInfo("es-AR");
+
+    string Badge(string estado) => estado switch
+    {
+        TransferenciaMpEstado.Asignada        => "<span class=\"badge bg-success\">Asignada</span>",
+        TransferenciaMpEstado.Ignorada        => "<span class=\"badge bg-secondary\">Ignorada</span>",
+        TransferenciaMpEstado.ImporteDistinto => "<span class=\"badge bg-warning text-dark\">Importe distinto</span>",
+        TransferenciaMpEstado.FueraDeTermino  => "<span class=\"badge bg-warning text-dark\">Fuera de plazo</span>",
+        TransferenciaMpEstado.Ambigua         => "<span class=\"badge bg-danger\">Ambigua</span>",
+        _                                     => "<span class=\"badge bg-light text-dark border\">Sin asignar</span>"
+    };
+}
+
+<div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+    <div>
+        <h2 class="mb-0 fw-bold"><i class="bi bi-wallet2 me-2"></i>Medios de pago</h2>
+        <span class="text-muted small">Qué formas de pago ve el cliente en el checkout y qué transferencias hay para revisar</span>
+    </div>
+    <a asp-page="/Admin/Configuracion/MercadoPago" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-credit-card me-1"></i>Conexión con Mercado Pago
+    </a>
+</div>
+
+@if (Model.Exito is not null)
+{
+    <div class="alert alert-success alert-dismissible fade show d-flex align-items-center gap-2 mb-4">
+        <i class="bi bi-check-circle-fill fs-5"></i><div>@Model.Exito</div>
+        <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (Model.Error is not null)
+{
+    <div class="alert alert-danger alert-dismissible fade show d-flex align-items-center gap-2 mb-4">
+        <i class="bi bi-exclamation-triangle-fill fs-5"></i><div>@Model.Error</div>
+        <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<div class="row g-4">
+
+    <!-- ══ Configuración ══ -->
+    <div class="col-12 col-xl-5">
+        <form method="post" asp-page-handler="Guardar">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-bottom py-3 fw-semibold">Formas de pago habilitadas</div>
+                <div class="card-body">
+
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" role="switch" id="chkReembolso"
+                               asp-for="Form.Reembolso" />
+                        <label class="form-check-label" for="chkReembolso">Pago contra reembolso</label>
+                    </div>
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" role="switch" id="chkMp"
+                               asp-for="Form.MercadoPago" />
+                        <label class="form-check-label" for="chkMp">Mercado Pago (link / QR de Checkout Pro)</label>
+                    </div>
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" role="switch" id="chkTransf"
+                               asp-for="Form.Transferencia" />
+                        <label class="form-check-label" for="chkTransf">Transferencia a mi cuenta de Mercado Pago</label>
+                    </div>
+
+                    @if (!Model.TablasListas)
+                    {
+                        <div class="alert alert-warning small py-2">
+                            <i class="bi bi-database-exclamation me-1"></i>
+                            Faltan las tablas de transferencias en esta base. Ejecutá <code>sql/create_transferencias_mp.sql</code>
+                            para poder habilitar la transferencia.
+                        </div>
+                    }
+
+                    @if (!Model.MpConectado)
+                    {
+                        <div class="alert alert-warning small py-2">
+                            <i class="bi bi-exclamation-triangle me-1"></i>
+                            La cuenta de Mercado Pago <strong>no está conectada</strong>. Sin conexión no se pueden detectar las
+                            transferencias, por eso no se deja habilitar esa opción.
+                        </div>
+                    }
+
+                    <hr />
+                    <h6 class="fw-semibold">Cuenta de destino de las transferencias</h6>
+                    <p class="text-muted small">
+                        Tiene que ser la <strong>misma cuenta de Mercado Pago</strong> que está conectada: de ahí se leen los pagos recibidos.
+                        Cargá el alias, el CVU o ambos.
+                    </p>
+
+                    <div class="mb-3">
+                        <label class="form-label small" for="txtAlias">Alias</label>
+                        <input class="form-control" id="txtAlias" asp-for="Form.Alias" maxlength="20" autocomplete="off" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small" for="txtCvu">CVU (22 dígitos)</label>
+                        <input class="form-control" id="txtCvu" asp-for="Form.Cvu" maxlength="30" inputmode="numeric" autocomplete="off" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small" for="txtTitular">Titular</label>
+                        <input class="form-control" id="txtTitular" asp-for="Form.Titular" maxlength="100" autocomplete="off" />
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <label class="form-label small" for="numHoras">Plazo para transferir (horas)</label>
+                            <input class="form-control" id="numHoras" type="number" min="1" max="168" asp-for="Form.VencimientoHoras" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small" for="numPolling">Buscar pagos cada (seg.)</label>
+                            <input class="form-control" id="numPolling" type="number" min="30" max="600" asp-for="Form.PollingSegundos" />
+                        </div>
+                    </div>
+                    <p class="text-muted small mt-2 mb-0">
+                        Los cambios de estas opciones se ven en el checkout al instante. El cliente transfiere el total
+                        <strong>menos entre $0,01 y $0,99</strong> (importe único por pedido) y así se identifica su pago.
+                    </p>
+                </div>
+                <div class="card-footer bg-white border-top">
+                    <button type="submit" class="btn btn-agregar"><i class="bi bi-save me-1"></i>Guardar</button>
+                </div>
+            </div>
+        </form>
+
+        @if (Model.DiagVenta is { } dv)
+        {
+            <div class="card border-0 shadow-sm mt-4">
+                <div class="card-header bg-white border-bottom py-3 fw-semibold">Registro de venta al confirmar</div>
+                <div class="card-body small">
+                    <p class="text-muted mb-2">
+                        Con el parámetro <code>ecommerce/registrarVentaAlConfirmar</code> en <code>1</code>, cada pedido confirmado
+                        por pago genera su venta como en Comercial Web (venta, detalle, stock y movimiento) y queda marcado como vendido.
+                    </p>
+                    <ul class="list-unstyled mb-0">
+                        <li>
+                            @(dv.Habilitado ? "✅" : "⏸️") Estado:
+                            <strong>@(dv.Habilitado ? "activo" : "inactivo")</strong>
+                        </li>
+                        <li>
+                            @(dv.TablasListas ? "✅" : "❌") Tablas ventas / ventasDetalle / pedidos_ventas:
+                            <strong>@(dv.TablasListas ? "presentes" : "faltan — ejecutá sql/parametros_venta_ecommerce.sql")</strong>
+                        </li>
+                        <li>
+                            @(dv.ClienteValido ? "✅" : "❌") Cliente consumidor final (<code>ventas/clienteConsumidorFinal</code>):
+                            <strong>@(dv.ClienteValido ? $"#{dv.ClienteConsumidorFinal}" : dv.ClienteConsumidorFinal is null ? "no configurado" : $"#{dv.ClienteConsumidorFinal} no existe")</strong>
+                        </li>
+                    </ul>
+                    @if (dv.Habilitado && (!dv.TablasListas || !dv.ClienteValido))
+                    {
+                        <div class="alert alert-danger small mt-2 mb-0 py-2">
+                            Está activo pero mal configurado: los pedidos pagados no van a poder confirmarse hasta corregirlo.
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- ══ Transferencias recibidas ══ -->
+    <div class="col-12 col-xl-7">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-bottom py-3 d-flex align-items-center gap-2 flex-wrap">
+                <span class="fw-semibold">Transferencias recibidas</span>
+                @if (Model.ParaRevisar > 0)
+                {
+                    <span class="badge bg-warning text-dark">@Model.ParaRevisar para revisar</span>
+                }
+                <div class="ms-auto btn-group btn-group-sm" role="group" aria-label="Filtro">
+                    <a class="btn btn-outline-secondary @(Model.Filtro is null ? "active" : "")" asp-page="Index">Todas</a>
+                    <a class="btn btn-outline-secondary @(Model.Filtro == "revisar" ? "active" : "")" asp-page="Index" asp-route-estado="revisar">Para revisar</a>
+                    <a class="btn btn-outline-secondary @(Model.Filtro == "asignada" ? "active" : "")" asp-page="Index" asp-route-estado="asignada">Asignadas</a>
+                    <a class="btn btn-outline-secondary @(Model.Filtro == "ignorada" ? "active" : "")" asp-page="Index" asp-route-estado="ignorada">Ignoradas</a>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                @if (Model.Transferencias.Count == 0)
+                {
+                    <p class="text-muted text-center my-4">No hay transferencias para mostrar.</p>
+                }
+                else
+                {
+                    <div class="list-group list-group-flush">
+                        @foreach (var t in Model.Transferencias)
+                        {
+                            <div class="list-group-item">
+                                <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+                                    <div>
+                                        <span class="fw-bold fs-6">$@t.Monto.ToString("N2", es)</span>
+                                        <span class="ms-2">@Html.Raw(Badge(t.Estado))</span>
+                                        @if (t.PedidoId is not null)
+                                        {
+                                            <a class="ms-2 small" asp-page="/Admin/Pedidos/Index">Pedido #@t.PedidoId</a>
+                                            @if (t.AsignadaPor == "admin")
+                                            {
+                                                <span class="text-muted small">(manual)</span>
+                                            }
+                                        }
+                                    </div>
+                                    <div class="text-muted small text-end">
+                                        @(t.FechaAprobacion?.ToString("dd/MM/yyyy HH:mm") ?? "—")
+                                        <div style="font-size:.7rem;">Pago MP @t.MpPaymentId</div>
+                                    </div>
+                                </div>
+
+                                @if (!string.IsNullOrWhiteSpace(t.Motivo))
+                                {
+                                    <div class="small text-muted mt-1">@t.Motivo</div>
+                                }
+
+                                @if (t.Pendiente)
+                                {
+                                    <div class="d-flex gap-2 flex-wrap align-items-center mt-2">
+                                        @if (Model.Asignables.Count > 0)
+                                        {
+                                            <form method="post" asp-page-handler="Asignar" class="d-flex gap-2 flex-grow-1"
+                                                  onsubmit="return confirm('¿Asignar esta transferencia al pedido elegido? El pedido se confirma y se descuenta el stock.');">
+                                                <input type="hidden" name="transferenciaId" value="@t.Id" />
+                                                <select name="cobroId" class="form-select form-select-sm" required>
+                                                    <option value="">Elegí el pedido…</option>
+                                                    @foreach (var a in Model.Asignables)
+                                                    {
+                                                        <option value="@a.CobroId">
+                                                            #@a.PedidoId · @(a.Cliente ?? "Cliente") · debía transferir $@((a.MontoTransferencia ?? a.Total).ToString("N2", es))@(a.Estado == "cancelado" ? " · plazo vencido" : "")
+                                                        </option>
+                                                    }
+                                                </select>
+                                                <button type="submit" class="btn btn-sm btn-success text-nowrap">Asignar</button>
+                                            </form>
+                                        }
+                                        else
+                                        {
+                                            <span class="small text-muted flex-grow-1">No hay pedidos pendientes de transferencia a los que asignarla.</span>
+                                        }
+                                        <form method="post" asp-page-handler="Ignorar"
+                                              onsubmit="return confirm('¿Marcar esta transferencia como ignorada? No corresponde a ningún pedido.');">
+                                            <input type="hidden" name="transferenciaId" value="@t.Id" />
+                                            <button type="submit" class="btn btn-sm btn-outline-secondary text-nowrap">Ignorar</button>
+                                        </form>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+            <div class="card-footer bg-white border-top small text-muted">
+                Una transferencia se asigna sola solo si el importe coincide exacto con un único pedido y llegó dentro del plazo.
+                Las transferencias sin ningún pedido pendiente con ese importe se registran como "Sin asignar" y no generan aviso.
+            </div>
+        </div>
+    </div>
+</div>

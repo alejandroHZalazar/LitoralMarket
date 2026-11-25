@@ -16,20 +16,35 @@ public class IndexModel : PageModel
     private readonly IProductoAdminService _productos;
     private readonly IProveedorRepository  _proveedores;
     private readonly IProductoRepository   _rubroRepo;
+    private readonly IParametrosService    _parametros;
+    private readonly IVarianteAdminService _variantes;
+    private readonly IGeneradorCodigoBarrasService _codigos;
 
     public IndexModel(
         IProductoAdminService productos,
         IProveedorRepository  proveedores,
-        IProductoRepository   rubroRepo)
+        IProductoRepository   rubroRepo,
+        IParametrosService    parametros,
+        IVarianteAdminService variantes,
+        IGeneradorCodigoBarrasService codigos)
     {
+        _codigos     = codigos;
         _productos   = productos;
         _proveedores = proveedores;
         _rubroRepo   = rubroRepo;
+        _parametros  = parametros;
+        _variantes   = variantes;
     }
 
     // ── Estado de la página ──────────────────────────────────────
     public List<SelectListItem>  Rubros      { get; private set; } = new();
     public List<ProveedorDto>    Proveedores { get; private set; } = new();
+
+    /// <summary>productos/generaCodigoBarras = '1': en el alta, los códigos vacíos se asignan automáticamente.</summary>
+    public bool CodigoAutomatico { get; private set; }
+
+    /// <summary>true solo con ecommerce/HabilitarVariantesProducto = 1 Y las tablas creadas.</summary>
+    public bool VariantesHabilitadas { get; private set; }
 
     [BindProperty] public ProductoAdminDto Producto { get; set; } = new();
 
@@ -37,13 +52,59 @@ public class IndexModel : PageModel
     public async Task OnGetAsync()
     {
         await CargarDropdownsAsync();
+        CodigoAutomatico = await _codigos.HabilitadoAsync();
+        VariantesHabilitadas = await _parametros.HabilitarVariantesProductoAsync()
+                               && await _variantes.TablasListasAsync();
     }
+
+    private static readonly JsonSerializerOptions _camel = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+
+    // ── AJAX variantes: estado de la ficha + maestros activos ────
+    public async Task<IActionResult> OnGetVariantesFichaAsync(int id)
+    {
+        if (!await VariantesOkAsync()) return new JsonResult(new { ok = false }, _camel);
+        var ficha    = id > 0 ? await _variantes.ObtenerFichaAsync(id) : new FichaVariantesDto();
+        var medidas  = await _variantes.ListarMedidasAsync(soloActivas: true);
+        var colores  = await _variantes.ListarColoresAsync(soloActivas: true);
+        return new JsonResult(new { ok = true, ficha, medidas, colores }, _camel);
+    }
+
+    // ── AJAX variantes: crear medida/color en línea ──────────────
+    public async Task<IActionResult> OnPostVarianteAtributoAsync([FromBody] AtributoRequest req)
+    {
+        if (!await VariantesOkAsync() || req is null)
+            return new JsonResult(new { ok = false, error = "Variantes no habilitadas." }, _camel);
+        var r = req.Tipo == "color"
+            ? await _variantes.GuardarColorAsync(null, req.Nombre ?? "", req.Hex, 0, true)
+            : await _variantes.GuardarMedidaAsync(null, req.Nombre ?? "", 0, true);
+        return new JsonResult(new { ok = r.Ok, error = r.Error, id = r.Id }, _camel);
+    }
+
+    // ── AJAX variantes: vista previa al cambiar el costo/precio común ──
+    public async Task<IActionResult> OnGetVariantesVistaPreviaAsync(int id, string? costo, string? precio)
+    {
+        if (!await VariantesOkAsync()) return new JsonResult(new { ok = false }, _camel);
+        var vp = await _variantes.VistaPreviaPrecioComunAsync(id, ParseDecimal(costo), ParseDecimal(precio));
+        return new JsonResult(new { ok = true, vp }, _camel);
+    }
+
+    private async Task<bool> VariantesOkAsync() =>
+        await _parametros.HabilitarVariantesProductoAsync() && await _variantes.TablasListasAsync();
+
+    private static decimal ParseDecimal(string? s)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return 0;
+        if (decimal.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var v)) return v;
+        return decimal.TryParse(s.Replace(',', '.'), NumberStyles.Any, CultureInfo.InvariantCulture, out v) ? v : 0;
+    }
+
+    public record AtributoRequest(string? Tipo, string? Nombre, string? Hex);
 
     // ── AJAX: buscar productos (devuelve filas HTML) ─────────────
     public async Task<IActionResult> OnGetBuscarProductosAsync(int tipo, string valor)
     {
         valor ??= string.Empty;
-        var lista = await _productos.BuscarAsync(tipo, valor);
+        var lista = await _productos.BuscarAsync(tipo, valor, ContextoBusquedaProducto.Administracion);
 
         var sb = new System.Text.StringBuilder();
         foreach (var p in lista)
@@ -54,10 +115,15 @@ public class IndexModel : PageModel
             // Ruta completa (Rubro > Subrubro); el tooltip la repite por si la celda la recorta.
             var rubro = System.Net.WebUtility.HtmlEncode(p.RubroRuta ?? p.RubroNombre ?? "-");
 
+            // Solo con el parámetro encendido: insignia en la ficha (EsFicha/CantVariantes llegan en 0/false si está apagado).
+            var insignia = p.EsFicha
+                ? $@" <span class=""badge bg-info text-dark"" title=""Producto con variantes""><i class=""bi bi-grid-3x3-gap me-1""></i>{p.CantVariantes} variante{(p.CantVariantes == 1 ? "" : "s")}</span>"
+                : "";
+
             sb.Append($@"<tr class=""fila-producto"" data-id=""{p.Id}"" role=""button"">
   <td>{codP}</td>
   <td>{codB}</td>
-  <td>{desc}</td>
+  <td>{desc}{insignia}</td>
   <td class=""text-muted small"" title=""{rubro}"">{rubro}</td>
   <td class=""text-end text-nowrap"">
     <button class=""btn btn-sm btn-outline-primary me-1"" onclick=""abrirModalEditar({p.Id});event.stopPropagation();"" title=""Editar"">
@@ -226,10 +292,54 @@ public class IndexModel : PageModel
             return new JsonResult(new { ok = false, errores });
         }
 
+        // ── Producto con variantes (solo con el parámetro y las tablas) ──
+        var variantesJson = Request.Form["variantesJson"].ToString();
+        if (!string.IsNullOrWhiteSpace(variantesJson))
+        {
+            try
+            {
+                if (!await VariantesOkAsync())
+                    return new JsonResult(new { ok = false, errores = new[] { "Las variantes de producto no están habilitadas." } });
+
+                var req = JsonSerializer.Deserialize<GuardarVariantesRequest>(
+                              variantesJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (req is null)
+                    return new JsonResult(new { ok = false, errores = new[] { "Solicitud de variantes inválida." } });
+
+                var rv = await _variantes.GuardarFichaAsync(Producto, req);
+                if (!rv.Ok)
+                    return new JsonResult(new { ok = false, errores = rv.Errores });
+
+                await _productos.SincronizarImagenesAsync(rv.ProductoId, imagenes);
+
+                var partes = new List<string> { Producto.Id == 0 ? "Producto con variantes creado." : "Producto con variantes actualizado." };
+                if (rv.Creadas > 0)        partes.Add($"{rv.Creadas} variante(s) nueva(s).");
+                if (rv.Deshabilitadas > 0) partes.Add($"{rv.Deshabilitadas} deshabilitada(s).");
+                if (rv.Habilitadas > 0)    partes.Add($"{rv.Habilitadas} rehabilitada(s).");
+                if (rv.PreciosPropagados > 0) partes.Add($"Precio común aplicado a {rv.PreciosPropagados}.");
+                if (rv.PreciosOmitidos > 0)   partes.Add($"{rv.PreciosOmitidos} con precio propio sin cambios.");
+                if (rv.CodigosAsignados.Count == 1)
+                    partes.Add($"Código automático asignado: {rv.CodigosAsignados[0]}.");
+                else if (rv.CodigosAsignados.Count > 1)
+                    partes.Add($"Códigos automáticos asignados: {string.Join(", ", rv.CodigosAsignados)}.");
+                if (!string.IsNullOrWhiteSpace(rv.AvisoStockInicial)) partes.Add(rv.AvisoStockInicial!);
+                return new JsonResult(new { ok = true, mensaje = string.Join(" ", partes), productoId = rv.ProductoId });
+            }
+            catch (JsonException)
+            {
+                return new JsonResult(new { ok = false, errores = new[] { "Solicitud de variantes inválida." } });
+            }
+            catch (Exception ex)
+            {
+                return new JsonResult(new { ok = false, errores = new[] { $"No se pudo guardar el producto: {ex.Message}" } });
+            }
+        }
+
         try
         {
             int productoId;
             bool esAlta = Producto.Id == 0;
+            var sinCodigos = string.IsNullOrWhiteSpace(Producto.CodBarras) && string.IsNullOrWhiteSpace(Producto.CodProveedor);
             if (esAlta)
                 productoId = await _productos.CrearAsync(Producto);
             else
@@ -244,6 +354,9 @@ public class IndexModel : PageModel
             var mensaje = esAlta
                 ? "Producto creado correctamente."
                 : "Producto actualizado correctamente.";
+            // En un alta sin códigos, si quedaron cargados es porque se asignaron automáticamente.
+            if (esAlta && sinCodigos && !string.IsNullOrWhiteSpace(Producto.CodBarras))
+                mensaje += $" Código asignado: {Producto.CodBarras} (barras y proveedor).";
 
             return new JsonResult(new { ok = true, mensaje, productoId });
         }

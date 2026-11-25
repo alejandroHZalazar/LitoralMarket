@@ -1,0 +1,152 @@
+@page
+@model LitoralMarket.Web.Pages.Admin.Productos.VariantesModel
+@Html.AntiForgeryToken()
+@{
+    ViewData["Title"] = "Medidas y colores";
+}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h2 class="mb-0"><i class="bi bi-palette me-2 text-success"></i>Medidas y colores</h2>
+    <a class="btn btn-outline-secondary btn-sm" asp-page="/Admin/Productos/Index"><i class="bi bi-arrow-left me-1"></i>Productos</a>
+</div>
+
+@if (!Model.Habilitado)
+{
+    <div class="alert alert-warning">
+        <i class="bi bi-info-circle me-1"></i>
+        @if (!Model.ParametroActivo)
+        {
+            <span>Los productos con variantes están deshabilitados. Para usarlos, el parámetro
+            <code>ecommerce / HabilitarVariantesProducto</code> debe valer <code>1</code>.</span>
+        }
+        else
+        {
+            <span>El parámetro está activo pero las tablas de variantes no existen en esta base.
+            Ejecutá <code>sql/variantes_01_tablas.sql</code> y volvé a cargar la página.</span>
+        }
+    </div>
+    return;
+}
+
+<p class="text-muted small">
+    Son las opciones que se eligen al crear un producto con variantes. Una opción en uso no se puede eliminar:
+    deshabilitala para que no se ofrezca en productos nuevos. Si renombrás una opción, las descripciones de las variantes que la usan se regeneran la próxima vez que se guarde el producto.
+</p>
+
+<div id="alertaVar"></div>
+
+<div class="row g-3">
+    @foreach (var (tipo, titulo, lista, icono) in new[]
+    {
+        ("medida", "Medidas", Model.Medidas, "bi-rulers"),
+        ("color",  "Colores", Model.Colores, "bi-palette")
+    })
+    {
+        <div class="col-12 col-lg-6">
+            <div class="card shadow-sm border-0 h-100" data-tipo="@tipo">
+                <div class="card-header bg-white fw-semibold"><i class="bi @icono me-1 text-success"></i>@titulo</div>
+                <div class="card-body">
+                    <div class="input-group input-group-sm mb-3">
+                        <input type="text" class="form-control nuevo-nombre" maxlength="40" placeholder="Nombre nuevo…" />
+                        @if (tipo == "color")
+                        {
+                            <input type="color" class="form-control form-control-color nuevo-hex" value="#000000" title="Muestra" style="max-width:44px" />
+                            <div class="input-group-text"><input type="checkbox" class="form-check-input mt-0 nuevo-usa-hex" title="Guardar muestra de color" /></div>
+                        }
+                        <button type="button" class="btn btn-success btn-agregar"><i class="bi bi-plus-lg"></i> Agregar</button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead class="table-light"><tr><th>Nombre</th>@if (tipo == "color") {<th>Muestra</th>}<th style="width:80px">Orden</th><th class="text-center">Activa</th><th class="text-center">En uso</th><th class="text-end">Acciones</th></tr></thead>
+                            <tbody>
+                            @foreach (var a in lista)
+                            {
+                                <tr data-id="@a.Id">
+                                    <td><input class="form-control form-control-sm f-nombre" maxlength="40" value="@a.Nombre" /></td>
+                                    @if (tipo == "color")
+                                    {
+                                        <td style="white-space:nowrap">
+                                            <input type="color" class="form-control form-control-color d-inline-block f-hex" value="@(a.CodigoHex ?? "#000000")" style="width:40px" />
+                                            <input type="checkbox" class="form-check-input f-usa-hex ms-1" title="Con muestra" @(string.IsNullOrEmpty(a.CodigoHex) ? "" : "checked") />
+                                        </td>
+                                    }
+                                    <td><input type="number" class="form-control form-control-sm f-orden" value="@a.Orden" /></td>
+                                    <td class="text-center"><input type="checkbox" class="form-check-input f-activa" @(a.Activa ? "checked" : "") /></td>
+                                    <td class="text-center">@a.EnUso</td>
+                                    <td class="text-end text-nowrap">
+                                        <button type="button" class="btn btn-sm btn-outline-primary btn-guardar" title="Guardar"><i class="bi bi-check-lg"></i></button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger btn-eliminar" title="Eliminar" @(a.EnUso > 0 ? "disabled" : "")><i class="bi bi-trash"></i></button>
+                                    </td>
+                                </tr>
+                            }
+                            @if (!lista.Any())
+                            {
+                                <tr><td colspan="6" class="text-center text-muted py-3">Todavía no hay @titulo.ToLower().</td></tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@section Scripts {
+<script>
+const TOKEN = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+
+function aviso(tipo, msg) {
+    document.getElementById('alertaVar').innerHTML =
+        `<div class="alert alert-${tipo} alert-dismissible fade show py-2">${msg}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>`;
+}
+async function post(handler, body) {
+    const res = await fetch(`?handler=${handler}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': TOKEN },
+        body: JSON.stringify(body)
+    });
+    let data = null; try { data = await res.json(); } catch { /* no JSON */ }
+    if (!res.ok || !data) return { ok: false, error: 'No se pudo completar la operación.' };
+    return data;
+}
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+document.addEventListener('click', async e => {
+    const card = e.target.closest('[data-tipo]');
+    if (!card) return;
+    const tipo = card.dataset.tipo;
+
+    if (e.target.closest('.btn-agregar')) {
+        const nombre = card.querySelector('.nuevo-nombre').value.trim();
+        if (!nombre) return;
+        const usa = card.querySelector('.nuevo-usa-hex')?.checked;
+        const r = await post('Guardar', { tipo, id: null, nombre, hex: usa ? card.querySelector('.nuevo-hex').value : null, orden: 0, activa: true });
+        if (!r.ok) return aviso('danger', esc(r.error ?? 'Error.'));
+        location.reload();
+        return;
+    }
+    const fila = e.target.closest('tr[data-id]');
+    if (!fila) return;
+    const id = parseInt(fila.dataset.id, 10);
+
+    if (e.target.closest('.btn-guardar')) {
+        const usa = fila.querySelector('.f-usa-hex')?.checked;
+        const r = await post('Guardar', {
+            tipo, id, nombre: fila.querySelector('.f-nombre').value.trim(),
+            hex: usa ? fila.querySelector('.f-hex').value : null,
+            orden: parseInt(fila.querySelector('.f-orden').value, 10) || 0,
+            activa: fila.querySelector('.f-activa').checked
+        });
+        aviso(r.ok ? 'success' : 'danger', r.ok ? 'Guardado.' : esc(r.error ?? 'Error.'));
+    }
+    if (e.target.closest('.btn-eliminar')) {
+        if (!confirm('¿Eliminar esta opción? No se puede deshacer.')) return;
+        const r = await post('Eliminar', { tipo, id });
+        if (!r.ok) return aviso('danger', esc(r.error ?? 'Error.'));
+        fila.remove();
+        aviso('success', 'Eliminada.');
+    }
+});
+</script>
+}

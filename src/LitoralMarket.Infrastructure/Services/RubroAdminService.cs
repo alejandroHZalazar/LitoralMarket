@@ -12,19 +12,28 @@ public class RubroAdminService : IRubroAdminService
 
     private readonly AppDbContext _db;
     private readonly IProductoRepository _productos;
+    private readonly IParametrosService _parametros;
 
-    public RubroAdminService(AppDbContext db, IProductoRepository productos)
+    public RubroAdminService(AppDbContext db, IProductoRepository productos, IParametrosService parametros)
     {
         _db        = db;
         _productos = productos;
+        _parametros = parametros;
     }
 
     public async Task<List<RubroAdminDto>> BuscarAsync(string valor)
     {
         var arbol = await _productos.ObtenerArbolRubrosAsync();
 
-        var cantidades = await _db.Productos
-            .Where(p => p.Baja != true && p.FkRubro != null)
+        // Con variantes habilitadas se cuentan fichas y productos simples, no cada variante.
+        var productos = _db.Productos.Where(p => p.Baja != true && p.FkRubro != null);
+        if (await _parametros.HabilitarVariantesProductoAsync())
+        {
+            var variantes = _db.ProductosVariantes.Select(x => x.FkProducto);
+            productos = productos.Where(p => !variantes.Contains(p.Id));
+        }
+
+        var cantidades = await productos
             .GroupBy(p => p.FkRubro!.Value)
             .Select(g => new { Id = g.Key, Cant = g.Count() })
             .ToDictionaryAsync(x => x.Id, x => x.Cant);

@@ -20,6 +20,18 @@ public interface IProductoRepository
     Task<List<ProductoDto>> ObtenerSeleccionInicioAsync(bool incluirSinStock, int maximo);
     Task<ProductoDto?> ObtenerPorIdAsync(int id);
 
+    /// <summary>
+    /// Productos de una lista de ids (los de una promoción), con los mismos filtros del catálogo (baja, stock) y ordenados por
+    /// descripción. Con variantes habilitadas, cada variante se muestra como su ficha (una sola vez). Devuelve la página y el total.
+    /// </summary>
+    Task<(List<ProductoDto> Items, int Total)> BuscarPorIdsAsync(IReadOnlyCollection<int> ids, bool incluirSinStock, int pagina, int porPagina);
+
+    /// <summary>Con variantes habilitadas: id de la ficha a la que pertenece una variante activa (null si no es variante o el parámetro está apagado).</summary>
+    Task<int?> ObtenerPrincipalDeVarianteAsync(int productoId);
+
+    /// <summary>Con variantes habilitadas: las variantes activas de una ficha para el detalle (null si no es ficha o el parámetro está apagado).</summary>
+    Task<FichaCatalogoDto?> ObtenerVariantesAsync(int principalId);
+
     /// <summary>Metadatos (sin blob) de las imágenes activas de un producto, principal primero.</summary>
     Task<List<ProductoImagenDto>> ObtenerImagenesAsync(int productoId);
 

@@ -1,4 +1,5 @@
 @using LitoralMarket.Application.DTOs
+@using LitoralMarket.Application.Helpers
 @inject LitoralMarket.Application.Interfaces.IParametrosService Parametros
 @model ProductoDto
 @functions {
@@ -24,6 +25,19 @@
     // Código de proveedor visible solo si ecommerce/CodProveedorEnCatalogo == "1" (cacheado).
     var verCodProveedor = await Parametros.MostrarCodProveedorEnCatalogoAsync()
                           && !string.IsNullOrWhiteSpace(Model.CodProveedor);
+    // Stock visible solo si ecommerce/MostrarStockEnCatalogo == "1" (cacheado) y el producto tiene stock:
+    // sin stock el badge "Agotado" ya lo comunica. Model.Stock ya viene en el DTO: no hay consulta extra.
+    // Ficha con variantes: el stock mostrado es el de cada variante en el detalle, no el total.
+    var verStock = tieneStock && !Model.TieneVariantes && await Parametros.MostrarStockEnCatalogoAsync();
+    // Límite por stock: solo con ecommerce/LimitarCantidadPorStock = '1' (cacheado). Es el tope del stepper;
+    // Model.Stock ya viene en el DTO, así que no hay consultas extra.
+    decimal? maximo = null;
+    var stockInsuficiente = false;
+    if (tieneStock && !Model.TieneVariantes && await Parametros.LimitarCantidadPorStockAsync())
+    {
+        maximo = CantidadVentaHelper.MaximoPermitido(Model.Stock, Model.CantidadMinimaVenta, Model.Fraccionado);
+        stockInsuficiente = maximo < CantidadVentaHelper.UnidadMinima(Model.CantidadMinimaVenta, Model.Fraccionado);
+    }
 }
 <div class="card h-100 producto-card">
     <a asp-page="/Producto" asp-route-id="@Model.Id" class="producto-card-img-link">
@@ -47,6 +61,11 @@
     {
         <span class="badge badge-promo">PROMO</span>
     }
+    @* Insignia de la promoción vigente (promociones/descuentos = 1): "-20 %", "3x2" o "OFERTA" para fichas con variantes *@
+    @if (Model.PromoEtiqueta is not null)
+    {
+        <span class="badge badge-promo-desc" title="@(Model.PromoCondicion ?? Model.PromoEtiqueta)">@Model.PromoEtiqueta</span>
+    }
 
     <div class="card-body d-flex flex-column gap-2 p-3">
         <h6 class="card-title mb-0">
@@ -61,7 +80,44 @@
             <div class="text-muted small producto-cod-proveedor">Cód.: @Model.CodProveedor</div>
         }
 
-        <div class="producto-precio">$@Model.Precio.ToString("N2")</div>
+        @if (Model.TieneVariantes)
+        {
+            <div class="producto-precio"><span class="producto-precio-desde">Desde</span> $@Model.Precio.ToString("N2")</div>
+            @if (Model.CantMedidas > 0 || Model.CantColores > 0)
+            {
+                <div class="producto-opciones">
+                    @(string.Join(" · ", new[]
+                    {
+                        Model.CantMedidas > 0 ? $"{Model.CantMedidas} {(Model.CantMedidas == 1 ? "medida" : "medidas")}" : null,
+                        Model.CantColores > 0 ? $"{Model.CantColores} {(Model.CantColores == 1 ? "color" : "colores")}" : null
+                    }.Where(x => x != null)))
+                </div>
+            }
+        }
+        else if (Model.PrecioPromo.HasValue)
+        {
+            @* Promoción de porcentaje (promociones/descuentos = 1): precio normal tachado y precio promocional *@
+            <div class="producto-precio-wrap">
+                <span class="producto-precio-tachado">$@Model.Precio.ToString("N2")</span>
+                <div class="producto-precio">$@Model.PrecioPromo.Value.ToString("N2")</div>
+            </div>
+        }
+        else
+        {
+            <div class="producto-precio">$@Model.Precio.ToString("N2")</div>
+        }
+        @if (Model.PromoCondicion is not null)
+        {
+            <div class="producto-promo-cond"><i class="bi bi-info-circle" aria-hidden="true"></i> @Model.PromoCondicion</div>
+        }
+
+        @if (verStock)
+        {
+            <div class="producto-stock" title="Stock disponible">
+                <i class="bi bi-box-seam" aria-hidden="true"></i>
+                <span>@Model.Stock.ToString("0.##") @(Model.Stock == 1m ? "disponible" : "disponibles")</span>
+            </div>
+        }
 
         @if (!tieneStock && mostrarAgotado)
         {
@@ -80,6 +136,22 @@
                 </a>
             </div>
         }
+        else if (tieneStock && Model.TieneVariantes)
+        {
+            <div class="mt-auto">
+                <a asp-page="/Producto" asp-route-id="@Model.Id" class="btn-agregar w-100 text-center text-decoration-none d-block">
+                    <i class="bi bi-sliders me-1"></i>Elegir opciones
+                </a>
+            </div>
+        }
+        else if (tieneStock && stockInsuficiente)
+        {
+            <div class="mt-auto">
+                <span class="badge-agotado" title="El stock disponible no alcanza para la cantidad mínima de venta">
+                    <i class="bi bi-exclamation-circle me-1"></i>Stock insuficiente
+                </span>
+            </div>
+        }
         else if (tieneStock)
         {
             <div class="mt-auto">
@@ -89,7 +161,7 @@
                     @Html.AntiForgeryToken()
 
                     <partial name="_CantidadStepper"
-                             model="@(new CantidadStepperVm(0, Model.Fraccionado, Model.CantidadMinimaVenta))" />
+                             model="@(new CantidadStepperVm(0, Model.Fraccionado, Model.CantidadMinimaVenta, Maximo: maximo))" />
 
                     <button type="submit" class="btn-agregar w-100">
                         <i class="bi bi-cart-plus me-1"></i>Agregar

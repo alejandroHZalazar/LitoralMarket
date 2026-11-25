@@ -1,37 +1,54 @@
 @model List<LitoralMarket.Application.DTOs.PromocionCarruselDto>
+@inject LitoralMarket.Application.Interfaces.IPromocionesService Promociones
 @* Carrusel de promociones (Inicio y vista previa del admin).
-   Pista horizontal con scroll-snap: se desplaza con rueda/dedo/teclado, con las flechas y solo.
-   Cada promoción es una tarjeta de producto (.producto-card / .producto-img): la imagen entra
-   completa (object-fit: contain), sin deformarse. La lógica está en wwwroot/js/carrusel-promos.js;
-   el intervalo (segundos) llega en data-intervalo desde el parámetro IntervaloCarruselPromociones.
-   Las 3 primeras imágenes (las visibles en escritorio) cargan de inmediato; el resto, diferidas. *@
+   Una imagen por vez, a todo el ancho, con desplazamiento animado (400 ms), avance automático, flechas,
+   puntos superpuestos abajo y deslizar con el dedo. Con 2 o más imágenes da la vuelta sin salto (el JS agrega
+   una copia de la última antes de la primera y de la primera después de la última).
+   La lógica está en wwwroot/js/carrusel-promos.js; el intervalo (segundos) llega en data-intervalo desde el
+   parámetro IntervaloCarruselPromociones. Formato recomendado de las imágenes: ver el ABM (Admin > Promociones).
+   La primera imagen carga de inmediato y con prioridad; las demás, diferidas.
+   Un banner con promoción asociada (FkPromocionRegla) es clickeable en su totalidad y lleva a /Promocion/{id}, la página con
+   los productos de esa promoción; sin promoción queda exactamente como antes. Los enlaces solo se emiten con el módulo de
+   promociones habilitado (valor cacheado: sin consulta extra) y no en la vista previa del administrador (SinEnlaces). *@
 @{
     var intervalo = ViewData["IntervaloSeg"] as int? ?? 5;
+    var enlaces = !(ViewData["SinEnlaces"] as bool? ?? false)
+                  && Model.Any(x => x.FkPromocionRegla.HasValue)
+                  && await Promociones.HabilitadoAsync();
 }
-<section class="carrusel-promos mb-4" data-carrusel-promos data-intervalo="@intervalo" aria-roledescription="carrusel" aria-label="Promociones">
+<section class="carrusel-promos mb-4" data-carrusel-promos data-intervalo="@intervalo" tabindex="0"
+         aria-roledescription="carrusel" aria-label="Promociones">
     <div class="carrusel-viewport">
-        <button type="button" class="carrusel-nav prev" data-carrusel-prev aria-label="Promoción anterior" hidden>
-            <i class="bi bi-chevron-left"></i>
-        </button>
-        <div class="carrusel-track" data-carrusel-track tabindex="0">
+        <div class="carrusel-track" data-carrusel-track>
             @for (var i = 0; i < Model.Count; i++)
             {
                 var p = Model[i];
                 <div class="carrusel-slide" role="group" aria-roledescription="diapositiva" aria-label="@(i + 1) de @Model.Count">
-                    <div class="card h-100 producto-card">
-                        <div class="producto-card-img-link">
+                    @if (enlaces && p.FkPromocionRegla.HasValue)
+                    {
+                        <a asp-page="/Promocion" asp-route-id="@p.FkPromocionRegla.Value" class="carrusel-link" draggable="false"
+                           aria-label="@(string.IsNullOrWhiteSpace(p.Titulo) ? "Ver los productos de la promoción" : $"{p.Titulo}: ver los productos de la promoción")">
                             <img src="/images/promociones/@p.Id?v=@p.Version"
-                                 class="card-img-top producto-img"
                                  alt="@(string.IsNullOrWhiteSpace(p.Titulo) ? $"Promoción {i + 1}" : p.Titulo)"
-                                 loading="@(i < 3 ? "eager" : "lazy")" fetchpriority="@(i == 0 ? "high" : "auto")" decoding="async" draggable="false" />
-                        </div>
-                    </div>
+                                 loading="@(i == 0 ? "eager" : "lazy")" fetchpriority="@(i == 0 ? "high" : "auto")" decoding="async" draggable="false" />
+                        </a>
+                    }
+                    else
+                    {
+                        <img src="/images/promociones/@p.Id?v=@p.Version"
+                             alt="@(string.IsNullOrWhiteSpace(p.Titulo) ? $"Promoción {i + 1}" : p.Titulo)"
+                             loading="@(i == 0 ? "eager" : "lazy")" fetchpriority="@(i == 0 ? "high" : "auto")" decoding="async" draggable="false" />
+                    }
                 </div>
             }
         </div>
+        <button type="button" class="carrusel-nav prev" data-carrusel-prev aria-label="Promoción anterior" hidden>
+            <i class="bi bi-chevron-left"></i>
+        </button>
         <button type="button" class="carrusel-nav next" data-carrusel-next aria-label="Promoción siguiente" hidden>
             <i class="bi bi-chevron-right"></i>
         </button>
+        <div class="carrusel-dots" data-carrusel-dots role="tablist" aria-label="Elegir promoción"></div>
     </div>
 </section>
 <script src="~/js/carrusel-promos.js" asp-append-version="true" defer></script>

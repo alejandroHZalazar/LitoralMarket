@@ -12,15 +12,29 @@ public class CarritoService : ICarritoService
     private readonly AppDbContext                  _db;
     private readonly IParametrosService            _params;
     private readonly IDbContextFactory<AppDbContext> _ctxFactory;
+    private readonly IPromocionesService           _promos;
 
     public CarritoService(
         AppDbContext                  db,
         IParametrosService            parametros,
-        IDbContextFactory<AppDbContext> ctxFactory)
+        IDbContextFactory<AppDbContext> ctxFactory,
+        IPromocionesService           promos)
     {
         _db         = db;
         _params     = parametros;
         _ctxFactory = ctxFactory;
+        _promos     = promos;
+    }
+
+    /// <summary>
+    /// Promociones por cantidad / porcentaje (promociones/descuentos = 1): recalcula las lineas del carrito en el
+    /// servidor despues de cada cambio. Apagado no hace nada ni consulta nada: el carrito se arma exactamente como siempre.
+    /// </summary>
+    private async Task AplicarPromocionesAsync(int pedidoId)
+    {
+        if (!await _promos.HabilitadoAsync()) return;
+        await _db.SaveChangesAsync();                    // lo pendiente (linea nueva, cantidad, bajas) antes de recalcular
+        await _promos.AplicarAlCarritoAsync(pedidoId);   // recalcula descuentos / precios / subtotales y persiste
     }
 
     /// <summary>
@@ -135,12 +149,16 @@ public class CarritoService : ICarritoService
             throw new InvalidOperationException(
                 $"Este producto se vende en múltiplos de {cantidadMinimaVenta}.");
 
-        // Sin restricción de cantidad vs stock cuando hay stock disponible (stock > 0):
-        // se puede pedir cualquier cantidad. La única restricción de stock es que el
-        // producto exista con stock > 0, lo cual ya filtra el catálogo (TieneStock) y
-        // SincronizarCarritoAsync (retira del carrito lo que se quedó sin stock).
+        // Por defecto (ecommerce/LimitarCantidadPorStock distinto de '1'): sin restricción de cantidad
+        // vs stock cuando hay stock disponible (stock > 0): se puede pedir cualquier cantidad. La única
+        // restricción de stock es que el producto exista con stock > 0, lo cual ya filtra el catálogo
+        // (TieneStock) y SincronizarCarritoAsync (retira del carrito lo que se quedó sin stock).
         var existente = await _db.PedidoDetalles
             .FirstOrDefaultAsync(d => d.FkPedido == pedidoId && d.FkProducto == productoId);
+
+        // Con LimitarCantidadPorStock = '1': lo que ya hay en la línea + lo que se agrega no puede superar el stock.
+        if (await _params.LimitarCantidadPorStockAsync())
+            await ValidarLimiteStockAsync(productoId, existente?.Cantidad ?? 0m, cantidad);
 
         if (existente is not null)
         {
@@ -196,6 +214,7 @@ public class CarritoService : ICarritoService
             _db.PedidoDetalles.Add(detalle);
         }
 
+        await AplicarPromocionesAsync(pedidoId);
         await ActualizarTotalPedidoAsync(pedidoId);
         await _db.SaveChangesAsync();
     }
@@ -207,6 +226,7 @@ public class CarritoService : ICarritoService
         if (detalle is null) return;
 
         _db.PedidoDetalles.Remove(detalle);
+        await AplicarPromocionesAsync(pedidoId);
         await ActualizarTotalPedidoAsync(pedidoId);
         await _db.SaveChangesAsync();
     }
@@ -233,13 +253,45 @@ public class CarritoService : ICarritoService
                 throw new InvalidOperationException(
                     $"Este producto se vende en múltiplos de {cantidadMinimaVenta}.");
 
+            // Con LimitarCantidadPorStock = '1' la nueva cantidad (que reemplaza a la de la línea) no puede superar el stock.
+            if (detalle.FkProducto.HasValue && await _params.LimitarCantidadPorStockAsync())
+                await ValidarLimiteStockAsync(detalle.FkProducto.Value, 0m, cantidad);
+
             detalle.Cantidad = cantidad;
             detalle.Subtotal       = cantidad * (detalle.PrecioConIva ?? 0);
             detalle.SubtotalSinIva = detalle.Subtotal;
         }
 
+        await AplicarPromocionesAsync(pedidoId);
         await ActualizarTotalPedidoAsync(pedidoId);
         await _db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Solo con ecommerce/LimitarCantidadPorStock = '1'. Lanza si <paramref name="yaEnCarrito"/> +
+    /// <paramref name="solicitada"/> supera el máximo permitido por el stock. Lectura pura: no modifica stock.
+    /// </summary>
+    private async Task ValidarLimiteStockAsync(int productoId, decimal yaEnCarrito, decimal solicitada)
+    {
+        // Proyección directa (sin blob de imagen): descripción, regla de venta y stock en una sola consulta.
+        var info = await _db.Productos
+            .Where(p => p.Id == productoId)
+            .Select(p => new
+            {
+                p.Descripcion,
+                p.CantidadMinimaVenta,
+                Fraccionado = p.Fraccionado == true,
+                Stock       = p.Stock != null ? (p.Stock.Cantidad ?? 0m) : 0m
+            })
+            .FirstOrDefaultAsync();
+
+        if (info is null) return;   // producto inexistente: se mantiene el comportamiento actual
+
+        var maximo = CantidadVentaHelper.MaximoPermitido(info.Stock, info.CantidadMinimaVenta, info.Fraccionado);
+        if (yaEnCarrito + solicitada > maximo)
+            throw new InvalidOperationException(CantidadVentaHelper.MensajeSuperaStock(
+                info.Descripcion, info.Stock, maximo, yaEnCarrito,
+                CantidadVentaHelper.UnidadMinima(info.CantidadMinimaVenta, info.Fraccionado)));
     }
 
     public async Task ActualizarPreciosAsync(int pedidoId)
@@ -272,6 +324,7 @@ public class CarritoService : ICarritoService
             d.SubtotalSinIva = d.Subtotal;
         }
 
+        await AplicarPromocionesAsync(pedidoId);
         await ActualizarTotalPedidoAsync(pedidoId);
         await _db.SaveChangesAsync();
     }
@@ -282,12 +335,14 @@ public class CarritoService : ICarritoService
         // TieneImagen se traduce a EXISTS / IS NOT NULL en SQL, sin leer los bytes del blob.
         var detalles = await _db.PedidoDetalles
             .Where(d => d.FkPedido == pedidoId)
+            .OrderBy(d => d.Linea)      // mismo orden que usa el calculo de promociones (las bonificadas NxM se asignan en orden de linea)
             .Select(d => new
             {
                 d.Linea,
                 d.FkProducto,
                 d.Descripcion,
                 d.PrecioConIva,
+                d.PrecioOrig,
                 d.Subtotal,
                 d.Cantidad,
                 // Imágenes en la tabla nueva o el blob legacy (transición). Ninguno carga el blob.
@@ -299,9 +354,43 @@ public class CarritoService : ICarritoService
             })
             .ToListAsync();
 
+        // Con LimitarCantidadPorStock = '1' se calcula el máximo por línea: una consulta de stock, solo en ese caso.
+        Dictionary<int, decimal>? stocks = null;
+        if (await _params.LimitarCantidadPorStockAsync())
+        {
+            var ids = detalles.Where(d => d.FkProducto.HasValue).Select(d => d.FkProducto!.Value).Distinct().ToList();
+            stocks = await _db.StockProductos
+                .Where(s => s.FkProducto != null && ids.Contains(s.FkProducto.Value))
+                .ToDictionaryAsync(s => s.FkProducto!.Value, s => s.Cantidad ?? 0m);
+        }
+
+        // Variantes de producto (ecommerce/HabilitarVariantesProducto = 1): una variante sin imagen propia muestra la de su
+        // ficha. Una consulta, solo con el parametro encendido y solo si hay lineas sin imagen.
+        Dictionary<int, int>? imagenDeFicha = null;
+        if (await _params.HabilitarVariantesProductoAsync())
+        {
+            var sinImagen = detalles.Where(d => d.ProductoId.HasValue && !d.TieneImagen)
+                                    .Select(d => d.ProductoId!.Value).Distinct().ToList();
+            if (sinImagen.Count > 0)
+                imagenDeFicha = await _db.ProductosVariantes
+                    .Where(x => sinImagen.Contains(x.FkProducto)
+                                && (x.Principal!.Producto!.Imagenes.Any(i => !i.Baja) || x.Principal.Producto.Imagen != null))
+                    .ToDictionaryAsync(x => x.FkProducto, x => x.FkPrincipal);
+        }
+
+        // Promociones vigentes (solo con promociones/descuentos = 1; apagado devuelve vacio sin consultar nada).
+        // Lo que se muestra sale del mismo calculo que persistio AplicarAlCarritoAsync.
+        var promo = await _promos.EvaluarAsync(detalles
+            .Where(x => x.FkProducto.HasValue)
+            .Select(x => (x.FkProducto!.Value, x.Cantidad ?? 0m, x.PrecioOrig ?? x.PrecioConIva ?? 0m)));
+
         return detalles.Select(d =>
         {
             var precio   = d.PrecioConIva ?? 0;
+            PromoLineaCarritoDto? pl = null;
+            if (d.FkProducto.HasValue) promo.PorProducto.TryGetValue(d.FkProducto.Value, out pl);
+            PromoProximaCarritoDto? px = null;
+            if (d.FkProducto.HasValue) promo.Proximas.TryGetValue(d.FkProducto.Value, out px);
             var subtotal = d.Subtotal     ?? 0;
 
             // Si cantidad es NULL (registro legacy del Comercial), la calculamos
@@ -316,12 +405,22 @@ public class CarritoService : ICarritoService
                 Descripcion = d.Descripcion ?? string.Empty,
                 Imagen      = d.TieneImagen && d.ProductoId.HasValue
                               ? $"/images/productos/{d.ProductoId.Value}"
-                              : null,
+                              : (d.ProductoId.HasValue && imagenDeFicha is not null && imagenDeFicha.TryGetValue(d.ProductoId.Value, out var fichaId)
+                                    ? $"/images/productos/{fichaId}"
+                                    : null),
                 Precio      = precio,
                 Cantidad    = cantidad,
                 Subtotal    = subtotal > 0 ? subtotal : precio * cantidad,
                 CantidadMinimaVenta = d.CantidadMinimaVenta ?? 1,
-                Fraccionado = d.Fraccionado
+                Fraccionado = d.Fraccionado,
+                PrecioOriginal = pl is { Tipo: "PORC" } ? d.PrecioOrig : null,
+                PromoTexto     = pl?.Texto,
+                PromoAhorro    = pl?.Ahorro ?? 0m,
+                PromoProxima   = px?.Texto,
+                MaximoPermitido = stocks is null
+                    ? null
+                    : CantidadVentaHelper.MaximoPermitido(
+                        stocks.GetValueOrDefault(d.FkProducto ?? 0), d.CantidadMinimaVenta, d.Fraccionado)
             };
         }).ToList();
     }
@@ -347,9 +446,10 @@ public class CarritoService : ICarritoService
         return total;
     }
 
-    public async Task<List<string>> SincronizarCarritoAsync(int pedidoId)
+    public async Task<SincronizacionCarrito> SincronizarCarritoAsync(int pedidoId)
     {
         var eliminados = new List<string>();
+        var ajustados  = new List<string>();
 
         var detalles = await _db.PedidoDetalles
             .Where(d => d.FkPedido == pedidoId)
@@ -358,7 +458,7 @@ public class CarritoService : ICarritoService
         // Carrito vacío: nada que sincronizar. El total ya es consistente (0),
         // así se evitan las consultas de precios/costos/stock y el SaveChanges.
         if (detalles.Count == 0)
-            return eliminados;
+            return new SincronizacionCarrito(eliminados, ajustados);
 
         // P1-C: cargar precios, costos y stock con consultas directas (sin Include del producto/blob)
         var productoIds = detalles
@@ -370,10 +470,43 @@ public class CarritoService : ICarritoService
         // Precios, costos y stock en paralelo (3 contextos independientes de la factory).
         var (precios, costos, stocks) = await CargarDatosProductosAsync(productoIds, incluirStock: true);
 
+        // Con LimitarCantidadPorStock = '1' hacen falta la regla de venta de cada producto (múltiplo / fraccionado):
+        // una consulta extra, solo en ese caso. Los stocks ya están cargados arriba.
+        var limitar = await _params.LimitarCantidadPorStockAsync();
+        var reglas  = new Dictionary<int, (decimal? Minima, bool Fraccionado)>();
+        if (limitar)
+        {
+            reglas = (await _db.Productos
+                    .Where(p => productoIds.Contains(p.Id))
+                    .Select(p => new { p.Id, p.CantidadMinimaVenta, Fraccionado = p.Fraccionado == true })
+                    .ToListAsync())
+                .ToDictionary(p => p.Id, p => (p.CantidadMinimaVenta, p.Fraccionado));
+        }
+
+        // Variantes de producto (ecommerce/HabilitarVariantesProducto = 1): una combinacion deshabilitada (o una ficha dada
+        // de baja) tiene baja = 1 pero puede conservar stock; si quedo en un carrito hay que retirarla. Una consulta, solo
+        // con el parametro encendido: apagado, el carrito se sincroniza exactamente como siempre.
+        var dadosDeBaja = new HashSet<int>();
+        if (await _params.HabilitarVariantesProductoAsync())
+        {
+            dadosDeBaja = (await _db.Productos
+                    .Where(p => productoIds.Contains(p.Id) && p.Baja == true)
+                    .Select(p => p.Id)
+                    .ToListAsync())
+                .ToHashSet();
+        }
+
         foreach (var d in detalles)
         {
             var pk          = d.FkProducto ?? 0;
             var stockActual = stocks.TryGetValue(pk, out var st) ? st : 0m;
+
+            if (dadosDeBaja.Contains(pk))
+            {
+                eliminados.Add($"{d.Descripcion ?? $"Producto #{d.FkProducto}"} (ya no está disponible)");
+                _db.PedidoDetalles.Remove(d);
+                continue;
+            }
 
             // Eliminar si no tiene stock
             if (stockActual <= 0)
@@ -381,6 +514,29 @@ public class CarritoService : ICarritoService
                 eliminados.Add(d.Descripcion ?? $"Producto #{d.FkProducto}");
                 _db.PedidoDetalles.Remove(d);
                 continue;
+            }
+
+            // Límite por stock: si la cantidad supera lo disponible (el stock bajó después de agregarla) se
+            // reduce al máximo y se avisa; si ni siquiera alcanza para la venta mínima, se quita la línea.
+            if (limitar && reglas.TryGetValue(pk, out var regla))
+            {
+                var maximo = CantidadVentaHelper.MaximoPermitido(stockActual ?? 0m, regla.Minima, regla.Fraccionado);
+                var unidad = CantidadVentaHelper.UnidadMinima(regla.Minima, regla.Fraccionado);
+                var nombre = d.Descripcion ?? $"Producto #{d.FkProducto}";
+
+                if (maximo < unidad)
+                {
+                    eliminados.Add($"{nombre} (el stock disponible no alcanza para la cantidad mínima de venta)");
+                    _db.PedidoDetalles.Remove(d);
+                    continue;
+                }
+
+                var pedida = d.Cantidad ?? 0m;
+                if (pedida > maximo)
+                {
+                    ajustados.Add($"{nombre}: de {CantidadVentaHelper.Formatear(pedida)} a {CantidadVentaHelper.Formatear(maximo)} unidades");
+                    d.Cantidad = maximo;   // el subtotal se recalcula abajo con el precio actualizado
+                }
             }
 
             // Actualizar precio y costo de lista
@@ -395,10 +551,11 @@ public class CarritoService : ICarritoService
             d.SubtotalSinIva = d.Subtotal;
         }
 
+        await AplicarPromocionesAsync(pedidoId);
         await ActualizarTotalPedidoAsync(pedidoId);
         await _db.SaveChangesAsync();
 
-        return eliminados;
+        return new SincronizacionCarrito(eliminados, ajustados);
     }
 
     public async Task VaciarAsync(int pedidoId)

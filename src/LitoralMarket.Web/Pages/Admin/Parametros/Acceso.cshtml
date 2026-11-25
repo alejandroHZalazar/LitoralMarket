@@ -1,0 +1,28 @@
+@page
+@model LitoralMarket.Web.Pages.Admin.Parametros.AccesoModel
+@{
+    ViewData["Title"] = "Acceso a parámetros";
+}
+
+<div class="row justify-content-center mt-4">
+    <div class="col-sm-8 col-md-6 col-lg-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <h2 class="h4 mb-2"><i class="bi bi-lock me-2"></i>Parámetros del sistema</h2>
+                <p class="text-muted small">Ingresá la contraseña para continuar.</p>
+
+                @if (Model.Error is not null)
+                {
+                    <div class="alert alert-danger py-2 small" role="alert">@Model.Error</div>
+                }
+
+                <form method="post" autocomplete="off">
+                    <label class="form-label" for="clave">Contraseña</label>
+                    <input type="password" class="form-control mb-3" id="clave" name="clave"
+                           autocomplete="off" required autofocus />
+                    <button type="submit" class="btn btn-primary w-100">Ingresar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

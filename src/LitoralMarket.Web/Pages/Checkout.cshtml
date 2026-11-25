@@ -215,6 +215,10 @@
                                 </span>
                                 <span class="text-nowrap fw-semibold">$@item.Subtotal.ToString("N2")</span>
                             </div>
+                            @if (item.PromoTexto is not null)
+                            {
+                                <div class="promo-linea small mb-1"><i class="bi bi-tag-fill me-1" aria-hidden="true"></i>@item.PromoTexto</div>
+                            }
                         }
                     </div>
 
@@ -225,6 +229,13 @@
                         <span class="text-muted">Subtotal productos</span>
                         <span>$@subtotal.ToString("N2")</span>
                     </div>
+                    @if (Model.Items.Sum(i => i.PromoAhorro) is var ahorroPromo && ahorroPromo > 0)
+                    {
+                        <div class="d-flex justify-content-between small mb-1 promo-ahorro">
+                            <span>Ahorro por promociones (incluido)</span>
+                            <span>-$@ahorroPromo.ToString("N2")</span>
+                        </div>
+                    }
 
                     <!-- Costo de envío (dinámico) — solo en modo publico -->
                     @if (!cred)

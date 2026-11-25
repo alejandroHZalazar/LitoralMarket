@@ -1,5 +1,6 @@
 @page "{id:int}"
 @inject LitoralMarket.Application.Interfaces.IParametrosService Parametros
+@using LitoralMarket.Application.Helpers
 @model ProductoDetalleModel
 @functions {
     static string ResolverRutaImagen(string? imagen)
@@ -18,8 +19,19 @@
     var soloLectura = await Parametros.GetModoAccesoAsync() == "credenciales"
                       && !(User.Identity?.IsAuthenticated ?? false);
     // Código de proveedor visible solo si ecommerce/CodProveedorEnCatalogo == "1" (cacheado).
-    var verCodProveedor = await Parametros.MostrarCodProveedorEnCatalogoAsync()
-                          && !string.IsNullOrWhiteSpace(Model.Producto?.CodProveedor);
+    var verCodProveedorParam = await Parametros.MostrarCodProveedorEnCatalogoAsync();
+    var verCodProveedor = verCodProveedorParam && !string.IsNullOrWhiteSpace(Model.Producto?.CodProveedor);
+    // Límite por stock: solo con ecommerce/LimitarCantidadPorStock = '1' (cacheado). Tope del stepper.
+    decimal? maximo = null;
+    var stockInsuficiente = false;
+    var esFicha = Model.Ficha is not null;
+    // Stock / código por variante: mismos parámetros que en el catálogo (cacheados).
+    var verStockVariante = esFicha && await Parametros.MostrarStockEnCatalogoAsync();
+    if (!esFicha && Model.Producto is { TieneStock: true } prodLimite && await Parametros.LimitarCantidadPorStockAsync())
+    {
+        maximo = CantidadVentaHelper.MaximoPermitido(prodLimite.Stock, prodLimite.CantidadMinimaVenta, prodLimite.Fraccionado);
+        stockInsuficiente = maximo < CantidadVentaHelper.UnidadMinima(prodLimite.CantidadMinimaVenta, prodLimite.Fraccionado);
+    }
 }
 
 @if (Model.Producto is null)
@@ -86,9 +98,86 @@ else
             {
                 <p>@Model.Producto.DescripcionLarga</p>
             }
-            <h2 class="text-primary my-3">$@Model.Producto.Precio.ToString("N2")</h2>
+            @if (esFicha)
+            {
+                <h2 class="text-primary my-3" id="varPrecio"
+                    data-desde="@Model.Producto.Precio.ToString("N2")">
+                    <small class="fs-6 fw-normal text-secondary">Desde</small> $@Model.Producto.Precio.ToString("N2")
+                </h2>
+            }
+            else if (Model.Producto.PrecioPromo.HasValue)
+            {
+                @* Promoción de porcentaje vigente (promociones/descuentos = 1) *@
+                <div class="my-3">
+                    <span class="producto-precio-tachado fs-6">$@Model.Producto.Precio.ToString("N2")</span>
+                    <span class="badge badge-promo-estatico ms-1">-@Model.Producto.PromoPorcentaje!.Value.ToString("0.##")%</span>
+                    <h2 class="text-primary mb-0">$@Model.Producto.PrecioPromo.Value.ToString("N2")</h2>
+                </div>
+            }
+            else
+            {
+                <h2 class="text-primary my-3">$@Model.Producto.Precio.ToString("N2")</h2>
+            }
+            @if (!esFicha && Model.Producto.PromoLleva.HasValue)
+            {
+                <p class="producto-promo-nxm mb-3"><i class="bi bi-tags-fill" aria-hidden="true"></i>
+                    Promo @Model.Producto.PromoLleva x @Model.Producto.PromoPaga: llevando @Model.Producto.PromoLleva pagás @Model.Producto.PromoPaga@(Model.Producto.PromoAgrupa ? " (se suman las variantes del mismo producto)" : "")</p>
+            }
 
-            @if (!Model.Producto.TieneStock && Model.MostrarSinStock)
+            @if (esFicha)
+            {
+                <div id="varDetalle" data-ver-stock="@(verStockVariante ? "1" : "0")" data-ver-cod="@(verCodProveedorParam ? "1" : "0")"
+                     data-solo-lectura="@(soloLectura ? "1" : "0")">
+                    @if (Model.Ficha!.UsaMedidas)
+                    {
+                        <div class="mb-3">
+                            <div class="fw-semibold small mb-1">Medida: <span id="varMedidaSel" class="fw-normal text-secondary">elegí una</span></div>
+                            <div class="d-flex flex-wrap gap-2" id="varOpcionesMedida" role="group" aria-label="Medida"></div>
+                        </div>
+                    }
+                    @if (Model.Ficha.UsaColores)
+                    {
+                        <div class="mb-3">
+                            <div class="fw-semibold small mb-1">Color: <span id="varColorSel" class="fw-normal text-secondary">elegí uno</span></div>
+                            <div class="d-flex flex-wrap gap-2" id="varOpcionesColor" role="group" aria-label="Color"></div>
+                        </div>
+                    }
+                    <div id="varPromo" class="producto-promo-nxm mb-2 d-none"></div>
+                    <div id="varInfo" class="small text-secondary mb-3" aria-live="polite"></div>
+
+                    @if (soloLectura)
+                    {
+                        <a asp-page="/Login" data-no-prefetch class="btn btn-outline-secondary">
+                            <i class="bi bi-box-arrow-in-right me-1"></i> Ingresá para comprar
+                        </a>
+                    }
+                    else
+                    {
+                        <form asp-page="/Carrito" asp-page-handler="Agregar" method="post" class="d-flex align-items-center gap-2" id="varForm">
+                            <input type="hidden" name="productoId" id="varProductoId" value="" />
+                            <partial name="_CantidadStepper"
+                                     model="@(new CantidadStepperVm(0, Model.Producto.Fraccionado, Model.Producto.CantidadMinimaVenta))" />
+                            <button type="submit" class="btn btn-primary px-4" id="varBtnAgregar" disabled>
+                                <i class="bi bi-cart-plus me-1"></i> <span id="varBtnTexto">Elegí una opción</span>
+                            </button>
+                        </form>
+                    }
+                </div>
+                <script type="application/json" id="variantesData">@Html.Raw(System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    usaMedidas = Model.Ficha.UsaMedidas,
+                    usaColores = Model.Ficha.UsaColores,
+                    inicial = Model.VarianteInicialId,
+                    unidadMinima = CantidadVentaHelper.UnidadMinima(Model.Producto.CantidadMinimaVenta, Model.Producto.Fraccionado),
+                    variantes = Model.Ficha.Variantes.Select(x => new
+                    {
+                        id = x.Id, medidaId = x.MedidaId, medida = x.Medida, colorId = x.ColorId, color = x.Color, colorHex = x.ColorHex,
+                        precio = x.Precio, stock = x.Stock, codProveedor = x.CodProveedor, maximo = x.MaximoPermitido,
+                        precioPromo = x.PrecioPromo, promoPorcentaje = x.PromoPorcentaje, promoLleva = x.PromoLleva, promoPaga = x.PromoPaga, promoAgrupa = x.PromoAgrupa
+                    })
+                }))</script>
+            }
+            else if (!Model.Producto.TieneStock && Model.MostrarSinStock)
             {
                 <span class="badge bg-secondary fs-6">Agotado</span>
             }
@@ -98,12 +187,16 @@ else
                     <i class="bi bi-box-arrow-in-right me-1"></i> Ingresá para comprar
                 </a>
             }
+            else if (Model.Producto.TieneStock && stockInsuficiente)
+            {
+                <span class="badge bg-secondary fs-6" title="El stock disponible no alcanza para la cantidad mínima de venta">Stock insuficiente</span>
+            }
             else if (Model.Producto.TieneStock)
             {
                 <form asp-page="/Carrito" asp-page-handler="Agregar" method="post" class="d-flex align-items-center gap-2">
                     <input type="hidden" name="productoId" value="@Model.Producto.Id" />
                     <partial name="_CantidadStepper"
-                             model="@(new CantidadStepperVm(0, Model.Producto.Fraccionado, Model.Producto.CantidadMinimaVenta))" />
+                             model="@(new CantidadStepperVm(0, Model.Producto.Fraccionado, Model.Producto.CantidadMinimaVenta, Maximo: maximo))" />
                     <button type="submit" class="btn btn-primary px-4">
                         <i class="bi bi-cart-plus me-1"></i> Agregar al carrito
                     </button>
@@ -120,6 +213,10 @@ else
 }
 
 @section Scripts {
+@if (Model.Ficha is not null)
+{
+    <script src="~/js/variantes.js" asp-append-version="true"></script>
+}
 <script>
     function cambiarImagenDetalle(thumb, url) {
         var main = document.getElementById('imgPrincipalDetalle');

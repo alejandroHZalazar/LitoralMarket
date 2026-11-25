@@ -63,6 +63,14 @@ public class AjusteStockService : IAjusteStockService
         if (f.OcultarBajas)
             q = q.Where(p => p.Baja != true);
 
+        // Variantes de producto (ecommerce/HabilitarVariantesProducto = 1): la ficha no tiene stock propio, no se ajusta;
+        // sus variantes si (cada una es un producto con su stock). Apagado: la busqueda es exactamente la de siempre.
+        if (await _parametros.HabilitarVariantesProductoAsync())
+        {
+            var fichas = _db.ProductosPrincipales.Select(x => x.FkProducto);
+            q = q.Where(p => !fichas.Contains(p.Id));
+        }
+
         // Sin cargar el blob de imagen; un producto sin registro de stock se lista con 0.
         var filas = await q
             .OrderBy(p => p.Descripcion)
